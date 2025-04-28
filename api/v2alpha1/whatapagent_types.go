@@ -28,7 +28,6 @@ type WhatapAgentSpec struct {
 	License  string       `json:"license"`
 	Host     string       `json:"host"`
 	Port     string       `json:"port"`
-	Image    string       `json:"image"`
 	Features FeaturesSpec `json:"features"`
 }
 

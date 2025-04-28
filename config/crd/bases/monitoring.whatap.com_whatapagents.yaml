@@ -119,8 +119,6 @@ spec:
                 type: object
               host:
                 type: string
-              image:
-                type: string
               license:
                 type: string
               port:
@@ -128,7 +126,6 @@ spec:
             required:
             - features
             - host
-            - image
             - license
             - port
             type: object
