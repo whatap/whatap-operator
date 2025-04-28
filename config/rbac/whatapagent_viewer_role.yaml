@@ -1,0 +1,23 @@
+# permissions for end users to view whatapagents.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: whatap-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: whatapagent-viewer-role
+rules:
+- apiGroups:
+  - monitoring.whatap.com
+  resources:
+  - whatapagents
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - monitoring.whatap.com
+  resources:
+  - whatapagents/status
+  verbs:
+  - get

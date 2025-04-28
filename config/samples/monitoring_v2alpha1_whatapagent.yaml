@@ -1,0 +1,27 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap-sample
+spec:
+  license: "your-license-key"
+  host: "whatap-server"
+  port: "6600"
+  image: "whatap/operator:0.2.0"
+  features:
+    apm:
+      instrumentation:
+        targets:
+          - name: "shop-api"
+            enabled: "true"
+            whatapApmVersions:
+              java: "latest"
+            namespaceSelector:
+              matchNames:
+                - "backend"
+            podSelector:
+              matchLabels:
+                app: "shop"
+            config:
+              configMap:
+                name: "shop-api-config"
+                namespace: "backend"
