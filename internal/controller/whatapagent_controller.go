@@ -77,35 +77,70 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	lang := target.Language
 	version := target.WhatapApmVersions[lang]
 
-	// InitContainer 추가
-	initContainer := corev1.Container{
-		Name:  "whatap-agent-init",
-		Image: fmt.Sprintf("public.ecr.aws/whatap/apm-init-%s:%s", lang, version),
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "whatap-agent-volume",
-				MountPath: "/whatap-agent",
+	// 1️⃣ InitContainer - 에이전트 복사
+	initContainers := []corev1.Container{
+		{
+			Name:  "whatap-agent-init",
+			Image: fmt.Sprintf("public.ecr.aws/whatap/apm-init-%s:%s", lang, version),
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "whatap-agent-volume",
+					MountPath: "/whatap-agent",
+				},
 			},
 		},
 	}
-	podSpec.InitContainers = append(podSpec.InitContainers, initContainer)
 
-	// 공유 볼륨 추가
-	volumeExists := false
-	for _, vol := range podSpec.Volumes {
-		if vol.Name == "whatap-agent-volume" {
-			volumeExists = true
-			break
-		}
-	}
-	if !volumeExists {
-		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-			Name: "whatap-agent-volume",
+	// 2️⃣ ConfigMap 기반 config 생성 (mode가 configMap일 때만 추가)
+	if target.Config.Mode == "configMap" && target.Config.ConfigMapRef != nil {
+		initContainers = append(initContainers, corev1.Container{
+			Name:    "whatap-config-init",
+			Image:   "alpine:3.18",
+			Command: []string{"sh", "-c"},
+			Args: []string{
+				fmt.Sprintf("cp /config-volume/whatap.conf /whatap-agent/"),
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
+				{Name: "config-volume", MountPath: "/config-volume"},
+			},
+		})
+
+		// ConfigMap 마운트 추가
+		podSpec.Volumes = appendIfNotExists(podSpec.Volumes, corev1.Volume{
+			Name: "config-volume",
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: target.Config.ConfigMapRef.Name,
+					},
+				},
+			},
+		})
+	} else if lang == "java" {
+		// 3️⃣ Java 기본 whatap.conf 생성 (ConfigMap 사용 안할 때)
+		initContainers = append(initContainers, corev1.Container{
+			Name:    "whatap-config-init",
+			Image:   "alpine:3.18",
+			Command: []string{"sh", "-c"},
+			Args: []string{
+				fmt.Sprintf(`echo "license=%s" > /whatap-agent/whatap.conf && echo "whatap.server.host=%s" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`, cr.Spec.License, cr.Spec.Host),
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
 			},
 		})
 	}
+
+	podSpec.InitContainers = append(podSpec.InitContainers, initContainers...)
+
+	// 3️⃣ 공유 볼륨 추가 (에이전트용)
+	podSpec.Volumes = appendIfNotExists(podSpec.Volumes, corev1.Volume{
+		Name: "whatap-agent-volume",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
 
 	// 컨테이너별 환경변수 & 볼륨 마운트
 	for i, container := range podSpec.Containers {
@@ -152,6 +187,15 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 			MountPath: "/whatap-agent",
 		})
 	}
+}
+
+func appendIfNotExists(volumes []corev1.Volume, newVol corev1.Volume) []corev1.Volume {
+	for _, v := range volumes {
+		if v.Name == newVol.Name {
+			return volumes
+		}
+	}
+	return append(volumes, newVol)
 }
 
 // JAVA_TOOL_OPTIONS 안전하게 주입

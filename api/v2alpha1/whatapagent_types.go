@@ -64,7 +64,8 @@ type PodSelector struct {
 }
 
 type ConfigSpec struct {
-	ConfigMap ConfigMapRef `json:"configMap"`
+	Mode         string        `json:"mode,omitempty"`         // "default" or "custom"
+	ConfigMapRef *ConfigMapRef `json:"configMapRef,omitempty"` // custom 모드일 때만 사용
 }
 
 type ConfigMapRef struct {
