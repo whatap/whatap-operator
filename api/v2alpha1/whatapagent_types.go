@@ -25,14 +25,25 @@ import (
 
 // WhatapAgentSpec defines the desired state of WhatapAgent
 type WhatapAgentSpec struct {
-	License  string       `json:"license"`
-	Host     string       `json:"host"`
-	Port     string       `json:"port"`
-	Features FeaturesSpec `json:"features"`
+	License           string       `json:"license"`
+	Host              string       `json:"host"`
+	Port              string       `json:"port"`
+	Features          FeaturesSpec `json:"features"`
+	AgentImageVersion string       `json:"agentImageVersion"`
 }
 
 type FeaturesSpec struct {
-	Apm ApmSpec `json:"apm"`
+	Apm                  ApmSpec                  `json:"apm"`
+	KubernetesMonitoring KubernetesMonitoringSpec `json:"kubernetesMonitoring"`
+}
+type KubernetesMonitoringSpec struct {
+	MasterAgentEnabled string `json:"masterAgentEnabled"`
+	NodeAgentEnabled   string `json:"nodeAgentEnabled"`
+	GpuEnabled         string `json:"gpuEnabled,omitempty"`       // GPU 모니터링, default=false
+	ApiserverEnabled   string `json:"apiserverEnabled,omitempty"` // API Server 모니터링, default=false
+	EtcdEnabled        string `json:"etcdEnabled,omitempty"`      // ETCD 모니터링, default=false
+	SchedulerEnabled   string `json:"schedulerEnabled,omitempty"` // Scheduler 모니터링, default=false
+	OpenAgentEnabled   string `json:"openAgentEnabled,omitempty"` // openAgent, default=false
 }
 
 type ApmSpec struct {

@@ -114,8 +114,29 @@ spec:
                     required:
                     - instrumentation
                     type: object
+                  kubernetesMonitoring:
+                    properties:
+                      apiserverEnabled:
+                        type: string
+                      etcdEnabled:
+                        type: string
+                      gpuEnabled:
+                        type: string
+                      masterAgentEnabled:
+                        type: string
+                      nodeAgentEnabled:
+                        type: string
+                      openAgentEnabled:
+                        type: string
+                      schedulerEnabled:
+                        type: string
+                    required:
+                    - masterAgentEnabled
+                    - nodeAgentEnabled
+                    type: object
                 required:
                 - apm
+                - kubernetesMonitoring
                 type: object
               host:
                 type: string
