@@ -104,6 +104,9 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
 	namespace := cr.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace
+	if namespace == "" {
+		namespace = "whatap-monitoring"
+	}
 	version := cr.Spec.AgentImageVersion
 	if version == "" {
 		version = "latest"
@@ -207,6 +210,9 @@ func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger lo
 }
 func installNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
 	namespace := cr.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace
+	if namespace == "" {
+		namespace = "whatap-monitoring"
+	}
 	version := cr.Spec.AgentImageVersion
 	if version == "" {
 		version = "latest"

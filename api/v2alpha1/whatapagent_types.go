@@ -37,7 +37,7 @@ type FeaturesSpec struct {
 	KubernetesMonitoring KubernetesMonitoringSpec `json:"kubernetesMonitoring"`
 }
 type KubernetesMonitoringSpec struct {
-	KubernetesMonitoringNamespace string `json:"kubernetesMonitoringNamespace"`
+	KubernetesMonitoringNamespace string `json:"kubernetesMonitoringNamespace,omitempty"`
 	MasterAgentEnabled            string `json:"masterAgentEnabled"`
 	NodeAgentEnabled              string `json:"nodeAgentEnabled"`
 	GpuEnabled                    string `json:"gpuEnabled,omitempty"`       // GPU 모니터링, default=false
