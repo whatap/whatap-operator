@@ -118,13 +118,13 @@ spec:
                     type: object
                   kubernetesMonitoring:
                     properties:
-                      KubernetesMonitoringNamespace:
-                        type: string
                       apiserverEnabled:
                         type: string
                       etcdEnabled:
                         type: string
                       gpuEnabled:
+                        type: string
+                      kubernetesMonitoringNamespace:
                         type: string
                       masterAgentEnabled:
                         type: string
@@ -135,7 +135,7 @@ spec:
                       schedulerEnabled:
                         type: string
                     required:
-                    - KubernetesMonitoringNamespace
+                    - kubernetesMonitoringNamespace
                     - masterAgentEnabled
                     - nodeAgentEnabled
                     type: object
