@@ -29,7 +29,7 @@ type WhatapAgentSpec struct {
 	Host              string       `json:"host"`
 	Port              string       `json:"port"`
 	Features          FeaturesSpec `json:"features"`
-	AgentImageVersion string       `json:"agentImageVersion"`
+	AgentImageVersion string       `json:"agentImageVersion,omitempty"`
 }
 
 type FeaturesSpec struct {
