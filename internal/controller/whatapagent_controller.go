@@ -438,7 +438,13 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 			Image:   "alpine:3.18",
 			Command: []string{"sh", "-c"},
 			Args: []string{
-				fmt.Sprintf("cp /config-volume/whatap.conf /whatap-agent/"),
+				fmt.Sprintf(`
+					cp /config-volume/whatap.conf /whatap-agent/ && \
+					echo "license=%s" >> /whatap-agent/whatap.conf && \
+					echo "whatap.server.host=%s" >> /whatap-agent/whatap.conf && \
+					echo "whatap.server.port=%s" >> /whatap-agent/whatap.conf && \
+					echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf
+					`, cr.Spec.License, cr.Spec.Host, cr.Spec.Port),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
@@ -464,7 +470,7 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 			Image:   "alpine:3.18",
 			Command: []string{"sh", "-c"},
 			Args: []string{
-				fmt.Sprintf(`echo "license=%s" > /whatap-agent/whatap.conf && echo "whatap.server.host=%s" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`, cr.Spec.License, cr.Spec.Host),
+				fmt.Sprintf(`echo "license=%s" > /whatap-agent/whatap.conf && echo "whatap.server.host=%s" >> /whatap-agent/whatap.conf &&echo "whatap.server.port=%s" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`, cr.Spec.License, cr.Spec.Host, cr.Spec.Port),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
