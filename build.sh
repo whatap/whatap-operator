@@ -14,3 +14,5 @@ echo "🚀 export IMG=${IMG}"
 echo "🚀 make docker-build VERSION=${VERSION}"
 
 make docker-build VERSION="${VERSION}"
+docker tag public.ecr.aws/whatap/whatap-operator:${VERSION} public.ecr.aws/whatap/whatap-operator:latest
+docker push public.ecr.aws/whatap/whatap-operator:latest
