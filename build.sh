@@ -8,6 +8,9 @@ if [ $# -lt 1 ]; then
 fi
 
 VERSION=$1
+export IMG="public.ecr.aws/whatap/whatap-operator:${VERSION}"
 
+echo "🚀 export IMG=${IMG}"
 echo "🚀 make docker-build VERSION=${VERSION}"
+
 make docker-build VERSION="${VERSION}"
