@@ -16,6 +16,7 @@ spec:
             whatapApmVersions:
               java: "latest"
             namespaceSelector:
+
               matchNames:
                 - "backend"
             podSelector:

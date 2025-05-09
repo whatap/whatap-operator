@@ -135,7 +135,6 @@ spec:
                       schedulerEnabled:
                         type: string
                     required:
-                    - kubernetesMonitoringNamespace
                     - masterAgentEnabled
                     - nodeAgentEnabled
                     type: object

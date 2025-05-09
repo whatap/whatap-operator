@@ -431,8 +431,8 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 		},
 	}
 
-	// 2️⃣ ConfigMap 기반 config 생성 (mode가 configMap일 때만 추가)
-	if target.Config.Mode == "configMap" && target.Config.ConfigMapRef != nil {
+	// 2️⃣ ConfigMap 기반 config 생성 (mode가 configMapRef 때만 추가)
+	if target.Config.Mode == "configMapRef" && target.Config.ConfigMapRef != nil {
 		initContainers = append(initContainers, corev1.Container{
 			Name:    "whatap-config-init",
 			Image:   "alpine:3.18",
