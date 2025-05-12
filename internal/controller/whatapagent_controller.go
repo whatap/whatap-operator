@@ -384,11 +384,20 @@ func resourceMustParse(q string) resource.Quantity {
 	qty, _ := resource.ParseQuantity(q)
 	return qty
 }
+func hasLabels(labels, selector map[string]string) bool {
+	for k, v := range selector {
+		if labels[k] != v {
+			return false
+		}
+	}
+	return true
+}
 
 // Deployment 처리
 func processDeployments(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, ns string, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent) {
+	// 1) 네임스페이스 내 모든 Deployment 읽기
 	var deployList appsv1.DeploymentList
-	if err := r.List(ctx, &deployList, client.InNamespace(ns), client.MatchingLabels(target.PodSelector.MatchLabels)); err != nil {
+	if err := r.List(ctx, &deployList, client.InNamespace(ns)); err != nil {
 		logger.Error(err, "Failed to list Deployments")
 		return
 	}
@@ -397,8 +406,38 @@ func processDeployments(ctx context.Context, r *WhatapAgentReconciler, logger lo
 		if isAlreadyPatched(deploy.Spec.Template.Spec) {
 			continue
 		}
+
+		// 2) 필터링: PodTemplate 라벨 / Selector 라벨 / Annotation 중 하나라도 매칭되면 대상
+		sel := target.PodSelector.MatchLabels
+		matchByTemplate := hasLabels(deploy.Spec.Template.Labels, sel)
+		matchBySelector := hasLabels(deploy.Spec.Selector.MatchLabels, sel)
+		matchByLabels := hasLabels(deploy.Labels, sel)
+		if !(matchByTemplate || matchBySelector || matchByLabels) {
+			continue
+		}
+
+		logger.Info("Detected APM injection target",
+			"deployment", deploy.Name,
+			"targetName", target.Name,
+			"language", target.Language,
+			"namespaceSelector", fmt.Sprintf("%#v", target.NamespaceSelector.MatchNames),
+			"podSelector", fmt.Sprintf("%#v", target.PodSelector.MatchLabels),
+			"matchByTemplate", matchByTemplate,
+			"matchBySelector", matchBySelector,
+			"matchByLabels", matchByLabels,
+		)
+
+		// 3) 패치 로직 적용
 		patchPodTemplateSpec(&deploy.Spec.Template.Spec, cr, target, logger)
-		_ = r.Update(ctx, &deploy)
+		if err := r.Update(ctx, &deploy); err != nil {
+			// ❌ 주입 실패 로그
+			logger.Error(err, "Failed to inject Whatap APM into Deployment",
+				"deployment", deploy.Name, "namespace", deploy.Namespace)
+		} else {
+			// ✅ 주입 성공 로그
+			logger.Info("Successfully injected Whatap APM into Deployment",
+				"deployment", deploy.Name, "namespace", deploy.Namespace)
+		}
 	}
 }
 
