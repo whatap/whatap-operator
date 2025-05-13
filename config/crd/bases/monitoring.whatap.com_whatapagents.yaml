@@ -12,7 +12,7 @@ spec:
     listKind: WhatapAgentList
     plural: whatapagents
     singular: whatapagent
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v2alpha1
     schema:
@@ -36,11 +36,6 @@ spec:
             type: string
           metadata:
             type: object
-            properties:
-              name:
-                type: string
-                pattern: ^whatap$
-                description: must be exactly "whatap"
           spec:
             description: WhatapAgentSpec defines the desired state of WhatapAgent
             properties:

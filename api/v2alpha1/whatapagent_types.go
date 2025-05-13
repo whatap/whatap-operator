@@ -92,7 +92,7 @@ type WhatapAgentStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +kubebuilder:resource:scope=Cluster
 // WhatapAgent is the Schema for the whatapagents API
 type WhatapAgent struct {
 	metav1.TypeMeta   `json:",inline"`
