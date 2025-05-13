@@ -12,8 +12,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 // WhatapAgentReconciler reconciles a WhatapAgent object
@@ -404,15 +407,18 @@ func processDeployments(ctx context.Context, r *WhatapAgentReconciler, logger lo
 
 	for _, deploy := range deployList.Items {
 		if isAlreadyPatched(deploy.Spec.Template.Spec) {
+			logger.Info("Deployment", deploy.Name,
+				"Namespace", deploy.Namespace)
 			continue
 		}
 
-		// 2) 필터링: PodTemplate 라벨 / Selector 라벨 / Annotation 중 하나라도 매칭되면 대상
+		// 2) 필터링: PodTemplate 라벨 / Selector 라벨 하나라도 매칭되면 대상
 		sel := target.PodSelector.MatchLabels
 		matchByTemplate := hasLabels(deploy.Spec.Template.Labels, sel)
-		matchBySelector := hasLabels(deploy.Spec.Selector.MatchLabels, sel)
-		matchByLabels := hasLabels(deploy.Labels, sel)
-		if !(matchByTemplate || matchBySelector || matchByLabels) {
+		//matchBySelector := hasLabels(deploy.Spec.Selector.MatchLabels, sel)
+		//matchByLabels := hasLabels(deploy.Labels, sel)
+		//matchByAnnotations := hasLabels(deploy.Annotations, sel)
+		if !(matchByTemplate) {
 			continue
 		}
 
@@ -423,8 +429,8 @@ func processDeployments(ctx context.Context, r *WhatapAgentReconciler, logger lo
 			"namespaceSelector", fmt.Sprintf("%#v", target.NamespaceSelector.MatchNames),
 			"podSelector", fmt.Sprintf("%#v", target.PodSelector.MatchLabels),
 			"matchByTemplate", matchByTemplate,
-			"matchBySelector", matchBySelector,
-			"matchByLabels", matchByLabels,
+			//"matchBySelector", matchBySelector,
+			//"matchByLabels", matchByLabels,
 		)
 
 		// 3) 패치 로직 적용
@@ -610,7 +616,28 @@ func injectJavaToolOptions(envVars []corev1.EnvVar, agentOption string, logger l
 
 // SetupWithManager
 func (r *WhatapAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	evtLog := ctrl.Log.WithName("WhatapAgent").WithName("DeploymentWatcher")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&monitoringv2alpha1.WhatapAgent{}).
+		// Primary resource is Deployment
+		For(&appsv1.Deployment{},
+			builder.WithPredicates(predicate.Funcs{
+				CreateFunc: func(e event.CreateEvent) bool {
+					evtLog.Info("Deployment CREATED",
+						"ns", e.Object.GetNamespace(),
+						"name", e.Object.GetName(),
+					)
+					return true
+				},
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					evtLog.Info("Deployment UPDATED",
+						"ns", e.ObjectNew.GetNamespace(),
+						"name", e.ObjectNew.GetName(),
+					)
+					return true
+				},
+				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+				GenericFunc: func(e event.GenericEvent) bool { return false },
+			}),
+		).
 		Complete(r)
 }
