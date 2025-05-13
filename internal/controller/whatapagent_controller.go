@@ -7,6 +7,7 @@ import (
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -19,15 +20,42 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+const whatapFinalizer = "whatapagent.finalizers.monitoring.whatap.com"
+
 // WhatapAgentReconciler reconciles a WhatapAgent object
 type WhatapAgentReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
+func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context, cr *monitoringv2alpha1.WhatapAgent) error {
+	// ex) whatap-master-agent Deployment 삭제
+	_ = r.Delete(ctx, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "whatap-master-agent", Namespace: "whatap-monitoring"},
+	})
+	_ = r.Delete(ctx, &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "whatap-node-agent", Namespace: "whatap-monitoring"},
+	})
+	// node-agent DaemonSet, GPU, api-server, etcd, scheduler, openAgent 등도 모두 Delete
+	// ignore NotFound 에러
+	return nil
+}
+
+// 헬퍼: 슬라이스에서 문자열 제거
+func removeString(slice []string, s string) []string {
+	result := []string{}
+	for _, v := range slice {
+		if v != s {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
 // Reconcile
 func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+	var cr monitoringv2alpha1.WhatapAgent
 
 	var whatapAgent monitoringv2alpha1.WhatapAgent
 	if err := r.Get(ctx, req.NamespacedName, &whatapAgent); err != nil {
@@ -36,6 +64,20 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	logger.Info("Reconciling WhatapAgent", "Name", whatapAgent.Name)
+
+	// 1) Deletion 감지
+	if !cr.ObjectMeta.DeletionTimestamp.IsZero() {
+		// 1-1) cleanup: CR가 install한 리소스들 삭제
+		if err := r.cleanupAgents(ctx, &cr); err != nil {
+			return ctrl.Result{}, err
+		}
+		// 1-2) finalizer 제거
+		cr.ObjectMeta.Finalizers = removeString(cr.ObjectMeta.Finalizers, whatapFinalizer)
+		if err := r.Update(ctx, &cr); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
 
 	// --- 1. Auto-Instrumentation 기존 처리 ---
 	for _, target := range whatapAgent.Spec.Features.Apm.Instrumentation.Targets {
