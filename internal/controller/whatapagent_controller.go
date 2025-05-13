@@ -184,8 +184,10 @@ func processDeployments(ctx context.Context, r *WhatapAgentReconciler, logger lo
 
 	for _, deploy := range deployList.Items {
 		if isAlreadyPatched(deploy.Spec.Template.Spec) {
-			logger.Info("Deployment", deploy.Name,
-				"Namespace", deploy.Namespace)
+			logger.Info("isAlreadyPatched",
+				"deployName", deploy.Name,
+				"deployNamespace", deploy.Namespace,
+			)
 			continue
 		}
 
