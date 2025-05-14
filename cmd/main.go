@@ -37,6 +37,7 @@ import (
 
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	"github.com/whatap/whatap-operator/internal/controller"
+	webhookmonitoringv2alpha1 "github.com/whatap/whatap-operator/internal/webhook/v2alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -155,6 +156,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WhatapAgent")
 		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err = webhookmonitoringv2alpha1.SetupWhatapAgentWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WhatapAgent")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 
