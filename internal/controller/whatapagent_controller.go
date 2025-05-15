@@ -101,18 +101,18 @@ func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.C
 	}
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, mwc, func() error {
 		mwc.Webhooks = []admissionregistrationv1.MutatingWebhook{{
-			Name: "mwhatapagent-v2alpha1.kb.io",
+			Name: "mpod.kb.io",
 			ClientConfig: admissionregistrationv1.WebhookClientConfig{
 				Service: &admissionregistrationv1.ServiceReference{
 					Name:      webhookServiceName,
 					Namespace: r.DefaultNamespace,
-					Path:      strPtr("/mutate-monitoring-whatap-com-v2alpha1-whatapagent"),
+					Path:      strPtr("/mutate--v1-pod"),
 				},
 				CABundle: r.WebhookCABundle,
 			},
 			Rules: []admissionregistrationv1.RuleWithOperations{{
 				Operations: []admissionregistrationv1.OperationType{
-					admissionregistrationv1.Create, admissionregistrationv1.Update,
+					admissionregistrationv1.Create,
 				},
 				Rule: admissionregistrationv1.Rule{
 					APIGroups:   []string{""},
