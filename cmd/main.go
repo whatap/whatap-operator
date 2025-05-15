@@ -17,9 +17,18 @@ limitations under the License.
 package main
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"flag"
+	"math/big"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -55,6 +64,57 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+// generateSelfSignedCert creates a CA and a server cert for "serviceName.ns.svc"
+func generateSelfSignedCert(serviceName, namespace string) (caCertPEM, caKeyPEM, serverCertPEM, serverKeyPEM []byte, err error) {
+	// 1) CA 키·인증서
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return
+	}
+	caTpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(time.Now().UnixNano()),
+		Subject:               pkix.Name{CommonName: "whatap-webhook-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTpl, caTpl, &caKey.PublicKey, caKey)
+	if err != nil {
+		return
+	}
+	caCertPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+	caKeyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(caKey)})
+
+	// 2) 서버 키·인증서 (CA로 서명)
+	srvKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return
+	}
+	srvTpl := &x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject:      pkix.Name{CommonName: serviceName + "." + namespace + ".svc"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames: []string{
+			serviceName + "." + namespace + ".svc",
+			serviceName + "." + namespace + ".svc.cluster.local",
+		},
+	}
+	caCert, _ := x509.ParseCertificate(caDER)
+	serverDER, err := x509.CreateCertificate(rand.Reader, srvTpl, caCert, &srvKey.PublicKey, caKey)
+	if err != nil {
+		return
+	}
+	serverCertPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverDER})
+	serverKeyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(srvKey)})
+
+	return
+}
+
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
@@ -62,6 +122,18 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
+
+	//env에서 기본 네임스페이스 읽기
+	defaultNS := os.Getenv("WHATAP_DEFAULT_NAMESPACE")
+	if defaultNS == "" {
+		// (안전장치) ServiceAccount 토큰에 붙은 파일 경로로도 읽을 수 있음
+		if b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+			defaultNS = strings.TrimSpace(string(b))
+		}
+	}
+	if defaultNS == "" {
+		defaultNS = "whatap-monitoring"
+	}
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -97,9 +169,54 @@ func main() {
 	if !enableHTTP2 {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
+	// 1) 인증서 한 번만 생성
+	caCert, caKey, serverPEM, serverKeyPEM, err := generateSelfSignedCert("whatap-webhook-service", defaultNS)
+	if err != nil {
+		setupLog.Error(err, "unable to generate self-signed cert for webhook")
+		os.Exit(1)
+	}
 
+	// 2) 디스크에 TLS용 cert/key 내려쓰기
+	certDir := "/etc/webhook/certs"
+	if err := os.MkdirAll(certDir, 0700); err != nil {
+		setupLog.Error(err, "unable to create cert directory", "path", certDir)
+		os.Exit(1)
+	}
+
+	// CA bundle
+	caCertFile := filepath.Join(certDir, "ca.crt")
+	if err := os.WriteFile(caCertFile, caCert, 0o644); err != nil {
+		setupLog.Error(err, "Failed to write caCertFile file", "file", caCertFile)
+		os.Exit(1)
+	}
+
+	caKeyFile := filepath.Join(certDir, "ca.key")
+	if err := os.WriteFile(caCertFile, caKey, 0o644); err != nil {
+		setupLog.Error(err, "Failed to write caKeyFile file", "file", caKeyFile)
+		os.Exit(1)
+	}
+
+	// server.crt
+	certFile := filepath.Join(certDir, "tls.crt")
+	if err := os.WriteFile(certFile, serverPEM, 0o600); err != nil {
+		setupLog.Error(err, "Failed to write serverCert file", "file", certFile)
+		os.Exit(1)
+	}
+
+	// server.key
+	keyFile := filepath.Join(certDir, "tls.key")
+	if err := os.WriteFile(keyFile, serverKeyPEM, 0o644); err != nil {
+		setupLog.Error(err, "Failed to write serverKey file", "file", keyFile)
+		os.Exit(1)
+	}
+
+	// 3) Webhook 서버 생성 (파일 읽기)
 	webhookServer := webhook.NewServer(webhook.Options{
-		TLSOpts: tlsOpts,
+		Port:     9443,
+		CertDir:  certDir,
+		CertName: "tls.crt",
+		KeyName:  "tls.key",
+		TLSOpts:  tlsOpts, // 필요하다면 동적 갱신 콜백 포함
 	})
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
@@ -151,8 +268,13 @@ func main() {
 	}
 
 	if err = (&controller.WhatapAgentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		DefaultNamespace: defaultNS,
+		WebhookCABundle:  caCert,
+		CaKey:            caKey,
+		ServerCert:       serverPEM,
+		ServerKey:        serverKeyPEM,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WhatapAgent")
 		os.Exit(1)

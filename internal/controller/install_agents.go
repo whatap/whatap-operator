@@ -19,10 +19,6 @@ func resourceMustParse(q string) resource.Quantity {
 }
 
 func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
-	namespace := cr.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace
-	if namespace == "" {
-		namespace = "whatap-monitoring"
-	}
 	version := cr.Spec.AgentImageVersion
 	if version == "" {
 		version = "latest"
@@ -31,7 +27,7 @@ func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger lo
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "whatap-master-agent",
-			Namespace: namespace,
+			Namespace: r.DefaultNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: int32Ptr(1),
@@ -125,10 +121,6 @@ func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger lo
 	return nil
 }
 func installNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
-	namespace := cr.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace
-	if namespace == "" {
-		namespace = "whatap-monitoring"
-	}
 	version := cr.Spec.AgentImageVersion
 	if version == "" {
 		version = "latest"
@@ -138,7 +130,7 @@ func installNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "whatap-node-agent",
-			Namespace: namespace,
+			Namespace: r.DefaultNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{

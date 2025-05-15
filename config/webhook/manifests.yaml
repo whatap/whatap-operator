@@ -2,27 +2,27 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: mutating-webhook-configuration
+  name: whatap-webhook
 webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: whatap-admission-controller
+      namespace: <WHATAP_DEFUALT_NAMESPACE>
       path: /mutate-monitoring-whatap-com-v2alpha1-whatapagent
   failurePolicy: Fail
   name: mwhatapagent-v2alpha1.kb.io
   rules:
   - apiGroups:
-    - monitoring.whatap.com
+    - ""
     apiVersions:
-    - v2alpha1
+    - v1
     operations:
     - CREATE
     - UPDATE
     resources:
-    - whatapagents
+    - pods
   sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
@@ -34,8 +34,8 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: whatap-admission-controller
+      namespace: default
       path: /validate-monitoring-whatap-com-v2alpha1-whatapagent
   failurePolicy: Fail
   name: vwhatapagent-v2alpha1.kb.io
