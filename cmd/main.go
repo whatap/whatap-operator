@@ -170,7 +170,7 @@ func main() {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
 	// 1) 인증서 한 번만 생성
-	caCert, caKey, serverPEM, serverKeyPEM, err := generateSelfSignedCert("whatap-webhook-service", defaultNS)
+	caCert, caKey, serverPEM, serverKeyPEM, err := generateSelfSignedCert("whatap-admission-controller", defaultNS)
 	if err != nil {
 		setupLog.Error(err, "unable to generate self-signed cert for webhook")
 		os.Exit(1)
