@@ -80,7 +80,6 @@ func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context) error 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
 		svc.Spec = corev1.ServiceSpec{
 			Selector: map[string]string{
-				"control-plane":          "controller-manager",
 				"app.kubernetes.io/name": "whatap-operator",
 			},
 			Ports: []corev1.ServicePort{{
