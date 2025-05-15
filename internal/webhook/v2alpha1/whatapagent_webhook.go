@@ -60,18 +60,18 @@ var _ webhook.CustomDefaulter = &WhatapAgentCustomDefaulter{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind WhatapAgent.
 func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
-	whatapagent, ok := obj.(*monitoringv2alpha1.WhatapAgent)
-
-	if !ok {
-		return fmt.Errorf("expected an WhatapAgent object but got %T", obj)
-	}
-
-	whatapagentlog.Info("Defaulting for WhatapAgent", "name", whatapagent.GetName())
-	// 1) kube monitoring 네임스페이스 기본값 설정
-	if whatapagent.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace == "" {
-		whatapagent.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace = "whatap-monitoring"
-		whatapagentlog.Info("Defaulted KubernetesMonitoringNamespace to whatap-monitoring")
-	}
+	//whatapagent, ok := obj.(*monitoringv2alpha1.WhatapAgent)
+	//
+	//if !ok {
+	//	return fmt.Errorf("expected an WhatapAgent object but got %T", obj)
+	//}
+	//
+	//whatapagentlog.Info("Defaulting for WhatapAgent", "name", whatapagent.GetName())
+	//// 1) kube monitoring 네임스페이스 기본값 설정
+	//if whatapagent.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace == "" {
+	//	whatapagent.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace = "whatap-monitoring"
+	//	whatapagentlog.Info("Defaulted KubernetesMonitoringNamespace to whatap-monitoring")
+	//}
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		return fmt.Errorf("expected a Pod but got a %T", obj)
@@ -82,18 +82,18 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	}
 	// TODO(user): fill in your defaulting logic.
 	pod.Annotations["mutating-admission-webhook"] = "whatap"
-	whatapagentlog.Info("Annotated Pod", "name", whatapagent.GetName())
+	whatapagentlog.Info("Annotated Pod", "name", pod.Name)
 
-	// --- 1. Auto-Instrumentation 기존 처리 ---
-	for _, target := range whatapagent.Spec.Features.Apm.Instrumentation.Targets {
-		if target.Enabled != "true" {
-			continue
-		}
-
-		//for _, ns := range target.NamespaceSelector.MatchNames {
-		//processDeployments(ctx, r, logger, ns, target, whatapagent)
-		//}
-	}
+	//// --- 1. Auto-Instrumentation 기존 처리 ---
+	//for _, target := range whatapagent.Spec.Features.Apm.Instrumentation.Targets {
+	//	if target.Enabled != "true" {
+	//		continue
+	//	}
+	//
+	//	//for _, ns := range target.NamespaceSelector.MatchNames {
+	//	//processDeployments(ctx, r, logger, ns, target, whatapagent)
+	//	//}
+	//}
 
 	return nil
 }
