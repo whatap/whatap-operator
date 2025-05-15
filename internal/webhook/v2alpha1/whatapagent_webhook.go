@@ -38,20 +38,17 @@ var whatapagentlog = logf.Log.WithName("whatapagent-resource")
 func SetupWhatapAgentWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&corev1.Pod{}).
-		WithValidator(&WhatapAgentCustomValidator{}).
+		//WithValidator(&WhatapAgentCustomValidator{}).
 		WithDefaulter(&WhatapAgentCustomDefaulter{}).
 		Complete()
 }
 
 // TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
-// +kubebuilder:webhook:path=/mutate-monitoring-whatap-com-v2alpha1-whatapagent,mutating=true,failurePolicy=fail,sideEffects=None,groups=monitoring.whatap.com,resources=whatapagents,verbs=create;update,versions=v2alpha1,name=mwhatapagent-v2alpha1.kb.io,admissionReviewVersions=v1
+// Carefully check out the following marker comments
+//+kubebuilder:webhook:path=/mutate--v1-pod,mutating=true,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create;update,versions=v1,name=mpod.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate--v1-pod,mutating=true,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create;update;delete,versions=v1,name=vpod.kb.io,admissionReviewVersions=v1
 
-// WhatapAgentCustomDefaulter struct is responsible for setting default values on the custom resource of the
-// Kind WhatapAgent when those are created or updated.
-//
-// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
-// as it is used only for temporary operations and does not need to be deeply copied.
 type WhatapAgentCustomDefaulter struct {
 	// TODO(user): Add more fields as needed for defaulting
 }
@@ -60,18 +57,6 @@ var _ webhook.CustomDefaulter = &WhatapAgentCustomDefaulter{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind WhatapAgent.
 func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
-	//whatapagent, ok := obj.(*monitoringv2alpha1.WhatapAgent)
-	//
-	//if !ok {
-	//	return fmt.Errorf("expected an WhatapAgent object but got %T", obj)
-	//}
-	//
-	//whatapagentlog.Info("Defaulting for WhatapAgent", "name", whatapagent.GetName())
-	//// 1) kube monitoring 네임스페이스 기본값 설정
-	//if whatapagent.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace == "" {
-	//	whatapagent.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace = "whatap-monitoring"
-	//	whatapagentlog.Info("Defaulted KubernetesMonitoringNamespace to whatap-monitoring")
-	//}
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		return fmt.Errorf("expected a Pod but got a %T", obj)
@@ -83,31 +68,9 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	// TODO(user): fill in your defaulting logic.
 	pod.Annotations["mutating-admission-webhook"] = "whatap"
 	whatapagentlog.Info("Annotated Pod", "name", pod.Name)
-
-	//// --- 1. Auto-Instrumentation 기존 처리 ---
-	//for _, target := range whatapagent.Spec.Features.Apm.Instrumentation.Targets {
-	//	if target.Enabled != "true" {
-	//		continue
-	//	}
-	//
-	//	//for _, ns := range target.NamespaceSelector.MatchNames {
-	//	//processDeployments(ctx, r, logger, ns, target, whatapagent)
-	//	//}
-	//}
-
 	return nil
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
-// Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
-// +kubebuilder:webhook:path=/validate-monitoring-whatap-com-v2alpha1-whatapagent,mutating=false,failurePolicy=fail,sideEffects=None,groups=monitoring.whatap.com,resources=whatapagents,verbs=create;update,versions=v2alpha1,name=vwhatapagent-v2alpha1.kb.io,admissionReviewVersions=v1
-
-// WhatapAgentCustomValidator struct is responsible for validating the WhatapAgent resource
-// when it is created, updated, or deleted.
-//
-// NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
-// as this struct is used only for temporary operations and does not need to be deeply copied.
 type WhatapAgentCustomValidator struct {
 	// TODO(user): Add more fields as needed for validation
 }
