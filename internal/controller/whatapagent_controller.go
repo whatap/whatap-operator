@@ -106,7 +106,7 @@ func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.C
 				Service: &admissionregistrationv1.ServiceReference{
 					Name:      webhookServiceName,
 					Namespace: r.DefaultNamespace,
-					Path:      strPtr("/mutate--v1-pod"),
+					Path:      strPtr("/whatap-injection--v1-pod"),
 				},
 				CABundle: r.WebhookCABundle,
 			},
