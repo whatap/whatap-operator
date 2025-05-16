@@ -41,7 +41,7 @@ func SetupWhatapAgentWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&corev1.Pod{}).
 		//WithValidator(&WhatapAgentCustomValidator{}).
-		WithDefaulter(&WhatapAgentCustomDefaulter{}).
+		WithDefaulter(&WhatapAgentCustomDefaulter{mgr.GetClient()}).
 		WithDefaulterCustomPath("/whatap-injection--v1-pod").
 		Complete()
 }
@@ -63,6 +63,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	}
 	// WhatapAgent CR 가져오기 (클러스터 스코프)
 	var whatapAgentCustomResource monitoringv2alpha1.WhatapAgent
+
 	if err := d.client.Get(ctx, client.ObjectKey{Name: "whatap"}, &whatapAgentCustomResource); err != nil {
 		// CR이 아직 생성 안 됐으면 주입 안 함
 		return nil
