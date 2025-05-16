@@ -57,7 +57,10 @@ var _ webhook.CustomDefaulter = &WhatapAgentCustomDefaulter{}
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind WhatapAgent.
 func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
 	pod, ok := obj.(*corev1.Pod)
-
+	if !ok {
+		whatapWebhookLogger.Info("skipping non-Pod object")
+		return nil
+	}
 	// WhatapAgent CR 가져오기 (클러스터 스코프)
 	var whatapAgentCustomResource monitoringv2alpha1.WhatapAgent
 	if err := d.client.Get(ctx, client.ObjectKey{Name: "whatap"}, &whatapAgentCustomResource); err != nil {
@@ -80,19 +83,27 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		if !hasLabels(pod.Labels, target.PodSelector.MatchLabels) {
 			continue
 		}
-		// controller 패치 함수 재사용
-		patchPodTemplateSpec(&pod.Spec, whatapAgentCustomResource, target, whatapWebhookLogger)
-	}
-	if !ok {
-		return fmt.Errorf("expected a Pod but got a %T", obj)
-	}
 
-	if pod.Annotations == nil {
-		pod.Annotations = map[string]string{}
+		// 4) PodSpec 변형 (initContainer, volumes, env 등)
+		patchPodTemplateSpec(&pod.Spec, whatapAgentCustomResource, target, whatapWebhookLogger)
+		if pod.Annotations == nil {
+			pod.Annotations = map[string]string{}
+		}
+		// 어노테이션 추가
+		if pod.Annotations == nil {
+			pod.Annotations = make(map[string]string, 3)
+		}
+		pod.Annotations["whatap-apm-injected"] = "true"
+		pod.Annotations["whatap-apm-language"] = target.Language
+		pod.Annotations["whatap-apm-version"] = target.WhatapApmVersions[target.Language]
+
+		whatapWebhookLogger.Info("injected Whatap APM into Pod",
+			"pod", pod.Name,
+			"language", target.Language,
+			"version", target.WhatapApmVersions[target.Language],
+		)
+		break
 	}
-	// TODO(user): fill in your defaulting logic.
-	pod.Annotations["mutating-admission-webhook"] = "whatap"
-	whatapWebhookLogger.Info("Annotated Pod", "name", pod.ObjectMeta.Name)
 	return nil
 }
 
