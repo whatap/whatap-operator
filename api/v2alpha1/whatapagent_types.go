@@ -34,30 +34,64 @@ type WhatapAgentSpec struct {
 
 type FeaturesSpec struct {
 	Apm                  ApmSpec                  `json:"apm"`
+	OpenAgent            OpenAgentSpec            `json:"openAgent"`
 	KubernetesMonitoring KubernetesMonitoringSpec `json:"kubernetesMonitoring"`
 }
-type KubernetesMonitoringSpec struct {
-	KubernetesMonitoringNamespace string `json:"kubernetesMonitoringNamespace,omitempty"`
-	MasterAgentEnabled            string `json:"masterAgentEnabled"`
-	NodeAgentEnabled              string `json:"nodeAgentEnabled"`
-	GpuEnabled                    string `json:"gpuEnabled,omitempty"`       // GPU 모니터링, default=false
-	ApiserverEnabled              string `json:"apiserverEnabled,omitempty"` // API Server 모니터링, default=false
-	EtcdEnabled                   string `json:"etcdEnabled,omitempty"`      // ETCD 모니터링, default=false
-	SchedulerEnabled              string `json:"schedulerEnabled,omitempty"` // Scheduler 모니터링, default=false
-	OpenAgentEnabled              string `json:"openAgentEnabled,omitempty"` // openAgent, default=false
+
+// OpenAgentSpec defines the openAgent enablement
+type OpenAgentSpec struct {
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled" default:"true"`
 }
 
+type KubernetesMonitoringSpec struct {
+	KubernetesMonitoringNamespace string `json:"kubernetesMonitoringNamespace,omitempty"`
+
+	// +kubebuilder:default=true
+	MasterAgent struct {
+		Enabled bool `json:"enabled"`
+	} `json:"masterAgent"`
+
+	// +kubebuilder:default=true
+	NodeAgent struct {
+		Enabled bool `json:"enabled"`
+	} `json:"nodeAgent"`
+
+	// +kubebuilder:default=false
+	GpuMonitoring struct {
+		Enabled bool `json:"enabled"`
+	} `json:"gpuMonitoring"`
+
+	// +kubebuilder:default=false
+	ApiserverMonitoring struct {
+		Enabled bool `json:"enabled"`
+	} `json:"apiserverMonitoring"`
+
+	// +kubebuilder:default=false
+	EtcdMonitoring struct {
+		Enabled bool `json:"enabled"`
+	} `json:"etcdMonitoring"`
+
+	// +kubebuilder:default=false
+	SchedulerMonitoring struct {
+		Enabled bool `json:"enabled"`
+	} `json:"schedulerMonitoring"`
+}
+
+// ApmSpec defines APM-specific settings
 type ApmSpec struct {
 	Instrumentation InstrumentationSpec `json:"instrumentation"`
 }
 
+// InstrumentationSpec holds instrumentation targets
 type InstrumentationSpec struct {
 	Targets []TargetSpec `json:"targets"`
 }
 
 type TargetSpec struct {
-	Name    string `json:"name"`
-	Enabled string `json:"enabled"` // "true" 문자열
+	Name string `json:"name"`
+	// +kubebuilder:default=true
+	Enabled bool `json:"enabled"`
 	// +kubebuilder:validation:Enum=java;python;php;dotnet;nodejs;golang
 	Language          string            `json:"language"` // ⭐️ Enum 제한
 	WhatapApmVersions map[string]string `json:"whatapApmVersions"`
@@ -66,19 +100,25 @@ type TargetSpec struct {
 	Config            ConfigSpec        `json:"config"`
 }
 
+// NamespaceSelector matches specific namespaces
 type NamespaceSelector struct {
 	MatchNames []string `json:"matchNames"`
 }
 
+// PodSelector matches pods by labels
 type PodSelector struct {
 	MatchLabels map[string]string `json:"matchLabels"`
 }
 
+// ConfigSpec holds custom configuration reference
 type ConfigSpec struct {
+	// Mode can be "default" or "custom"
+	// +kubebuilder:validation:Enum=default;custom
 	Mode         string        `json:"mode,omitempty"`         // "default" or "custom"
 	ConfigMapRef *ConfigMapRef `json:"configMapRef,omitempty"` // custom 모드일 때만 사용
 }
 
+// ConfigMapRef identifies a ConfigMap resource
 type ConfigMapRef struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`

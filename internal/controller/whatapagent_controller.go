@@ -185,57 +185,49 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// ---  Kubernetes Monitoring  ---
+	// Kubernetes Monitoring
 	kubeMon := whatapAgent.Spec.Features.KubernetesMonitoring
 
-	if kubeMon.MasterAgentEnabled == "true" {
+	if kubeMon.MasterAgent.Enabled {
 		logger.Info("Installing Whatap Master Agent")
-		err := installMasterAgent(ctx, r, logger, whatapAgent)
-		if err != nil {
+		if err := installMasterAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Master Agent")
 		}
 	}
-
-	if kubeMon.NodeAgentEnabled == "true" {
+	if kubeMon.NodeAgent.Enabled {
 		logger.Info("Installing Whatap Node Agent")
-		err := installNodeAgent(ctx, r, logger, whatapAgent)
-		if err != nil {
+		if err := installNodeAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Node Agent")
 		}
 	}
-
-	if kubeMon.GpuEnabled == "true" {
+	if kubeMon.GpuMonitoring.Enabled {
 		logger.Info("Installing GPU Monitoring Agent")
-		err := installGpuAgent(ctx, r, logger, whatapAgent)
-		if err != nil {
+		if err := installGpuAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install GPU Agent")
 		}
 	}
-	if kubeMon.ApiserverEnabled == "true" {
+	if kubeMon.ApiserverMonitoring.Enabled {
 		logger.Info("Installing Apiserver Monitoring Agent")
-		err := installApiserverMonitor(ctx, r, logger, whatapAgent)
-		if err != nil {
+		if err := installApiserverMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Apiserver Monitor")
 		}
 	}
-	if kubeMon.EtcdEnabled == "true" {
+	if kubeMon.EtcdMonitoring.Enabled {
 		logger.Info("Installing Etcd Monitoring Agent")
-		err := installEtcdMonitor(ctx, r, logger, whatapAgent)
-		if err != nil {
+		if err := installEtcdMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Etcd Monitor")
 		}
 	}
-	if kubeMon.SchedulerEnabled == "true" {
+	if kubeMon.SchedulerMonitoring.Enabled {
 		logger.Info("Installing Scheduler Monitoring Agent")
-		err := installSchedulerMonitor(ctx, r, logger, whatapAgent)
-		if err != nil {
+		if err := installSchedulerMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Scheduler Monitor")
 		}
 	}
-	if kubeMon.OpenAgentEnabled == "true" {
+	// OpenAgent
+	if whatapAgent.Spec.Features.OpenAgent.Enabled {
 		logger.Info("Installing Open Agent")
-		err := installOpenAgent(ctx, r, logger, whatapAgent)
-		if err != nil {
+		if err := installOpenAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Open Agent")
 		}
 	}
