@@ -120,7 +120,7 @@ func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.C
 					Resources:   []string{"pods"},
 				},
 			}},
-			FailurePolicy:           failurePtr(admissionregistrationv1.Fail),
+			FailurePolicy:           failurePtr(admissionregistrationv1.Ignore),
 			AdmissionReviewVersions: []string{"v1"},
 			SideEffects:             &sideEffectNone,
 		}}
