@@ -25,17 +25,16 @@ import (
 
 // WhatapAgentSpec defines the desired state of WhatapAgent
 type WhatapAgentSpec struct {
-	License           string       `json:"license"`
-	Host              string       `json:"host"`
-	Port              string       `json:"port"`
-	Features          FeaturesSpec `json:"features"`
-	AgentImageVersion string       `json:"agentImageVersion,omitempty"`
+	License  string       `json:"license"`
+	Host     string       `json:"host"`
+	Port     string       `json:"port"`
+	Features FeaturesSpec `json:"features"`
 }
 
 type FeaturesSpec struct {
-	Apm       ApmSpec                  `json:"apm"`
-	OpenAgent OpenAgentSpec            `json:"openAgent"`
-	K8sAgent  KubernetesMonitoringSpec `json:"kubernetesMonitoring"`
+	Apm       ApmSpec       `json:"apm"`
+	OpenAgent OpenAgentSpec `json:"openAgent"`
+	K8sAgent  K8sAgentSpec  `json:"K8sAgent"`
 }
 
 // OpenAgentSpec defines the openAgent enablement
@@ -44,14 +43,15 @@ type OpenAgentSpec struct {
 	Enabled bool `json:"enabled"`
 }
 
-type KubernetesMonitoringSpec struct {
-	KubernetesMonitoringNamespace string             `json:"kubernetesMonitoringNamespace,omitempty"`
-	MasterAgent                   AgentComponentSpec `json:"masterAgent"`
-	NodeAgent                     AgentComponentSpec `json:"nodeAgent"`
-	GpuMonitoring                 AgentComponentSpec `json:"gpuMonitoring"`
-	ApiserverMonitoring           AgentComponentSpec `json:"apiserverMonitoring"`
-	EtcdMonitoring                AgentComponentSpec `json:"etcdMonitoring"`
-	SchedulerMonitoring           AgentComponentSpec `json:"schedulerMonitoring"`
+type K8sAgentSpec struct {
+	Namespace           string             `json:"namespace,omitempty"`
+	AgentImageVersion   string             `json:"agentImageVersion,omitempty"`
+	MasterAgent         AgentComponentSpec `json:"masterAgent"`
+	NodeAgent           AgentComponentSpec `json:"nodeAgent"`
+	GpuMonitoring       AgentComponentSpec `json:"gpuMonitoring"`
+	ApiserverMonitoring AgentComponentSpec `json:"apiserverMonitoring"`
+	EtcdMonitoring      AgentComponentSpec `json:"etcdMonitoring"`
+	SchedulerMonitoring AgentComponentSpec `json:"schedulerMonitoring"`
 }
 
 type AgentComponentSpec struct {

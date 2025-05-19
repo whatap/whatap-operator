@@ -72,7 +72,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	if defaultNS == "" {
 		defaultNS = "whatap-monitoring"
 	}
-	ns := whatapAgentCustomResource.Spec.Features.KubernetesMonitoring.KubernetesMonitoringNamespace
+	ns := whatapAgentCustomResource.Spec.Features.K8sAgent.Namespace
 	if ns == "" {
 		ns = defaultNS
 	}

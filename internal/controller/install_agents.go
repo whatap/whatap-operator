@@ -19,7 +19,7 @@ func resourceMustParse(q string) resource.Quantity {
 }
 
 func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
-	version := cr.Spec.AgentImageVersion
+	version := cr.Spec.Features.K8sAgent.AgentImageVersion
 	if version == "" {
 		version = "latest"
 	}
@@ -121,7 +121,7 @@ func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger lo
 	return nil
 }
 func installNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
-	version := cr.Spec.AgentImageVersion
+	version := cr.Spec.Features.K8sAgent.AgentImageVersion
 	if version == "" {
 		version = "latest"
 	}
