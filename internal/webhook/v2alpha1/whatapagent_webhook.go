@@ -78,7 +78,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	}
 
 	for _, target := range whatapAgentCustomResource.Spec.Features.Apm.Instrumentation.Targets {
-		if target.Enabled != "true" {
+		if !target.Enabled {
 			continue
 		}
 		if !hasLabels(pod.Labels, target.PodSelector.MatchLabels) {
