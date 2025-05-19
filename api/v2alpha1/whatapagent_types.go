@@ -17,6 +17,7 @@ limitations under the License.
 package v2alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -44,14 +45,21 @@ type OpenAgentSpec struct {
 }
 
 type K8sAgentSpec struct {
-	Namespace           string             `json:"namespace,omitempty"`
-	AgentImageVersion   string             `json:"agentImageVersion,omitempty"`
-	MasterAgent         AgentComponentSpec `json:"masterAgent"`
-	NodeAgent           AgentComponentSpec `json:"nodeAgent"`
-	GpuMonitoring       AgentComponentSpec `json:"gpuMonitoring"`
-	ApiserverMonitoring AgentComponentSpec `json:"apiserverMonitoring"`
-	EtcdMonitoring      AgentComponentSpec `json:"etcdMonitoring"`
-	SchedulerMonitoring AgentComponentSpec `json:"schedulerMonitoring"`
+	Namespace           string                   `json:"namespace,omitempty"`
+	AgentImageVersion   string                   `json:"agentImageVersion,omitempty"`
+	MasterAgent         MasterAgentComponentSpec `json:"masterAgent"`
+	NodeAgent           AgentComponentSpec       `json:"nodeAgent"`
+	GpuMonitoring       AgentComponentSpec       `json:"gpuMonitoring"`
+	ApiserverMonitoring AgentComponentSpec       `json:"apiserverMonitoring"`
+	EtcdMonitoring      AgentComponentSpec       `json:"etcdMonitoring"`
+	SchedulerMonitoring AgentComponentSpec       `json:"schedulerMonitoring"`
+}
+
+type MasterAgentComponentSpec struct {
+	// +kubebuilder:default=false
+	Enabled   bool                        `json:"enabled"`
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	Envs      []corev1.EnvVar             `json:"envs,omitempty"`
 }
 
 type AgentComponentSpec struct {

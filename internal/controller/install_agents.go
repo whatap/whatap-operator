@@ -10,6 +10,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func int32Ptr(i int32) *int32 { return &i }
@@ -18,18 +19,43 @@ func resourceMustParse(q string) resource.Quantity {
 	return qty
 }
 
-func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
+func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	version := cr.Spec.Features.K8sAgent.AgentImageVersion
 	if version == "" {
 		version = "latest"
 	}
 	agentImage := fmt.Sprintf("public.ecr.aws/whatap/kube_agent:%s", version)
+
+	// 기본 리소스 설정
+	resources := cr.Spec.Features.K8sAgent.MasterAgent.Resources.DeepCopy()
+	if resources.Requests == nil {
+		resources.Requests = corev1.ResourceList{}
+	}
+	if resources.Limits == nil {
+		resources.Limits = corev1.ResourceList{}
+	}
+	if _, ok := resources.Requests[corev1.ResourceCPU]; !ok {
+		resources.Requests[corev1.ResourceCPU] = resourceMustParse("100m")
+	}
+	if _, ok := resources.Requests[corev1.ResourceMemory]; !ok {
+		resources.Requests[corev1.ResourceMemory] = resourceMustParse("300Mi")
+	}
+	if _, ok := resources.Limits[corev1.ResourceCPU]; !ok {
+		resources.Limits[corev1.ResourceCPU] = resourceMustParse("200m")
+	}
+	if _, ok := resources.Limits[corev1.ResourceMemory]; !ok {
+		resources.Limits[corev1.ResourceMemory] = resourceMustParse("350Mi")
+	}
+
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "whatap-master-agent",
 			Namespace: r.DefaultNamespace,
 		},
-		Spec: appsv1.DeploymentSpec{
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		deploy.Spec = appsv1.DeploymentSpec{
 			Replicas: int32Ptr(1),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"name": "whatap-master-agent"},
@@ -76,16 +102,7 @@ func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger lo
 									MountPath: "/whatap_conf",
 								},
 							},
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resourceMustParse("200m"),
-									corev1.ResourceMemory: resourceMustParse("350Mi"),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resourceMustParse("100m"),
-									corev1.ResourceMemory: resourceMustParse("300Mi"),
-								},
-							},
+							Resources: *resources,
 						},
 					},
 					Volumes: []corev1.Volume{
@@ -109,18 +126,17 @@ func installMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger lo
 					},
 				},
 			},
-		},
-	}
-
-	// Deployment 생성 또는 업데이트
-	err := r.Create(ctx, deploy)
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		logger.Error(err, "Failed to create Whatap Master Agent Deployment")
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error(err, "Failed to create/update Whatap Master Agent Deployment")
 		return err
 	}
 	return nil
 }
-func installNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
+
+func installNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	version := cr.Spec.Features.K8sAgent.AgentImageVersion
 	if version == "" {
 		version = "latest"
@@ -271,18 +287,18 @@ func installNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 	}
 	return nil
 }
-func installGpuAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
+func installGpuAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	return nil
 }
-func installApiserverMonitor(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
+func installApiserverMonitor(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	return nil
 }
-func installEtcdMonitor(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
+func installEtcdMonitor(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	return nil
 }
-func installSchedulerMonitor(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
+func installSchedulerMonitor(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	return nil
 }
-func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr monitoringv2alpha1.WhatapAgent) error {
+func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	return nil
 }

@@ -139,8 +139,9 @@ var sideEffectNone = admissionregistrationv1.SideEffectClassNone
 // Reconcile
 func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	var whatapAgent monitoringv2alpha1.WhatapAgent
-	if err := r.Get(ctx, req.NamespacedName, &whatapAgent); err != nil {
+
+	whatapAgent := &monitoringv2alpha1.WhatapAgent{}
+	if err := r.Get(ctx, req.NamespacedName, whatapAgent); err != nil {
 		logger.Error(err, "Failed to get WhatapAgent CR")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -148,22 +149,23 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	logger.Info("Reconciling WhatapAgent", "Name", whatapAgent.Name)
 
 	// Apply finalizer
-	if whatapAgent.DeletionTimestamp.IsZero() && !containsString(whatapAgent.Finalizers, whatapFinalizer) {
-		whatapAgent.Finalizers = append(whatapAgent.Finalizers, whatapFinalizer)
-		if err := r.Update(ctx, &whatapAgent); err != nil {
-			return ctrl.Result{}, err
+	if whatapAgent.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(whatapAgent, whatapFinalizer) {
+			controllerutil.AddFinalizer(whatapAgent, whatapFinalizer)
+			if err := r.Update(ctx, whatapAgent); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
-	}
-
-	// Handle deletion
-	if !whatapAgent.ObjectMeta.DeletionTimestamp.IsZero() {
-		// 1-1) cleanup: CR가 install한 리소스들 삭제
-		if err := r.cleanupAgents(ctx); err != nil {
-			return ctrl.Result{}, err
+	} else {
+		// The object is being deleted
+		if controllerutil.ContainsFinalizer(whatapAgent, whatapFinalizer) {
+			// our finalizer is present, so let's handle any external dependency
+			if err := r.cleanupAgents(ctx); err != nil {
+			}
 		}
-		// 1-2) finalizer 제거
-		whatapAgent.Finalizers = removeString(whatapAgent.Finalizers, whatapFinalizer)
-		if err := r.Update(ctx, &whatapAgent); err != nil {
+		// remove our finalizer from the list and update it.
+		controllerutil.RemoveFinalizer(whatapAgent, whatapFinalizer)
+		if err := r.Update(ctx, whatapAgent); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -190,7 +192,7 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	openAgentSpec := whatapAgent.Spec.Features.OpenAgent
 	if k8sAgentSpec.MasterAgent.Enabled {
 		logger.Info("Installing Whatap Master Agent")
-		if err := installMasterAgent(ctx, r, logger, whatapAgent); err != nil {
+		if err := createOrUpdateMasterAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Master Agent")
 		}
 	}
