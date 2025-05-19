@@ -33,49 +33,30 @@ type WhatapAgentSpec struct {
 }
 
 type FeaturesSpec struct {
-	Apm                  ApmSpec                  `json:"apm"`
-	OpenAgent            OpenAgentSpec            `json:"openAgent"`
-	KubernetesMonitoring KubernetesMonitoringSpec `json:"kubernetesMonitoring"`
+	Apm       ApmSpec                  `json:"apm"`
+	OpenAgent OpenAgentSpec            `json:"openAgent"`
+	K8sAgent  KubernetesMonitoringSpec `json:"kubernetesMonitoring"`
 }
 
 // OpenAgentSpec defines the openAgent enablement
 type OpenAgentSpec struct {
 	// +kubebuilder:default=false
-	Enabled bool `json:"enabled" default:"true"`
+	Enabled bool `json:"enabled"`
 }
 
 type KubernetesMonitoringSpec struct {
-	KubernetesMonitoringNamespace string `json:"kubernetesMonitoringNamespace,omitempty"`
+	KubernetesMonitoringNamespace string             `json:"kubernetesMonitoringNamespace,omitempty"`
+	MasterAgent                   AgentComponentSpec `json:"masterAgent"`
+	NodeAgent                     AgentComponentSpec `json:"nodeAgent"`
+	GpuMonitoring                 AgentComponentSpec `json:"gpuMonitoring"`
+	ApiserverMonitoring           AgentComponentSpec `json:"apiserverMonitoring"`
+	EtcdMonitoring                AgentComponentSpec `json:"etcdMonitoring"`
+	SchedulerMonitoring           AgentComponentSpec `json:"schedulerMonitoring"`
+}
 
-	// +kubebuilder:default=true
-	MasterAgent struct {
-		Enabled bool `json:"enabled"`
-	} `json:"masterAgent"`
-
-	// +kubebuilder:default=true
-	NodeAgent struct {
-		Enabled bool `json:"enabled"`
-	} `json:"nodeAgent"`
-
+type AgentComponentSpec struct {
 	// +kubebuilder:default=false
-	GpuMonitoring struct {
-		Enabled bool `json:"enabled"`
-	} `json:"gpuMonitoring"`
-
-	// +kubebuilder:default=false
-	ApiserverMonitoring struct {
-		Enabled bool `json:"enabled"`
-	} `json:"apiserverMonitoring"`
-
-	// +kubebuilder:default=false
-	EtcdMonitoring struct {
-		Enabled bool `json:"enabled"`
-	} `json:"etcdMonitoring"`
-
-	// +kubebuilder:default=false
-	SchedulerMonitoring struct {
-		Enabled bool `json:"enabled"`
-	} `json:"schedulerMonitoring"`
+	Enabled bool `json:"enabled"`
 }
 
 // ApmSpec defines APM-specific settings
@@ -89,11 +70,9 @@ type InstrumentationSpec struct {
 }
 
 type TargetSpec struct {
-	Name string `json:"name"`
-	// +kubebuilder:default=true
-	Enabled bool `json:"enabled"`
-	// +kubebuilder:validation:Enum=java;python;php;dotnet;nodejs;golang
-	Language          string            `json:"language"` // ⭐️ Enum 제한
+	Name              string            `json:"name"`
+	Enabled           bool              `json:"enabled"`  // +kubebuilder:default=true
+	Language          string            `json:"language"` // +kubebuilder:validation:Enum=java;python;php;dotnet;nodejs;golang
 	WhatapApmVersions map[string]string `json:"whatapApmVersions"`
 	NamespaceSelector NamespaceSelector `json:"namespaceSelector"`
 	PodSelector       PodSelector       `json:"podSelector"`

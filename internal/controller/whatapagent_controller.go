@@ -186,46 +186,46 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Kubernetes Monitoring
-	kubeMon := whatapAgent.Spec.Features.KubernetesMonitoring
-
-	if kubeMon.MasterAgent.Enabled {
+	k8sAgentSpec := whatapAgent.Spec.Features.K8sAgent
+	openAgentSpec := whatapAgent.Spec.Features.OpenAgent
+	if k8sAgentSpec.MasterAgent.Enabled {
 		logger.Info("Installing Whatap Master Agent")
 		if err := installMasterAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Master Agent")
 		}
 	}
-	if kubeMon.NodeAgent.Enabled {
+	if k8sAgentSpec.NodeAgent.Enabled {
 		logger.Info("Installing Whatap Node Agent")
 		if err := installNodeAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Node Agent")
 		}
 	}
-	if kubeMon.GpuMonitoring.Enabled {
+	if k8sAgentSpec.GpuMonitoring.Enabled {
 		logger.Info("Installing GPU Monitoring Agent")
 		if err := installGpuAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install GPU Agent")
 		}
 	}
-	if kubeMon.ApiserverMonitoring.Enabled {
+	if k8sAgentSpec.ApiserverMonitoring.Enabled {
 		logger.Info("Installing Apiserver Monitoring Agent")
 		if err := installApiserverMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Apiserver Monitor")
 		}
 	}
-	if kubeMon.EtcdMonitoring.Enabled {
+	if k8sAgentSpec.EtcdMonitoring.Enabled {
 		logger.Info("Installing Etcd Monitoring Agent")
 		if err := installEtcdMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Etcd Monitor")
 		}
 	}
-	if kubeMon.SchedulerMonitoring.Enabled {
+	if k8sAgentSpec.SchedulerMonitoring.Enabled {
 		logger.Info("Installing Scheduler Monitoring Agent")
 		if err := installSchedulerMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Scheduler Monitor")
 		}
 	}
 	// OpenAgent
-	if whatapAgent.Spec.Features.OpenAgent.Enabled {
+	if openAgentSpec.Enabled {
 		logger.Info("Installing Open Agent")
 		if err := installOpenAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Open Agent")
