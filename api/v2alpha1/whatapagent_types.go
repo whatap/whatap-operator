@@ -48,7 +48,7 @@ type K8sAgentSpec struct {
 	Namespace           string                   `json:"namespace,omitempty"`
 	AgentImageVersion   string                   `json:"agentImageVersion,omitempty"`
 	MasterAgent         MasterAgentComponentSpec `json:"masterAgent"`
-	NodeAgent           AgentComponentSpec       `json:"nodeAgent"`
+	NodeAgent           NodeAgentComponentSpec   `json:"nodeAgent"`
 	GpuMonitoring       AgentComponentSpec       `json:"gpuMonitoring"`
 	ApiserverMonitoring AgentComponentSpec       `json:"apiserverMonitoring"`
 	EtcdMonitoring      AgentComponentSpec       `json:"etcdMonitoring"`
@@ -56,6 +56,12 @@ type K8sAgentSpec struct {
 }
 
 type MasterAgentComponentSpec struct {
+	// +kubebuilder:default=false
+	Enabled   bool                        `json:"enabled"`
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	Envs      []corev1.EnvVar             `json:"envs,omitempty"`
+}
+type NodeAgentComponentSpec struct {
 	// +kubebuilder:default=false
 	Enabled   bool                        `json:"enabled"`
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`

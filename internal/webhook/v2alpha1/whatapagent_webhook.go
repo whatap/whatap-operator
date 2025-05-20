@@ -99,7 +99,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		pod.Annotations["whatap-apm-version"] = target.WhatapApmVersions[target.Language]
 
 		whatapWebhookLogger.Info("injected Whatap APM into Pod",
-			"pod", pod.Name,
+			"pod", pod.ObjectMeta.Name,
 			"language", target.Language,
 			"version", target.WhatapApmVersions[target.Language],
 		)

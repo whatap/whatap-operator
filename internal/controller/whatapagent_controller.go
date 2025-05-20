@@ -190,22 +190,23 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Kubernetes Monitoring
 	k8sAgentSpec := whatapAgent.Spec.Features.K8sAgent
 	openAgentSpec := whatapAgent.Spec.Features.OpenAgent
+	if k8sAgentSpec.GpuMonitoring.Enabled {
+		logger.Info("createOrUpdate Whatap GPU Monitoring ConfigMap/dcgm-exporter-csv")
+		if err := createOrUpdateGpuConfigMap(ctx, r, logger, whatapAgent); err != nil {
+			logger.Error(err, "Failed to createOrUpdate GPU Monitoring ConfigMap")
+		}
+	}
+
 	if k8sAgentSpec.MasterAgent.Enabled {
-		logger.Info("Installing Whatap Master Agent")
+		logger.Info("createOrUpdate Whatap Master Agent")
 		if err := createOrUpdateMasterAgent(ctx, r, logger, whatapAgent); err != nil {
-			logger.Error(err, "Failed to install Master Agent")
+			logger.Error(err, "Failed to createOrUpdate Master Agent")
 		}
 	}
 	if k8sAgentSpec.NodeAgent.Enabled {
-		logger.Info("Installing Whatap Node Agent")
-		if err := installNodeAgent(ctx, r, logger, whatapAgent); err != nil {
-			logger.Error(err, "Failed to install Node Agent")
-		}
-	}
-	if k8sAgentSpec.GpuMonitoring.Enabled {
-		logger.Info("Installing GPU Monitoring Agent")
-		if err := installGpuAgent(ctx, r, logger, whatapAgent); err != nil {
-			logger.Error(err, "Failed to install GPU Agent")
+		logger.Info("createOrUpdate Whatap Node Agent")
+		if err := createOrUpdateNodeAgent(ctx, r, logger, whatapAgent); err != nil {
+			logger.Error(err, "Failed to createOrUpdate Node Agent")
 		}
 	}
 	if k8sAgentSpec.ApiserverMonitoring.Enabled {
