@@ -15,4 +15,5 @@ echo "🚀 make docker-build VERSION=${VERSION}"
 
 make docker-build VERSION="${VERSION}"
 docker tag public.ecr.aws/whatap/whatap-operator:${VERSION} public.ecr.aws/whatap/whatap-operator:latest
+source ~/.aws-ecr-login
 docker push public.ecr.aws/whatap/whatap-operator:latest
