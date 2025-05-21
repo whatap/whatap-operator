@@ -100,30 +100,57 @@ func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.C
 		},
 	}
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, mwc, func() error {
-		mwc.Webhooks = []admissionregistrationv1.MutatingWebhook{{
-			Name: "mpod.kb.io",
-			ClientConfig: admissionregistrationv1.WebhookClientConfig{
-				Service: &admissionregistrationv1.ServiceReference{
-					Name:      webhookServiceName,
-					Namespace: r.DefaultNamespace,
-					Path:      strPtr("/whatap-injection--v1-pod"),
+		mwc.Webhooks = []admissionregistrationv1.MutatingWebhook{
+			{
+				Name: "mpod.kb.io",
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{
+					Service: &admissionregistrationv1.ServiceReference{
+						Name:      webhookServiceName,
+						Namespace: r.DefaultNamespace,
+						Path:      strPtr("/whatap-injection--v1-pod"),
+					},
+					CABundle: r.WebhookCABundle,
 				},
-				CABundle: r.WebhookCABundle,
+				Rules: []admissionregistrationv1.RuleWithOperations{{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{""},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"pods"},
+					},
+				}},
+				FailurePolicy:           failurePtr(admissionregistrationv1.Ignore),
+				AdmissionReviewVersions: []string{"v1"},
+				SideEffects:             &sideEffectNone,
 			},
-			Rules: []admissionregistrationv1.RuleWithOperations{{
-				Operations: []admissionregistrationv1.OperationType{
-					admissionregistrationv1.Create,
+			{
+				Name: "whatapagent.kb.io",
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{
+					Service: &admissionregistrationv1.ServiceReference{
+						Name:      webhookServiceName,
+						Namespace: r.DefaultNamespace,
+						Path:      strPtr("/whatap-validation--v2alpha1-whatapagent"),
+					},
+					CABundle: r.WebhookCABundle,
 				},
-				Rule: admissionregistrationv1.Rule{
-					APIGroups:   []string{""},
-					APIVersions: []string{"v1"},
-					Resources:   []string{"pods"},
-				},
-			}},
-			FailurePolicy:           failurePtr(admissionregistrationv1.Ignore),
-			AdmissionReviewVersions: []string{"v1"},
-			SideEffects:             &sideEffectNone,
-		}}
+				Rules: []admissionregistrationv1.RuleWithOperations{{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+						admissionregistrationv1.Update,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"monitoring.whatap.com"},
+						APIVersions: []string{"v2alpha1"},
+						Resources:   []string{"whatapagents"},
+					},
+				}},
+				FailurePolicy:           failurePtr(admissionregistrationv1.Ignore),
+				AdmissionReviewVersions: []string{"v1"},
+				SideEffects:             &sideEffectNone,
+			},
+		}
 		return nil
 	})
 	return err

@@ -38,11 +38,20 @@ var whatapWebhookLogger = logf.Log.WithName("whatap-webhook")
 
 // SetupWhatapAgentWebhookWithManager registers the webhook for WhatapAgent in the manager.
 func SetupWhatapAgentWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
+	// Register the Pod webhook for injection
+	if err := ctrl.NewWebhookManagedBy(mgr).
 		For(&corev1.Pod{}).
-		//WithValidator(&WhatapAgentCustomValidator{}).
 		WithDefaulter(&WhatapAgentCustomDefaulter{mgr.GetClient()}).
 		WithDefaulterCustomPath("/whatap-injection--v1-pod").
+		Complete(); err != nil {
+		return err
+	}
+
+	// Register the WhatapAgent webhook for validation
+	return ctrl.NewWebhookManagedBy(mgr).
+		For(&monitoringv2alpha1.WhatapAgent{}).
+		WithValidator(&WhatapAgentCustomValidator{client: mgr.GetClient()}).
+		WithValidatorCustomPath("/whatap-validation--v2alpha1-whatapagent").
 		Complete()
 }
 
@@ -109,7 +118,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 }
 
 type WhatapAgentCustomValidator struct {
-	// TODO(user): Add more fields as needed for validation
+	client client.Client
 }
 
 var _ webhook.CustomValidator = &WhatapAgentCustomValidator{}
@@ -122,7 +131,20 @@ func (v *WhatapAgentCustomValidator) ValidateCreate(ctx context.Context, obj run
 	}
 	whatapWebhookLogger.Info("Validation for WhatapAgent upon creation", "name", whatapagent.GetName())
 
-	// TODO(user): fill in your validation logic upon object creation.
+	// Validate required fields
+	//if err := validateRequiredFields(whatapagent); err != nil {
+	//	return nil, err
+	//}
+
+	// Validate APM targets
+	//if err := validateApmTargets(whatapagent); err != nil {
+	//	return nil, err
+	//}
+
+	// Validate agent configurations
+	if err := validateAgentConfigurations(whatapagent); err != nil {
+		return nil, err
+	}
 
 	return nil, nil
 }
@@ -135,7 +157,20 @@ func (v *WhatapAgentCustomValidator) ValidateUpdate(ctx context.Context, oldObj,
 	}
 	whatapWebhookLogger.Info("Validation for WhatapAgent upon update", "name", whatapagent.GetName())
 
-	// TODO(user): fill in your validation logic upon object update.
+	// Validate required fields
+	if err := validateRequiredFields(whatapagent); err != nil {
+		return nil, err
+	}
+
+	// Validate APM targets
+	if err := validateApmTargets(whatapagent); err != nil {
+		return nil, err
+	}
+
+	// Validate agent configurations
+	if err := validateAgentConfigurations(whatapagent); err != nil {
+		return nil, err
+	}
 
 	return nil, nil
 }
@@ -148,7 +183,80 @@ func (v *WhatapAgentCustomValidator) ValidateDelete(ctx context.Context, obj run
 	}
 	whatapWebhookLogger.Info("Validation for WhatapAgent upon deletion", "name", whatapagent.GetName())
 
-	// TODO(user): fill in your validation logic upon object deletion.
-
+	// No specific validation for deletion
 	return nil, nil
+}
+
+// validateRequiredFields checks that all required fields are present and valid
+func validateRequiredFields(whatapagent *monitoringv2alpha1.WhatapAgent) error {
+	// Check license
+	if whatapagent.Spec.License == "" {
+		return fmt.Errorf("license is required")
+	}
+
+	// Check host
+	if whatapagent.Spec.Host == "" {
+		return fmt.Errorf("host is required")
+	}
+
+	// Check port
+	if whatapagent.Spec.Port == "" {
+		return fmt.Errorf("port is required")
+	}
+
+	return nil
+}
+
+// validateApmTargets validates the APM targets configuration
+func validateApmTargets(whatapagent *monitoringv2alpha1.WhatapAgent) error {
+	for i, target := range whatapagent.Spec.Features.Apm.Instrumentation.Targets {
+		// Skip disabled targets
+		if !target.Enabled {
+			continue
+		}
+
+		// Check target name
+		if target.Name == "" {
+			return fmt.Errorf("target[%d]: name is required", i)
+		}
+
+		// Check language
+		if target.Language == "" {
+			return fmt.Errorf("target[%d]: language is required", i)
+		}
+
+		// Check if WhatapApmVersions has an entry for the specified language
+		if target.WhatapApmVersions == nil {
+			return fmt.Errorf("target[%d]: whatapApmVersions is required", i)
+		}
+		version, exists := target.WhatapApmVersions[target.Language]
+		if !exists || version == "" {
+			return fmt.Errorf("target[%d]: whatapApmVersions must include an entry for language '%s'", i, target.Language)
+		}
+
+		// Check config mode
+		if target.Config.Mode == "custom" {
+			if target.Config.ConfigMapRef == nil {
+				return fmt.Errorf("target[%d]: configMapRef is required when config mode is 'custom'", i)
+			}
+			if target.Config.ConfigMapRef.Name == "" {
+				return fmt.Errorf("target[%d]: configMapRef.name is required when config mode is 'custom'", i)
+			}
+			if target.Config.ConfigMapRef.Namespace == "" {
+				return fmt.Errorf("target[%d]: configMapRef.namespace is required when config mode is 'custom'", i)
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateAgentConfigurations validates the agent configurations
+func validateAgentConfigurations(whatapagent *monitoringv2alpha1.WhatapAgent) error {
+	// Validate K8sAgent configuration
+	whatapAgentCrName := whatapagent.ObjectMeta.Name
+	if whatapAgentCrName != "whatap" {
+		return fmt.Errorf("agent configuration is not valid")
+	}
+	return nil
 }
