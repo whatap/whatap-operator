@@ -90,7 +90,21 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		if !target.Enabled {
 			continue
 		}
-		if !hasLabels(pod.Labels, target.PodSelector.MatchLabels) {
+
+		// Check if pod labels match the PodSelector
+		if !matchesSelector(pod.Labels, target.PodSelector) {
+			continue
+		}
+
+		// Get the namespace object to check its labels
+		var namespace corev1.Namespace
+		if err := d.client.Get(ctx, client.ObjectKey{Name: pod.Namespace}, &namespace); err != nil {
+			whatapWebhookLogger.Error(err, "Failed to get namespace", "namespace", pod.Namespace)
+			continue
+		}
+
+		// Check if namespace matches the NamespaceSelector
+		if !matchesNamespaceSelector(pod.Namespace, namespace.Labels, target.NamespaceSelector) {
 			continue
 		}
 
@@ -107,8 +121,20 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		pod.Annotations["whatap-apm-language"] = target.Language
 		pod.Annotations["whatap-apm-version"] = target.WhatapApmVersions[target.Language]
 
+		// Get pod name or use namespace+generateName if name is empty
+		podIdentifier := pod.GetObjectMeta().GetName()
+		if podIdentifier == "" {
+			// Use namespace + generateName as alternative identifier
+			podIdentifier = pod.GetObjectMeta().GetNamespace()
+			if pod.GetObjectMeta().GetGenerateName() != "" {
+				podIdentifier += "/" + pod.GetObjectMeta().GetGenerateName() + "*"
+			} else {
+				podIdentifier += "/unknown"
+			}
+		}
+
 		whatapWebhookLogger.Info("injected Whatap APM into Pod",
-			"pod", pod.ObjectMeta.Name,
+			"pod", podIdentifier,
 			"language", target.Language,
 			"version", target.WhatapApmVersions[target.Language],
 		)
@@ -158,14 +184,14 @@ func (v *WhatapAgentCustomValidator) ValidateUpdate(ctx context.Context, oldObj,
 	whatapWebhookLogger.Info("Validation for WhatapAgent upon update", "name", whatapagent.GetName())
 
 	// Validate required fields
-	if err := validateRequiredFields(whatapagent); err != nil {
-		return nil, err
-	}
+	//if err := validateRequiredFields(whatapagent); err != nil {
+	//	return nil, err
+	//}
 
 	// Validate APM targets
-	if err := validateApmTargets(whatapagent); err != nil {
-		return nil, err
-	}
+	//if err := validateApmTargets(whatapagent); err != nil {
+	//	return nil, err
+	//}
 
 	// Validate agent configurations
 	if err := validateAgentConfigurations(whatapagent); err != nil {

@@ -1,68 +1,13 @@
 package v2alpha1
 
 import (
-	"context"
 	"fmt"
 	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
-	"github.com/whatap/whatap-operator/internal/controller"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Deployment 처리
-func processDeployments(ctx context.Context, r *controller.WhatapAgentReconciler, logger logr.Logger, ns string, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent) {
-	// 1) 네임스페이스 내 모든 Deployment 읽기
-	var deployList appsv1.DeploymentList
-	if err := r.List(ctx, &deployList, client.InNamespace(ns)); err != nil {
-		logger.Error(err, "Failed to list Deployments")
-		return
-	}
-
-	for _, deploy := range deployList.Items {
-		if isAlreadyPatched(deploy.Spec.Template.Spec) {
-			logger.Info("isAlreadyPatched",
-				"deployName", deploy.Name,
-				"deployNamespace", deploy.Namespace,
-			)
-			continue
-		}
-
-		// 2) 필터링: PodTemplate 라벨 / Selector 라벨 하나라도 매칭되면 대상
-		sel := target.PodSelector.MatchLabels
-		matchByTemplate := hasLabels(deploy.Spec.Template.Labels, sel)
-		//matchBySelector := hasLabels(deploy.Spec.Selector.MatchLabels, sel)
-		//matchByLabels := hasLabels(deploy.Labels, sel)
-		//matchByAnnotations := hasLabels(deploy.Annotations, sel)
-		if !(matchByTemplate) {
-			continue
-		}
-
-		logger.Info("Detected APM injection target",
-			"deployment", deploy.Name,
-			"targetName", target.Name,
-			"language", target.Language,
-			"namespaceSelector", fmt.Sprintf("%#v", target.NamespaceSelector.MatchNames),
-			"podSelector", fmt.Sprintf("%#v", target.PodSelector.MatchLabels),
-			"matchByTemplate", matchByTemplate,
-			//"matchBySelector", matchBySelector,
-			//"matchByLabels", matchByLabels,
-		)
-
-		// 3) 패치 로직 적용
-		patchPodTemplateSpec(&deploy.Spec.Template.Spec, cr, target, logger)
-		if err := r.Update(ctx, &deploy); err != nil {
-			// ❌ 주입 실패 로그
-			logger.Error(err, "Failed to inject Whatap APM into Deployment",
-				"deployment", deploy.Name, "namespace", deploy.Namespace)
-		} else {
-			// ✅ 주입 성공 로그
-			logger.Info("Successfully injected Whatap APM into Deployment",
-				"deployment", deploy.Name, "namespace", deploy.Namespace)
-		}
-	}
-}
 
 // PodSpec 수정 (자동 주입 핵심 로직)
 func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec, logger logr.Logger) {
@@ -212,21 +157,134 @@ func injectJavaToolOptions(envVars []corev1.EnvVar, agentOption string, logger l
 	return envVars
 }
 
-// 이미 패치되었는지 확인
-func isAlreadyPatched(podSpec corev1.PodSpec) bool {
-	for _, ic := range podSpec.InitContainers {
-		if ic.Name == "whatap-agent-init" {
-			return true
-		}
-	}
-	return false
-}
 func hasLabels(labels, selector map[string]string) bool {
 	for k, v := range selector {
 		if labels[k] != v {
 			return false
 		}
 	}
+	return true
+}
+
+// matchesSelector checks if the given labels match the selector
+func matchesSelector(labels map[string]string, selector monitoringv2alpha1.PodSelector) bool {
+	// Check matchLabels
+	if !hasLabels(labels, selector.MatchLabels) {
+		return false
+	}
+
+	// Check matchExpressions
+	for _, req := range selector.MatchExpressions {
+		switch req.Operator {
+		case "In":
+			// The label must exist and its value must be in the specified values
+			value, exists := labels[req.Key]
+			if !exists {
+				return false
+			}
+			found := false
+			for _, v := range req.Values {
+				if value == v {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		case "NotIn":
+			// If the label exists, its value must not be in the specified values
+			value, exists := labels[req.Key]
+			if exists {
+				for _, v := range req.Values {
+					if value == v {
+						return false
+					}
+				}
+			}
+		case "Exists":
+			// The label must exist
+			_, exists := labels[req.Key]
+			if !exists {
+				return false
+			}
+		case "DoesNotExist":
+			// The label must not exist
+			_, exists := labels[req.Key]
+			if exists {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// matchesNamespaceSelector checks if the given namespace matches the selector
+func matchesNamespaceSelector(namespaceName string, namespaceLabels map[string]string, selector monitoringv2alpha1.NamespaceSelector) bool {
+	// Check matchNames
+	if len(selector.MatchNames) > 0 {
+		found := false
+		for _, name := range selector.MatchNames {
+			if namespaceName == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	// Check matchLabels
+	if !hasLabels(namespaceLabels, selector.MatchLabels) {
+		return false
+	}
+
+	// Check matchExpressions
+	for _, req := range selector.MatchExpressions {
+		switch req.Operator {
+		case "In":
+			// The label must exist and its value must be in the specified values
+			value, exists := namespaceLabels[req.Key]
+			if !exists {
+				return false
+			}
+			found := false
+			for _, v := range req.Values {
+				if value == v {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		case "NotIn":
+			// If the label exists, its value must not be in the specified values
+			value, exists := namespaceLabels[req.Key]
+			if exists {
+				for _, v := range req.Values {
+					if value == v {
+						return false
+					}
+				}
+			}
+		case "Exists":
+			// The label must exist
+			_, exists := namespaceLabels[req.Key]
+			if !exists {
+				return false
+			}
+		case "DoesNotExist":
+			// The label must not exist
+			_, exists := namespaceLabels[req.Key]
+			if exists {
+				return false
+			}
+		}
+	}
+
 	return true
 }
 func appendIfNotExists(volumes []corev1.Volume, newVol corev1.Volume) []corev1.Volume {
