@@ -75,7 +75,8 @@ type OpenAgentSpec struct {
 type OpenAgentTargetSpec struct {
 	// TargetName is the name of the target
 	TargetName string `json:"targetName"`
-	// Type is the type of the target (e.g., ServiceMonitor)
+ // Type is the type of the target (ServiceMonitor, PodMonitor, or StaticEndpoints)
+	// +kubebuilder:validation:Enum=ServiceMonitor;PodMonitor;StaticEndpoints
 	Type string `json:"type"`
 	// NamespaceSelector selects the namespaces to find the targets in
 	NamespaceSelector NamespaceSelector `json:"namespaceSelector,omitempty"`
