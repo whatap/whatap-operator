@@ -1,0 +1,42 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  license: "x41pl22ek7jhv-z43cebasdv4il7-z62p3l35fj5502"
+  host: "15.165.146.117"
+  port: "6600"
+  features:
+    k8sAgent:
+      masterAgent:
+        enabled: true
+        # Tolerations for the master agent
+        tolerations:
+          - key: "dedicated"
+            operator: "Equal"
+            value: "monitoring"
+            effect: "NoSchedule"
+          - key: "special-workload"
+            operator: "Exists"
+            effect: "NoSchedule"
+      nodeAgent:
+        enabled: true
+        # Tolerations for the node agent
+        # Note: These are in addition to the default tolerations for master and control-plane nodes
+        tolerations:
+          - key: "dedicated"
+            operator: "Equal"
+            value: "monitoring"
+            effect: "NoSchedule"
+          - key: "gpu"
+            operator: "Exists"
+            effect: "NoSchedule"
+
+# Note: The WhatapAgent CR now directly supports specifying tolerations.
+# The tolerations specified in the CR will be applied to the respective pods.
+# For the node agent, the specified tolerations are added to the default tolerations
+# for master and control-plane nodes.
+#
+# Default tolerations for the node agent:
+# - key: "node-role.kubernetes.io/master", effect: "NoSchedule"
+# - key: "node-role.kubernetes.io/control-plane", effect: "NoSchedule"

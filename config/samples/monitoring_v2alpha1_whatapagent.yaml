@@ -32,3 +32,34 @@ spec:
               configMap:
                 name: "shop-api-config"
                 namespace: "backend"
+    openAgent:
+      enabled: true
+      globalInterval: "60s"
+      globalPath: "/metrics"
+      targets:
+        - targetName: "kube-apiserver"
+          type: "ServiceMonitor"
+          namespaceSelector:
+            matchNames:
+              - "default"
+          selector:
+            component: "apiserver"
+            provider: "kubernetes"
+          endpoints:
+            - port: "https"
+              path: "/metrics"
+              interval: "30s"
+              scheme: "https"
+              tlsConfig:
+                insecureSkipVerify: true
+          metricRelabelConfigs:
+            - source_labels: ["__name__"]
+              regex: "apiserver_request_total"
+              action: "keep"
+            - source_labels: ["verb"]
+              target_label: "http_verb"
+              replacement: "${1}"
+              action: "replace"
+            - target_label: "metric_src"
+              replacement: "whatap-open-agent"
+              action: "replace"

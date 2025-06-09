@@ -3,12 +3,14 @@ package controller
 import (
 	"context"
 	"fmt"
+	"gopkg.in/yaml.v2"
 
 	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	"github.com/whatap/whatap-operator/internal/gpu"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -97,6 +99,9 @@ func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, lo
 }
 
 func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements, cr *monitoringv2alpha1.WhatapAgent) appsv1.DeploymentSpec {
+	// Get the master agent component spec for easier access
+	masterSpec := cr.Spec.Features.K8sAgent.MasterAgent
+
 	return appsv1.DeploymentSpec{
 		Replicas: int32Ptr(1),
 		Selector: &metav1.LabelSelector{
@@ -108,6 +113,8 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 			},
 			Spec: corev1.PodSpec{
 				ServiceAccountName: "whatap",
+				// Apply tolerations from CR if specified
+				Tolerations: masterSpec.Tolerations,
 				Containers: []corev1.Container{
 					{
 						Name:    "whatap-master-agent",
@@ -206,6 +213,18 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 }
 
 func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, cr *monitoringv2alpha1.WhatapAgent) appsv1.DaemonSetSpec {
+	// Get the node agent component spec for easier access
+	nodeSpec := cr.Spec.Features.K8sAgent.NodeAgent
+
+	// Default tolerations for node agent
+	defaultTolerations := []corev1.Toleration{
+		{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+		{Key: "node-role.kubernetes.io/control-plane", Effect: corev1.TaintEffectNoSchedule},
+	}
+
+	// Merge default tolerations with any specified in the CR
+	tolerations := append(defaultTolerations, nodeSpec.Tolerations...)
+
 	return appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{"name": "whatap-node-agent"},
@@ -297,10 +316,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						},
 					},
 				},
-				Tolerations: []corev1.Toleration{
-					{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
-					{Key: "node-role.kubernetes.io/control-plane", Effect: corev1.TaintEffectNoSchedule},
-				},
+				Tolerations: tolerations,
 				Volumes: []corev1.Volume{
 					{Name: "rootfs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/"}}},
 					{Name: "hostsys", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys"}}},
@@ -389,6 +405,326 @@ func installEtcdMonitor(ctx context.Context, r *WhatapAgentReconciler, logger lo
 func installSchedulerMonitor(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	return nil
 }
+
+// generateScrapeConfig generates the scrape_config.yaml content from the CR
+func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent) string {
+	// Define the structure for the scrape config
+	type ScrapeConfig struct {
+		Global struct {
+			ScrapeInterval string `yaml:"scrape_interval"`
+		} `yaml:"global"`
+		Features struct {
+			OpenAgent struct {
+				Enabled        bool          `yaml:"enabled"`
+				GlobalInterval string        `yaml:"globalInterval,omitempty"`
+				GlobalPath     string        `yaml:"globalPath,omitempty"`
+				Targets        []interface{} `yaml:"targets,omitempty"`
+			} `yaml:"openAgent"`
+		} `yaml:"features"`
+	}
+
+	// Create the scrape config
+	config := ScrapeConfig{}
+	config.Global.ScrapeInterval = "15s" // Default interval
+	config.Features.OpenAgent.Enabled = cr.Spec.Features.OpenAgent.Enabled
+	config.Features.OpenAgent.GlobalInterval = cr.Spec.Features.OpenAgent.GlobalInterval
+	config.Features.OpenAgent.GlobalPath = cr.Spec.Features.OpenAgent.GlobalPath
+
+	// Convert targets to interface{} for YAML marshaling
+	for _, target := range cr.Spec.Features.OpenAgent.Targets {
+		targetMap := make(map[string]interface{})
+		targetMap["targetName"] = target.TargetName
+		targetMap["type"] = target.Type
+
+		// Add namespaceSelector if present
+		if len(target.NamespaceSelector.MatchNames) > 0 || len(target.NamespaceSelector.MatchLabels) > 0 || len(target.NamespaceSelector.MatchExpressions) > 0 {
+			nsSelector := make(map[string]interface{})
+			if len(target.NamespaceSelector.MatchNames) > 0 {
+				nsSelector["matchNames"] = target.NamespaceSelector.MatchNames
+			}
+			if len(target.NamespaceSelector.MatchLabels) > 0 {
+				nsSelector["matchLabels"] = target.NamespaceSelector.MatchLabels
+			}
+			if len(target.NamespaceSelector.MatchExpressions) > 0 {
+				// Convert match expressions to interface{}
+				matchExpressions := make([]interface{}, 0)
+				for _, expr := range target.NamespaceSelector.MatchExpressions {
+					exprMap := make(map[string]interface{})
+					exprMap["key"] = expr.Key
+					exprMap["operator"] = expr.Operator
+					exprMap["values"] = expr.Values
+					matchExpressions = append(matchExpressions, exprMap)
+				}
+				nsSelector["matchExpressions"] = matchExpressions
+			}
+			targetMap["namespaceSelector"] = nsSelector
+		}
+
+		// Add selector if present
+		if len(target.Selector) > 0 {
+			targetMap["selector"] = target.Selector
+		}
+
+		// Add endpoints if present
+		if len(target.Endpoints) > 0 {
+			endpoints := make([]interface{}, 0)
+			for _, endpoint := range target.Endpoints {
+				endpointMap := make(map[string]interface{})
+				endpointMap["port"] = endpoint.Port
+				if endpoint.Path != "" {
+					endpointMap["path"] = endpoint.Path
+				}
+				if endpoint.Interval != "" {
+					endpointMap["interval"] = endpoint.Interval
+				}
+				if endpoint.Scheme != "" {
+					endpointMap["scheme"] = endpoint.Scheme
+				}
+				if endpoint.TLSConfig != nil {
+					tlsConfig := make(map[string]interface{})
+					tlsConfig["insecureSkipVerify"] = endpoint.TLSConfig.InsecureSkipVerify
+					endpointMap["tlsConfig"] = tlsConfig
+				}
+				endpoints = append(endpoints, endpointMap)
+			}
+			targetMap["endpoints"] = endpoints
+		}
+
+		// Add metricRelabelConfigs if present
+		if len(target.MetricRelabelConfigs) > 0 {
+			relabelConfigs := make([]interface{}, 0)
+			for _, relabelConfig := range target.MetricRelabelConfigs {
+				relabelMap := make(map[string]interface{})
+				if len(relabelConfig.SourceLabels) > 0 {
+					relabelMap["source_labels"] = relabelConfig.SourceLabels
+				}
+				if relabelConfig.Regex != "" {
+					relabelMap["regex"] = relabelConfig.Regex
+				}
+				if relabelConfig.TargetLabel != "" {
+					relabelMap["target_label"] = relabelConfig.TargetLabel
+				}
+				if relabelConfig.Replacement != "" {
+					relabelMap["replacement"] = relabelConfig.Replacement
+				}
+				if relabelConfig.Action != "" {
+					relabelMap["action"] = relabelConfig.Action
+				}
+				relabelConfigs = append(relabelConfigs, relabelMap)
+			}
+			targetMap["metricRelabelConfigs"] = relabelConfigs
+		}
+
+		config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
+	}
+
+	// Marshal to YAML
+	yamlBytes, err := yaml.Marshal(config)
+	if err != nil {
+		return "# Error generating scrape config: " + err.Error()
+	}
+
+	return string(yamlBytes)
+}
+
 func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
+	// Create ServiceAccount
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "whatap-open-agent-sa",
+			Namespace: r.DefaultNamespace,
+		},
+	}
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, sa, func() error {
+		return nil
+	})
+	if err != nil {
+		logger.Error(err, "Failed to create/update ServiceAccount for OpenAgent")
+		return err
+	}
+	logResult(logger, "Whatap", "OpenAgent ServiceAccount", op)
+
+	// Create ClusterRole
+	cr1 := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "whatap-open-agent-role",
+		},
+	}
+	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, cr1, func() error {
+		cr1.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"*"},
+				Resources: []string{"pods", "services", "endpoints", "namespaces"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				NonResourceURLs: []string{"/metrics"},
+				Verbs:           []string{"*"},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error(err, "Failed to create/update ClusterRole for OpenAgent")
+		return err
+	}
+	logResult(logger, "Whatap", "OpenAgent ClusterRole", op)
+
+	// Create ClusterRoleBinding
+	crb := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "whatap-open-agent-role-binding",
+		},
+	}
+	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, crb, func() error {
+		crb.Subjects = []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "whatap-open-agent-sa",
+				Namespace: r.DefaultNamespace,
+			},
+		}
+		crb.RoleRef = rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "whatap-open-agent-role",
+			APIGroup: "rbac.authorization.k8s.io",
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error(err, "Failed to create/update ClusterRoleBinding for OpenAgent")
+		return err
+	}
+	logResult(logger, "Whatap", "OpenAgent ClusterRoleBinding", op)
+
+	// Create ConfigMap
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "whatap-open-agent-config",
+			Namespace: r.DefaultNamespace,
+		},
+	}
+	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		// Generate scrape_config.yaml content from CR
+		scrapeConfig := generateScrapeConfig(cr)
+		cm.Data = map[string]string{
+			"scrape_config.yaml": scrapeConfig,
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error(err, "Failed to create/update ConfigMap for OpenAgent")
+		return err
+	}
+	logResult(logger, "Whatap", "OpenAgent ConfigMap", op)
+
+	// Create Deployment
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "whatap-open-agent",
+			Namespace: r.DefaultNamespace,
+			Labels: map[string]string{
+				"app": "whatap-open-agent",
+			},
+		},
+	}
+	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		deploy.Spec = appsv1.DeploymentSpec{
+			Replicas: int32Ptr(1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "whatap-open-agent",
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": "whatap-open-agent",
+					},
+				},
+				Spec: corev1.PodSpec{
+					ServiceAccountName: "whatap-open-agent-sa",
+					Containers: []corev1.Container{
+						{
+							Name:            "whatap-open-agent",
+							Image:           "whatap/open_agent:latest",
+							ImagePullPolicy: corev1.PullAlways,
+							Env: []corev1.EnvVar{
+								{
+									Name: "WHATAP_LICENSE",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "whatap-credentials",
+											},
+											Key: "license",
+										},
+									},
+								},
+								{
+									Name: "WHATAP_HOST",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "whatap-credentials",
+											},
+											Key: "host",
+										},
+									},
+								},
+								{
+									Name: "WHATAP_PORT",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "whatap-credentials",
+											},
+											Key: "port",
+										},
+									},
+								},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "config-volume",
+									MountPath: "/app/scrape_config.yaml",
+									SubPath:   "scrape_config.yaml",
+								},
+								{
+									Name:      "logs-volume",
+									MountPath: "/app/logs",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "config-volume",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "whatap-open-agent-config",
+									},
+								},
+							},
+						},
+						{
+							Name: "logs-volume",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
+					},
+				},
+			},
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error(err, "Failed to create/update Deployment for OpenAgent")
+		return err
+	}
+	logResult(logger, "Whatap", "OpenAgent Deployment", op)
+
 	return nil
 }

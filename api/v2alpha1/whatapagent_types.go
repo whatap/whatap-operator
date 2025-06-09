@@ -38,10 +38,80 @@ type FeaturesSpec struct {
 	K8sAgent  K8sAgentSpec  `json:"k8sAgent"`
 }
 
-// OpenAgentSpec defines the openAgent enablement
+// OpenAgentSpec defines the openAgent enablement and configuration
 type OpenAgentSpec struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled"`
+	// GlobalInterval defines the default scrape interval for all targets
+	// +optional
+	GlobalInterval string `json:"globalInterval,omitempty"`
+	// GlobalPath defines the default metrics path for all targets
+	// +optional
+	GlobalPath string `json:"globalPath,omitempty"`
+	// Targets defines the list of targets to scrape metrics from
+	// +optional
+	Targets []OpenAgentTargetSpec `json:"targets,omitempty"`
+}
+
+// OpenAgentTargetSpec defines a target for the OpenAgent to scrape metrics from
+type OpenAgentTargetSpec struct {
+	// TargetName is the name of the target
+	TargetName string `json:"targetName"`
+	// Type is the type of the target (e.g., ServiceMonitor)
+	Type string `json:"type"`
+	// NamespaceSelector selects the namespaces to find the targets in
+	NamespaceSelector NamespaceSelector `json:"namespaceSelector,omitempty"`
+	// Selector selects the targets to scrape
+	Selector map[string]string `json:"selector,omitempty"`
+	// Endpoints defines the endpoints to scrape metrics from
+	Endpoints []OpenAgentEndpoint `json:"endpoints,omitempty"`
+	// MetricRelabelConfigs defines the metric relabeling configurations
+	// +optional
+	MetricRelabelConfigs []MetricRelabelConfig `json:"metricRelabelConfigs,omitempty"`
+}
+
+// OpenAgentEndpoint defines an endpoint for the OpenAgent to scrape metrics from
+type OpenAgentEndpoint struct {
+	// Port is the port to scrape metrics from
+	Port string `json:"port"`
+	// Path is the path to scrape metrics from
+	// +optional
+	Path string `json:"path,omitempty"`
+	// Interval is the scrape interval for this endpoint
+	// +optional
+	Interval string `json:"interval,omitempty"`
+	// Scheme is the HTTP scheme to use for scraping (http or https)
+	// +optional
+	Scheme string `json:"scheme,omitempty"`
+	// TLSConfig defines the TLS configuration for the endpoint
+	// +optional
+	TLSConfig *TLSConfig `json:"tlsConfig,omitempty"`
+}
+
+// TLSConfig defines the TLS configuration for an endpoint
+type TLSConfig struct {
+	// InsecureSkipVerify disables target certificate validation
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+}
+
+// MetricRelabelConfig defines a metric relabeling configuration
+type MetricRelabelConfig struct {
+	// SourceLabels is the list of source labels to use in the relabeling
+	// +optional
+	SourceLabels []string `json:"source_labels,omitempty"`
+	// Regex is the regular expression to match against the source labels
+	// +optional
+	Regex string `json:"regex,omitempty"`
+	// TargetLabel is the label to set in the relabeling
+	// +optional
+	TargetLabel string `json:"target_label,omitempty"`
+	// Replacement is the replacement value for the target label
+	// +optional
+	Replacement string `json:"replacement,omitempty"`
+	// Action is the relabeling action to perform
+	// +optional
+	Action string `json:"action,omitempty"`
 }
 
 type K8sAgentSpec struct {
@@ -60,12 +130,18 @@ type MasterAgentComponentSpec struct {
 	Enabled   bool                        `json:"enabled"`
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 	Envs      []corev1.EnvVar             `json:"envs,omitempty"`
+	// Tolerations to be added to the MasterAgent pod
+	// +optional
+	Tolerations []corev1.Toleration       `json:"tolerations,omitempty"`
 }
 type NodeAgentComponentSpec struct {
 	// +kubebuilder:default=false
 	Enabled   bool                        `json:"enabled"`
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 	Envs      []corev1.EnvVar             `json:"envs,omitempty"`
+	// Tolerations to be added to the NodeAgent pod
+	// +optional
+	Tolerations []corev1.Toleration       `json:"tolerations,omitempty"`
 }
 
 type AgentComponentSpec struct {

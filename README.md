@@ -1,96 +1,48 @@
-# whatap-operator
-// TODO(user): Add simple overview of use/purpose
+# Whatap Operator
+
+The Whatap Operator is a Kubernetes operator that simplifies the deployment and management of Whatap monitoring agents in your Kubernetes cluster.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
 
-## Getting Started
+The Whatap Operator automates the installation, configuration, and lifecycle management of Whatap monitoring components:
 
-### Prerequisites
-- go version v1.22.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+- **Master Agent**: Collects and processes monitoring data from node agents
+- **Node Agent**: Monitors Kubernetes nodes and containers
+- **Open Agent**: Collects Prometheus-style metrics from various sources
+- **APM Instrumentation**: Automatically injects APM agents into application pods
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+The operator uses a Custom Resource Definition (CRD) to define the desired state of the monitoring agents, making it easy to deploy and configure Whatap monitoring in a Kubernetes-native way.
 
-```sh
-make docker-build docker-push IMG=<some-registry>/whatap-operator:tag
-```
+## Documentation
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+### Quick Start
 
-**Install the CRDs into the cluster:**
+For a quick introduction to deploying and using the Whatap Operator, see the [Quick Start Guide](docs/quick-start.md).
 
-```sh
-make install
-```
+### For Users
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+If you want to configure Whatap monitoring for your applications and infrastructure, see the [User Guide](docs/user-guide.md).
 
-```sh
-make deploy IMG=<some-registry>/whatap-operator:tag
-```
+### For Administrators
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
+If you need to deploy and manage the Whatap Operator in your Kubernetes cluster, see the [Administrator Guide](docs/admin-guide.md).
 
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
+### Configuration Examples
 
-```sh
-kubectl apply -k config/samples/
-```
+For examples of different monitoring configurations, see the [Configuration Examples](examples/README.md).
 
->**NOTE**: Ensure that the samples has default values to test it out.
+### Customization
 
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
-kubectl delete -k config/samples/
-```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
-make undeploy
-```
-
-## Project Distribution
-
-Following are the steps to build the installer and distribute this project to users.
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/whatap-operator:tag
-```
-
-NOTE: The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without
-its dependencies.
-
-2. Using the installer
-
-Users can just run kubectl apply -f <URL for YAML BUNDLE> to install the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/whatap-operator/<tag or branch>/dist/install.yaml
-```
+For information on how to customize resources created by the operator, see the [Customization Documentation](docs/customization.md).
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+
+Contributions to the Whatap Operator are welcome! Here are some ways you can contribute:
+
+- Report bugs or suggest features by creating issues
+- Improve documentation
+- Submit pull requests with bug fixes or new features
+- Share your experiences using the operator
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
@@ -111,4 +63,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-

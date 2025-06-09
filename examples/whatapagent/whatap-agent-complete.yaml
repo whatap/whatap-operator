@@ -1,0 +1,55 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  license: "x41pl22ek7jhv-z43cebasdv4il7-z62p3l35fj5502"
+  host: "15.165.146.117"
+  port: "6600"
+  features:
+    apm:
+      instrumentation:
+        targets:
+          - name: hello-world
+            enabled: true
+            language: "java"
+            whatapApmVersions:
+              java: "2.2.58"
+            namespaceSelector:
+              matchNames:
+                - default
+            podSelector:
+              matchLabels:
+                app: "hello-world"
+            config:
+              mode: default
+    openAgent:
+        enabled: true
+        globalInterval: "60s"
+        globalPath: "/metrics"
+        targets:
+          - targetName: kube-apiserver
+            type: ServiceMonitor
+            namespaceSelector:
+              matchNames:
+                - "default"
+            selector:
+              matchLabels:
+                component: apiserver
+                provider: kubernetes
+            endpoints:
+              - port: "https"
+                path: "/metrics"
+                interval: "30s"
+                scheme: "https"
+                tlsConfig:
+                  insecureSkipVerify: true
+            metricRelabelConfigs:
+              - source_labels: ["__name__"]
+                regex: "apiserver_request_total"
+                action: "keep"
+    k8sAgent:
+      masterAgent:
+        enabled: true
+      nodeAgent:
+        enabled: true

@@ -1,0 +1,28 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  license: "x41pl22ek7jhv-z43cebasdv4il7-z62p3l35fj5502"
+  host: "15.165.146.117"
+  port: "6600"
+  features:
+    k8sAgent:
+      masterAgent:
+        enabled: true
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "400Mi"
+          limits:
+            cpu: "500m"
+            memory: "600Mi"
+      nodeAgent:
+        enabled: true
+        resources:
+          requests:
+            cpu: "150m"
+            memory: "350Mi"
+          limits:
+            cpu: "300m"
+            memory: "500Mi"
