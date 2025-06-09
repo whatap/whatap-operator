@@ -220,7 +220,7 @@ spec:
             effect: "NoSchedule"
 ```
 
-The WhatapAgent CR now directly supports specifying tolerations for both the master agent and node agent. The tolerations specified in the CR will be applied to the respective pods.
+The WhatapAgent CR directly supports specifying tolerations for both the master agent and node agent. The tolerations specified in the CR will be applied to the respective pods.
 
 For the node agent, the specified tolerations are added to the default tolerations for master and control-plane nodes:
 - `key: "node-role.kubernetes.io/master", effect: "NoSchedule"`

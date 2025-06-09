@@ -79,11 +79,35 @@ func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, lo
 			corev1.ResourceMemory: resourceMustParse("350Mi")},
 	)
 
+	// Get the master agent component spec for easier access
+	masterSpec := cr.Spec.Features.K8sAgent.MasterAgent
+
+	// Create deployment with base metadata
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "whatap-master-agent",
 			Namespace: r.DefaultNamespace,
 		},
+	}
+
+	// Apply custom labels if provided
+	if masterSpec.Labels != nil {
+		if deploy.Labels == nil {
+			deploy.Labels = make(map[string]string)
+		}
+		for k, v := range masterSpec.Labels {
+			deploy.Labels[k] = v
+		}
+	}
+
+	// Apply custom annotations if provided
+	if masterSpec.Annotations != nil {
+		if deploy.Annotations == nil {
+			deploy.Annotations = make(map[string]string)
+		}
+		for k, v := range masterSpec.Annotations {
+			deploy.Annotations[k] = v
+		}
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
@@ -102,6 +126,23 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 	// Get the master agent component spec for easier access
 	masterSpec := cr.Spec.Features.K8sAgent.MasterAgent
 
+	// Create base labels and merge with custom labels if provided
+	labels := map[string]string{"name": "whatap-master-agent"}
+	if masterSpec.PodLabels != nil {
+		for k, v := range masterSpec.PodLabels {
+			labels[k] = v
+		}
+	}
+
+	// Create pod annotations if provided
+	var annotations map[string]string
+	if masterSpec.PodAnnotations != nil {
+		annotations = make(map[string]string)
+		for k, v := range masterSpec.PodAnnotations {
+			annotations[k] = v
+		}
+	}
+
 	return appsv1.DeploymentSpec{
 		Replicas: int32Ptr(1),
 		Selector: &metav1.LabelSelector{
@@ -109,7 +150,8 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{"name": "whatap-master-agent"},
+				Labels:      labels,
+				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
 				ServiceAccountName: "whatap",
@@ -189,11 +231,35 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 			corev1.ResourceMemory: resourceMustParse("350Mi")},
 	)
 
+	// Get the node agent component spec for easier access
+	nodeSpec := cr.Spec.Features.K8sAgent.NodeAgent
+
+	// Create daemonset with base metadata
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "whatap-node-agent",
 			Namespace: r.DefaultNamespace,
 		},
+	}
+
+	// Apply custom labels if provided
+	if nodeSpec.Labels != nil {
+		if ds.Labels == nil {
+			ds.Labels = make(map[string]string)
+		}
+		for k, v := range nodeSpec.Labels {
+			ds.Labels[k] = v
+		}
+	}
+
+	// Apply custom annotations if provided
+	if nodeSpec.Annotations != nil {
+		if ds.Annotations == nil {
+			ds.Annotations = make(map[string]string)
+		}
+		for k, v := range nodeSpec.Annotations {
+			ds.Annotations[k] = v
+		}
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, ds, func() error {
@@ -225,13 +291,31 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 	// Merge default tolerations with any specified in the CR
 	tolerations := append(defaultTolerations, nodeSpec.Tolerations...)
 
+	// Create base labels and merge with custom labels if provided
+	labels := map[string]string{"name": "whatap-node-agent"}
+	if nodeSpec.PodLabels != nil {
+		for k, v := range nodeSpec.PodLabels {
+			labels[k] = v
+		}
+	}
+
+	// Create pod annotations if provided
+	var annotations map[string]string
+	if nodeSpec.PodAnnotations != nil {
+		annotations = make(map[string]string)
+		for k, v := range nodeSpec.PodAnnotations {
+			annotations[k] = v
+		}
+	}
+
 	return appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{"name": "whatap-node-agent"},
 		},
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{"name": "whatap-node-agent"},
+				Labels:      labels,
+				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
 				ServiceAccountName: "whatap",
@@ -628,7 +712,48 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 			},
 		},
 	}
+
+	// Get the OpenAgent spec for easier access
+	openAgentSpec := cr.Spec.Features.OpenAgent
+
+	// Apply custom labels if provided
+	if openAgentSpec.Labels != nil {
+		if deploy.Labels == nil {
+			deploy.Labels = make(map[string]string)
+		}
+		for k, v := range openAgentSpec.Labels {
+			deploy.Labels[k] = v
+		}
+	}
+
+	// Apply custom annotations if provided
+	if openAgentSpec.Annotations != nil {
+		if deploy.Annotations == nil {
+			deploy.Annotations = make(map[string]string)
+		}
+		for k, v := range openAgentSpec.Annotations {
+			deploy.Annotations[k] = v
+		}
+	}
+
 	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		// Create base labels for pod template
+		podLabels := map[string]string{"app": "whatap-open-agent"}
+		if openAgentSpec.PodLabels != nil {
+			for k, v := range openAgentSpec.PodLabels {
+				podLabels[k] = v
+			}
+		}
+
+		// Create pod annotations if provided
+		var podAnnotations map[string]string
+		if openAgentSpec.PodAnnotations != nil {
+			podAnnotations = make(map[string]string)
+			for k, v := range openAgentSpec.PodAnnotations {
+				podAnnotations[k] = v
+			}
+		}
+
 		deploy.Spec = appsv1.DeploymentSpec{
 			Replicas: int32Ptr(1),
 			Selector: &metav1.LabelSelector{
@@ -638,18 +763,19 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app": "whatap-open-agent",
-					},
+					Labels:      podLabels,
+					Annotations: podAnnotations,
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: "whatap-open-agent-sa",
+					// Apply tolerations from CR if specified
+					Tolerations: openAgentSpec.Tolerations,
 					Containers: []corev1.Container{
 						{
 							Name:            "whatap-open-agent",
 							Image:           "whatap/open_agent:latest",
 							ImagePullPolicy: corev1.PullAlways,
-							Env: []corev1.EnvVar{
+							Env: append([]corev1.EnvVar{
 								{
 									Name: "WHATAP_LICENSE",
 									ValueFrom: &corev1.EnvVarSource{
@@ -683,7 +809,7 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 										},
 									},
 								},
-							},
+							}, openAgentSpec.Envs...),
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "config-volume",

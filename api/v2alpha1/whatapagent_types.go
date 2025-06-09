@@ -51,6 +51,24 @@ type OpenAgentSpec struct {
 	// Targets defines the list of targets to scrape metrics from
 	// +optional
 	Targets []OpenAgentTargetSpec `json:"targets,omitempty"`
+	// Labels to be added to the OpenAgent deployment
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+	// Annotations to be added to the OpenAgent deployment
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// PodLabels to be added to the OpenAgent pod template
+	// +optional
+	PodLabels map[string]string `json:"podLabels,omitempty"`
+	// PodAnnotations to be added to the OpenAgent pod template
+	// +optional
+	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+	// Tolerations to be added to the OpenAgent pod
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// Environment variables to be added to the OpenAgent container
+	// +optional
+	Envs []corev1.EnvVar `json:"envs,omitempty"`
 }
 
 // OpenAgentTargetSpec defines a target for the OpenAgent to scrape metrics from
@@ -133,6 +151,18 @@ type MasterAgentComponentSpec struct {
 	// Tolerations to be added to the MasterAgent pod
 	// +optional
 	Tolerations []corev1.Toleration       `json:"tolerations,omitempty"`
+	// Labels to be added to the MasterAgent deployment
+	// +optional
+	Labels map[string]string              `json:"labels,omitempty"`
+	// Annotations to be added to the MasterAgent deployment
+	// +optional
+	Annotations map[string]string         `json:"annotations,omitempty"`
+	// PodLabels to be added to the MasterAgent pod template
+	// +optional
+	PodLabels map[string]string           `json:"podLabels,omitempty"`
+	// PodAnnotations to be added to the MasterAgent pod template
+	// +optional
+	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
 }
 type NodeAgentComponentSpec struct {
 	// +kubebuilder:default=false
@@ -142,6 +172,18 @@ type NodeAgentComponentSpec struct {
 	// Tolerations to be added to the NodeAgent pod
 	// +optional
 	Tolerations []corev1.Toleration       `json:"tolerations,omitempty"`
+	// Labels to be added to the NodeAgent daemonset
+	// +optional
+	Labels map[string]string              `json:"labels,omitempty"`
+	// Annotations to be added to the NodeAgent daemonset
+	// +optional
+	Annotations map[string]string         `json:"annotations,omitempty"`
+	// PodLabels to be added to the NodeAgent pod template
+	// +optional
+	PodLabels map[string]string           `json:"podLabels,omitempty"`
+	// PodAnnotations to be added to the NodeAgent pod template
+	// +optional
+	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
 }
 
 type AgentComponentSpec struct {

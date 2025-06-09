@@ -1,65 +1,46 @@
 # Whatap Operator
 
-The Whatap Operator is a Kubernetes operator that simplifies the deployment and management of Whatap monitoring agents in your Kubernetes cluster.
+Whatap Operator는 Kubernetes 클러스터에서 Whatap 모니터링 에이전트의 배포 및 관리를 간소화하는 Kubernetes 오퍼레이터입니다.
 
-## Description
+## 설명
 
-The Whatap Operator automates the installation, configuration, and lifecycle management of Whatap monitoring components:
+Whatap Operator는 다음과 같은 Whatap 모니터링 구성 요소의 설치, 구성 및 수명 주기 관리를 자동화합니다:
 
-- **Master Agent**: Collects and processes monitoring data from node agents
-- **Node Agent**: Monitors Kubernetes nodes and containers
-- **Open Agent**: Collects Prometheus-style metrics from various sources
-- **APM Instrumentation**: Automatically injects APM agents into application pods
+- **Master Agent**: Kubernetes 클러스터 리소스를 모니터링합니다.
+- **Node Agent**: Kubernetes 노드 및 컨테이너를 모니터링합니다
+- **Open Agent**: 다양한 소스에서 Prometheus 스타일 메트릭을 수집합니다
+- **APM Instrumentation**: 애플리케이션 포드에 APM 에이전트를 자동으로 주입합니다
 
-The operator uses a Custom Resource Definition (CRD) to define the desired state of the monitoring agents, making it easy to deploy and configure Whatap monitoring in a Kubernetes-native way.
+이 오퍼레이터는 Custom Resource Definition(CRD)을 사용하여 모니터링 에이전트의 원하는 상태를 정의하므로, Kubernetes 네이티브 방식으로 Whatap 모니터링을 쉽게 배포하고 구성할 수 있습니다.
 
-## Documentation
+## 문서
 
-### Quick Start
+### 빠른 시작
 
-For a quick introduction to deploying and using the Whatap Operator, see the [Quick Start Guide](docs/quick-start.md).
+Whatap Operator를 배포하고 사용하는 방법에 대한 빠른 소개는 [빠른 시작 가이드](docs/quick-start.md)를 참조하세요. 빠른 시작 가이드는 최소한의 설명으로 Whatap Operator를 신속하게 설치하고 기본적인 모니터링을 구성하는 방법을 안내합니다.
 
-### For Users
+### 사용자 가이드
 
-If you want to configure Whatap monitoring for your applications and infrastructure, see the [User Guide](docs/user-guide.md).
+애플리케이션 및 인프라에 대한 Whatap 모니터링을 구성하려면 [사용자 가이드](docs/user-guide.md)를 참조하세요. 사용자 가이드는 다양한 구성 옵션과 고급 기능에 대한 자세한 설명을 포함하고 있어, Whatap 모니터링을 보다 세부적으로 구성하고자 하는 사용자에게 적합합니다.
 
-### For Administrators
+### 구성 예제
 
-If you need to deploy and manage the Whatap Operator in your Kubernetes cluster, see the [Administrator Guide](docs/admin-guide.md).
+다양한 모니터링 구성 예제는 [구성 예제](examples/README.md)를 참조하세요. 이 예제들은 라벨, 어노테이션, 톨러레이션 등의 사용자 정의 설정 방법도 포함하고 있습니다.
 
-### Configuration Examples
+## 사용자 정의 및 마이그레이션
 
-For examples of different monitoring configurations, see the [Configuration Examples](examples/README.md).
+### 사용자 정의 설정
 
-### Customization
+Whatap Operator는 다음과 같은 사용자 정의 설정을 지원합니다:
 
-For information on how to customize resources created by the operator, see the [Customization Documentation](docs/customization.md).
+- **라벨 및 어노테이션**: 리소스와 파드 템플릿에 사용자 정의 라벨과 어노테이션을 추가할 수 있습니다.
+- **톨러레이션**: 특정 노드에서만 에이전트가 실행되도록 톨러레이션을 설정할 수 있습니다.
+- **환경 변수**: 에이전트 컨테이너에 사용자 정의 환경 변수를 추가할 수 있습니다.
+- **리소스 요구사항**: CPU 및 메모리 요청/제한을 사용자 정의할 수 있습니다.
 
-## Contributing
+이러한 설정은 WhatapAgent CR에서 직접 지정하거나, 오퍼레이터가 생성한 리소스를 `kubectl patch` 명령으로 수정할 수 있습니다. 자세한 내용은 [구성 예제](examples/README.md)를 참조하세요.
 
-Contributions to the Whatap Operator are welcome! Here are some ways you can contribute:
+### 수동 설치에서 오퍼레이터로 마이그레이션
 
-- Report bugs or suggest features by creating issues
-- Improve documentation
-- Submit pull requests with bug fixes or new features
-- Share your experiences using the operator
-
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
-
-## License
-
-Copyright 2025 whatapK8s.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+기존에 YAML 파일을 사용하여 수동으로 Whatap 에이전트를 설치한 경우, 기존 에이전트를 제거하고 Whatap Operator를 설치를 권장합니다.
+기존 리소스가 이미 설치된 경우 CR에 정의된 내용을 우선으로 적용하여, 정의된 내용과 다른 경우 update 를 진행하게 됩니다.
