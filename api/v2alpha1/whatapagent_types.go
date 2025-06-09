@@ -81,7 +81,7 @@ type OpenAgentTargetSpec struct {
 	// NamespaceSelector selects the namespaces to find the targets in
 	NamespaceSelector NamespaceSelector `json:"namespaceSelector,omitempty"`
 	// Selector selects the targets to scrape
-	Selector map[string]string `json:"selector,omitempty"`
+	Selector PodSelector `json:"selector,omitempty"`
 	// Endpoints defines the endpoints to scrape metrics from
 	Endpoints []OpenAgentEndpoint `json:"endpoints,omitempty"`
 	// MetricRelabelConfigs defines the metric relabeling configurations

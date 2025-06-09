@@ -430,13 +430,7 @@ func (in *OpenAgentSpec) DeepCopy() *OpenAgentSpec {
 func (in *OpenAgentTargetSpec) DeepCopyInto(out *OpenAgentTargetSpec) {
 	*out = *in
 	in.NamespaceSelector.DeepCopyInto(&out.NamespaceSelector)
-	if in.Selector != nil {
-		in, out := &in.Selector, &out.Selector
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
-	}
+	in.Selector.DeepCopyInto(&out.Selector)
 	if in.Endpoints != nil {
 		in, out := &in.Endpoints, &out.Endpoints
 		*out = make([]OpenAgentEndpoint, len(*in))

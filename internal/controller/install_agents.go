@@ -545,8 +545,28 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent) string {
 		}
 
 		// Add selector if present
-		if len(target.Selector) > 0 {
-			targetMap["selector"] = target.Selector
+		if len(target.Selector.MatchLabels) > 0 || len(target.Selector.MatchExpressions) > 0 {
+			selector := make(map[string]interface{})
+
+			// Add matchLabels if present
+			if len(target.Selector.MatchLabels) > 0 {
+				selector["matchLabels"] = target.Selector.MatchLabels
+			}
+
+			// Add matchExpressions if present
+			if len(target.Selector.MatchExpressions) > 0 {
+				matchExpressions := make([]interface{}, 0)
+				for _, expr := range target.Selector.MatchExpressions {
+					exprMap := make(map[string]interface{})
+					exprMap["key"] = expr.Key
+					exprMap["operator"] = expr.Operator
+					exprMap["values"] = expr.Values
+					matchExpressions = append(matchExpressions, exprMap)
+				}
+				selector["matchExpressions"] = matchExpressions
+			}
+
+			targetMap["selector"] = selector
 		}
 
 		// Add endpoints if present
