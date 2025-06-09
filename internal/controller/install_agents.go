@@ -441,7 +441,7 @@ func createOrUpdateGpuConfigMap(ctx context.Context, r *WhatapAgentReconciler, l
 func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec) {
 	dcgmContainer := corev1.Container{
 		Name:  "dcgm-exporter",
-		Image: "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.0-4.1.0-ubuntu22.04",
+		Image: "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04",
 		Env: []corev1.EnvVar{
 			{Name: "DCGM_EXPORTER_LISTEN", Value: ":9400"},
 			{Name: "DCGM_EXPORTER_KUBERNETES", Value: "true"},
