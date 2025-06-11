@@ -5,19 +5,16 @@ ARG TARGETARCH
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
-COPY go.mod go.sum ./
+COPY go.mod go.mod
+COPY go.sum go.sum
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
 RUN go mod download
 
-# Copy API package first (changes less frequently)
+# Copy the go source
+COPY cmd/main.go cmd/main.go
 COPY api/ api/
-
-# Copy internal package (changes more frequently)
 COPY internal/ internal/
-
-# Copy main.go last (changes most frequently)
-COPY cmd/ cmd/
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
@@ -27,12 +24,9 @@ COPY cmd/ cmd/
 ARG VERSION=dev
 ARG BUILD_TIME=unknown
 
-# Build with optimizations for faster builds
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -ldflags "-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
-    -o manager -v -trimpath -a -parallel=4 cmd/main.go
-
+    -o manager cmd/main.go
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot

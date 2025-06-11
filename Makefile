@@ -158,22 +158,14 @@ docker-push: ## Push docker image with the manager.
 # - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
 PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
-# EXTRA_ARGS allows passing additional arguments to the docker buildx command
-EXTRA_ARGS ?=
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	# Create buildx builder if it doesn't exist
-	- $(CONTAINER_TOOL) buildx inspect whatap-operator-builder || $(CONTAINER_TOOL) buildx create --name whatap-operator-builder
+	- $(CONTAINER_TOOL) buildx create --name whatap-operator-builder
 	$(CONTAINER_TOOL) buildx use whatap-operator-builder
-	# Build and push with caching enabled
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) -f Dockerfile.cross \
-		--build-arg VERSION=$(VERSION) \
-		--build-arg BUILD_TIME=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ") \
-		--cache-from=type=registry,ref=${IMG}-cache \
-		--cache-to=type=registry,ref=${IMG}-cache,mode=max \
-		$(EXTRA_ARGS) .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx rm whatap-operator-builder
 	rm Dockerfile.cross
 
 .PHONY: build-installer
