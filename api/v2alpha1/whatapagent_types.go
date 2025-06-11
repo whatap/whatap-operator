@@ -26,9 +26,15 @@ import (
 
 // WhatapAgentSpec defines the desired state of WhatapAgent
 type WhatapAgentSpec struct {
-	License  string       `json:"license"`
-	Host     string       `json:"host"`
-	Port     string       `json:"port"`
+	// License key for Whatap monitoring
+	// +optional
+	License  string       `json:"license,omitempty"`
+	// Host address for Whatap server
+	// +optional
+	Host     string       `json:"host,omitempty"`
+	// Port for Whatap server
+	// +optional
+	Port     string       `json:"port,omitempty"`
 	Features FeaturesSpec `json:"features"`
 }
 

@@ -164,9 +164,9 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 						Command: []string{"/bin/entrypoint.sh"},
 						Ports:   []corev1.ContainerPort{{ContainerPort: 6600}},
 						Env: []corev1.EnvVar{
-							{Name: "WHATAP_LICENSE", Value: cr.Spec.License},
-							{Name: "WHATAP_HOST", Value: cr.Spec.Host},
-							{Name: "WHATAP_PORT", Value: cr.Spec.Port},
+							getWhatapLicenseEnvVar(cr),
+							getWhatapHostEnvVar(cr),
+							getWhatapPortEnvVar(cr),
 							{
 								Name: "WHATAP_MEM_LIMIT",
 								ValueFrom: &corev1.EnvVarSource{
@@ -368,9 +368,9 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 									FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 								},
 							},
-							{Name: "WHATAP_LICENSE", Value: cr.Spec.License},
-							{Name: "WHATAP_HOST", Value: cr.Spec.Host},
-							{Name: "WHATAP_PORT", Value: cr.Spec.Port},
+							getWhatapLicenseEnvVar(cr),
+							getWhatapHostEnvVar(cr),
+							getWhatapPortEnvVar(cr),
 							{
 								Name: "WHATAP_MEM_LIMIT",
 								ValueFrom: &corev1.EnvVarSource{
@@ -873,4 +873,59 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 	logResult(logger, "Whatap", "OpenAgent Deployment", op)
 
 	return nil
+}
+
+// Helper functions to get environment variables for Whatap credentials
+// These functions check if the values are provided in the CR spec, and if not,
+// they use the values from the whatap-credentials secret
+
+func getWhatapLicenseEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
+	if cr.Spec.License != "" {
+		return corev1.EnvVar{Name: "WHATAP_LICENSE", Value: cr.Spec.License}
+	}
+	return corev1.EnvVar{
+		Name: "WHATAP_LICENSE",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "whatap-credentials",
+				},
+				Key: "license",
+			},
+		},
+	}
+}
+
+func getWhatapHostEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
+	if cr.Spec.Host != "" {
+		return corev1.EnvVar{Name: "WHATAP_HOST", Value: cr.Spec.Host}
+	}
+	return corev1.EnvVar{
+		Name: "WHATAP_HOST",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "whatap-credentials",
+				},
+				Key: "host",
+			},
+		},
+	}
+}
+
+func getWhatapPortEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
+	if cr.Spec.Port != "" {
+		return corev1.EnvVar{Name: "WHATAP_PORT", Value: cr.Spec.Port}
+	}
+	return corev1.EnvVar{
+		Name: "WHATAP_PORT",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "whatap-credentials",
+				},
+				Key: "port",
+			},
+		},
+	}
 }

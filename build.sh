@@ -9,7 +9,7 @@ function show_usage {
   echo "  --no-cache: 캐시를 사용하지 않고 빌드 (선택 사항)"
   echo "예: ./build.sh 1.7.15 arm64"
   echo "    ./build.sh 1.7.15 all --no-cache"
-}
+}[
 
 # Check if at least one argument is provided
 if [ $# -lt 1 ]; then
