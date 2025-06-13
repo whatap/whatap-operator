@@ -63,11 +63,16 @@ func logResult(logger logr.Logger, what, target string, op controllerutil.Operat
 // ---------- 주요 리소스 배포 함수 ----------
 
 func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
+	imgName := cr.Spec.Features.K8sAgent.AgentImageName
+	if imgName == "" {
+		imgName = "public.ecr.aws/whatap/kube_agent"
+	}
+
 	ver := cr.Spec.Features.K8sAgent.AgentImageVersion
 	if ver == "" {
 		ver = "latest"
 	}
-	img := fmt.Sprintf("public.ecr.aws/whatap/kube_agent:%s", ver)
+	img := fmt.Sprintf("%s:%s", imgName, ver)
 
 	resources := cr.Spec.Features.K8sAgent.MasterAgent.Resources.DeepCopy()
 	setDefaultResource(resources,
@@ -215,11 +220,16 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 }
 
 func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
+	imgName := cr.Spec.Features.K8sAgent.AgentImageName
+	if imgName == "" {
+		imgName = "public.ecr.aws/whatap/kube_agent"
+	}
+
 	ver := cr.Spec.Features.K8sAgent.AgentImageVersion
 	if ver == "" {
 		ver = "latest"
 	}
-	img := fmt.Sprintf("public.ecr.aws/whatap/kube_agent:%s", ver)
+	img := fmt.Sprintf("%s:%s", imgName, ver)
 
 	resources := cr.Spec.Features.K8sAgent.NodeAgent.Resources.DeepCopy()
 	setDefaultResource(resources,

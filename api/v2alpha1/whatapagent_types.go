@@ -28,10 +28,10 @@ import (
 type WhatapAgentSpec struct {
 	// License key for Whatap monitoring
 	// +optional
-	License  string       `json:"license,omitempty"`
+	License string `json:"license,omitempty"`
 	// Host address for Whatap server
 	// +optional
-	Host     string       `json:"host,omitempty"`
+	Host string `json:"host,omitempty"`
 	// Port for Whatap server
 	// +optional
 	Port     string       `json:"port,omitempty"`
@@ -81,7 +81,7 @@ type OpenAgentSpec struct {
 type OpenAgentTargetSpec struct {
 	// TargetName is the name of the target
 	TargetName string `json:"targetName"`
- // Type is the type of the target (ServiceMonitor, PodMonitor, or StaticEndpoints)
+	// Type is the type of the target (ServiceMonitor, PodMonitor, or StaticEndpoints)
 	// +kubebuilder:validation:Enum=ServiceMonitor;PodMonitor;StaticEndpoints
 	Type string `json:"type"`
 	// NamespaceSelector selects the namespaces to find the targets in
@@ -140,7 +140,10 @@ type MetricRelabelConfig struct {
 }
 
 type K8sAgentSpec struct {
-	Namespace           string                   `json:"namespace,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	// AgentImageName defines the name of the agent image to use
+	// +optional
+	AgentImageName      string                   `json:"agentImageName,omitempty"`
 	AgentImageVersion   string                   `json:"agentImageVersion,omitempty"`
 	MasterAgent         MasterAgentComponentSpec `json:"masterAgent"`
 	NodeAgent           NodeAgentComponentSpec   `json:"nodeAgent"`
@@ -157,19 +160,19 @@ type MasterAgentComponentSpec struct {
 	Envs      []corev1.EnvVar             `json:"envs,omitempty"`
 	// Tolerations to be added to the MasterAgent pod
 	// +optional
-	Tolerations []corev1.Toleration       `json:"tolerations,omitempty"`
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 	// Labels to be added to the MasterAgent deployment
 	// +optional
-	Labels map[string]string              `json:"labels,omitempty"`
+	Labels map[string]string `json:"labels,omitempty"`
 	// Annotations to be added to the MasterAgent deployment
 	// +optional
-	Annotations map[string]string         `json:"annotations,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 	// PodLabels to be added to the MasterAgent pod template
 	// +optional
-	PodLabels map[string]string           `json:"podLabels,omitempty"`
+	PodLabels map[string]string `json:"podLabels,omitempty"`
 	// PodAnnotations to be added to the MasterAgent pod template
 	// +optional
-	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
+	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
 }
 type NodeAgentComponentSpec struct {
 	// +kubebuilder:default=false
@@ -178,25 +181,25 @@ type NodeAgentComponentSpec struct {
 	Envs      []corev1.EnvVar             `json:"envs,omitempty"`
 	// Tolerations to be added to the NodeAgent pod
 	// +optional
-	Tolerations []corev1.Toleration       `json:"tolerations,omitempty"`
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 	// Labels to be added to the NodeAgent daemonset
 	// +optional
-	Labels map[string]string              `json:"labels,omitempty"`
+	Labels map[string]string `json:"labels,omitempty"`
 	// Annotations to be added to the NodeAgent daemonset
 	// +optional
-	Annotations map[string]string         `json:"annotations,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 	// PodLabels to be added to the NodeAgent pod template
 	// +optional
-	PodLabels map[string]string           `json:"podLabels,omitempty"`
+	PodLabels map[string]string `json:"podLabels,omitempty"`
 	// PodAnnotations to be added to the NodeAgent pod template
 	// +optional
-	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
+	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
 	// NodeAgentContainer defines configuration specific to the whatap-node-agent container
 	// +optional
-	NodeAgentContainer *ContainerSpec     `json:"nodeAgentContainer,omitempty"`
+	NodeAgentContainer *ContainerSpec `json:"nodeAgentContainer,omitempty"`
 	// NodeHelperContainer defines configuration specific to the whatap-node-helper container
 	// +optional
-	NodeHelperContainer *ContainerSpec    `json:"nodeHelperContainer,omitempty"`
+	NodeHelperContainer *ContainerSpec `json:"nodeHelperContainer,omitempty"`
 }
 
 // ContainerSpec defines configuration for a specific container

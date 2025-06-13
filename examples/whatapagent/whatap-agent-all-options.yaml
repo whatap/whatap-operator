@@ -13,18 +13,18 @@ spec:
             language: "java"                   # 지원 언어: java, python, php, dotnet, nodejs, golang
             whatapApmVersions:
               java: "2.2.58"                   # 사용할 APM 에이전트 버전
-            
+
             # 대상 네임스페이스 선택 (다음 중 하나 사용)
             namespaceSelector:
               # 특정 네임스페이스 이름으로 선택
               matchNames:
                 - "default"
                 - "app-namespace"
-              
+
               # 또는 네임스페이스 라벨로 선택
               # matchLabels:
               #   environment: "production"
-              
+
               # 또는 라벨 표현식으로 선택
               # matchExpressions:
               #   - key: "environment"
@@ -32,13 +32,13 @@ spec:
               #     values:
               #       - "production"
               #       - "staging"
-            
+
             # 대상 Pod 선택
             podSelector:
               # Pod 라벨로 선택
               matchLabels:
                 app: "hello-world"
-              
+
               # 또는 라벨 표현식으로 선택
               # matchExpressions:
               #   - key: "app"
@@ -46,28 +46,30 @@ spec:
               #     values:
               #       - "hello-world"
               #       - "hello-app"
-            
+
             # APM 에이전트 설정
             config:
               mode: "default"                  # 기본 설정 사용 (default 또는 custom)
-              
+
               # 커스텀 설정을 사용하는 경우 (mode: "custom"일 때)
               # configMapRef:
               #   name: "apm-custom-config"    # 커스텀 설정이 포함된 ConfigMap 이름
               #   namespace: "default"         # ConfigMap이 위치한 네임스페이스
-    
+
     ### Kubernetes 모니터링 설정 - 클러스터, 노드, 컨테이너 모니터링
     k8sAgent:
+      # 에이전트 이미지 이름 (생략 시 기본값 public.ecr.aws/whatap/kube_agent 사용)
+      agentImageName: "public.ecr.aws/whatap/kube_agent"
       # 에이전트 이미지 버전 (생략 시 latest 사용)
       agentImageVersion: "latest"
-      
+
       # 에이전트가 설치될 네임스페이스 (생략 시 기본값 사용)
       namespace: "whatap-monitoring"
-      
+
       # 마스터 에이전트 설정 (클러스터 수준 메트릭 수집)
       masterAgent:
         enabled: true                          # 마스터 에이전트 활성화
-        
+
         # 리소스 요구사항 설정
         resources:
           requests:                            # 최소 필요 리소스
@@ -76,42 +78,42 @@ spec:
           limits:                              # 최대 사용 가능 리소스
             cpu: "500m"                        # 500 밀리코어 (0.5 CPU)
             memory: "600Mi"                    # 600 MiB 메모리
-        
+
         # 마스터 에이전트 톨러레이션 설정
         tolerations:
           - key: "dedicated"                   # 테인트 키
             operator: "Equal"                  # 연산자: Equal(키와 값 모두 일치), Exists(키만 일치)
             value: "monitoring"                # 테인트 값 (Equal 연산자에서만 사용)
             effect: "NoSchedule"               # 효과: NoSchedule, PreferNoSchedule, NoExecute
-        
+
         # 마스터 에이전트 Deployment에 추가할 라벨
         labels:
           app.kubernetes.io/part-of: "monitoring"
           app.kubernetes.io/component: "whatap-master"
-        
+
         # 마스터 에이전트 Deployment에 추가할 어노테이션
         annotations:
           app.kubernetes.io/managed-by: "whatap-operator"
-        
+
         # 마스터 에이전트 Pod에 추가할 라벨
         podLabels:
           monitoring-agent: "whatap-master"
-        
+
         # 마스터 에이전트 Pod에 추가할 어노테이션
         podAnnotations:
           prometheus.io/scrape: "true"
-        
+
         # 마스터 에이전트 컨테이너에 추가할 환경 변수
         envs:
           - name: "TZ"
             value: "Asia/Seoul"
           - name: "WHATAP_DEBUG_LEVEL"
             value: "info"
-      
+
       # 노드 에이전트 설정 (노드 및 컨테이너 수준 메트릭 수집)
       nodeAgent:
         enabled: true                          # 노드 에이전트 활성화
-        
+
         # 리소스 요구사항 설정
         resources:
           requests:                            # 최소 필요 리소스
@@ -120,106 +122,106 @@ spec:
           limits:                              # 최대 사용 가능 리소스
             cpu: "300m"                        # 300 밀리코어 (0.3 CPU)
             memory: "500Mi"                    # 500 MiB 메모리
-        
+
         # 노드 에이전트 톨러레이션 설정 (기본 톨러레이션에 추가됨)
         tolerations:
           - key: "gpu"
             operator: "Exists"
             effect: "NoSchedule"
-        
+
         # 노드 에이전트 DaemonSet에 추가할 라벨
         labels:
           app.kubernetes.io/part-of: "monitoring"
           app.kubernetes.io/component: "whatap-node"
-        
+
         # 노드 에이전트 DaemonSet에 추가할 어노테이션
         annotations:
           app.kubernetes.io/managed-by: "whatap-operator"
-        
+
         # 노드 에이전트 Pod에 추가할 라벨
         podLabels:
           monitoring-agent: "whatap-node"
-        
+
         # 노드 에이전트 Pod에 추가할 어노테이션
         podAnnotations:
           prometheus.io/scrape: "true"
-        
+
         # 노드 에이전트 컨테이너에 추가할 환경 변수
         envs:
           - name: "TZ"
             value: "Asia/Seoul"
           - name: "WHATAP_DEBUG_LEVEL"
             value: "info"
-      
+
       # GPU 모니터링 설정 (NVIDIA GPU 메트릭 수집)
       gpuMonitoring:
         enabled: true                          # GPU 모니터링 활성화
-      
+
       # API 서버 모니터링 설정
       apiserverMonitoring:
         enabled: false                         # API 서버 모니터링 활성화
-      
+
       # etcd 모니터링 설정
       etcdMonitoring:
         enabled: false                         # etcd 모니터링 활성화
-      
+
       # 스케줄러 모니터링 설정
       schedulerMonitoring:
         enabled: false                         # 스케줄러 모니터링 활성화
-    
+
     ### 오픈메트릭 설정 - Prometheus 형식의 메트릭 수집
     openAgent:
       enabled: true                            # OpenAgent 활성화
       globalInterval: "60s"                    # 기본 스크래핑 간격
       globalPath: "/metrics"                   # 기본 메트릭 경로
-      
+
       # OpenAgent Deployment에 추가할 라벨
       labels:
         app.kubernetes.io/part-of: "monitoring"
         app.kubernetes.io/component: "whatap-openagent"
-      
+
       # OpenAgent Deployment에 추가할 어노테이션
       annotations:
         app.kubernetes.io/managed-by: "whatap-operator"
-      
+
       # OpenAgent Pod에 추가할 라벨
       podLabels:
         monitoring-agent: "whatap-openagent"
-      
+
       # OpenAgent Pod에 추가할 어노테이션
       podAnnotations:
         prometheus.io/scrape: "true"
-      
+
       # OpenAgent 톨러레이션 설정
       tolerations:
         - key: "dedicated"
           operator: "Equal"
           value: "monitoring"
           effect: "NoSchedule"
-      
+
       # OpenAgent 컨테이너에 추가할 환경 변수
       envs:
         - name: "TZ"
           value: "Asia/Seoul"
         - name: "WHATAP_DEBUG_LEVEL"
           value: "info"
-      
+
       # 메트릭 수집 대상 설정
       targets:
         - targetName: "kube-apiserver"         # 대상 이름
           type: "ServiceMonitor"               # 대상 유형: ServiceMonitor, PodMonitor, StaticEndpoints
-          
+
           # 대상 네임스페이스 선택
           namespaceSelector:
             matchNames:
               - "kube-system"
-          
+
           # 대상 서비스/Pod 선택
           selector:
             matchLabels:
               component: "apiserver"
               provider: "kubernetes"
-          
+
           # 메트릭 엔드포인트 설정
           endpoints:
             - port: "https"                    # 메트릭 포트
@@ -228,18 +230,18 @@ spec:
               scheme: "https"                  # HTTP 스키마 (http 또는 https)
               tlsConfig:
                 insecureSkipVerify: true       # TLS 인증서 검증 건너뛰기
-          
+
           # 메트릭 필터링 설정
           metricRelabelConfigs:
             - source_labels: ["__name__"]      # 소스 라벨
               regex: "apiserver_request_.*"    # 정규식 패턴
               action: "keep"                   # 작업: keep(유지), drop(제외), replace(대체) 등
-            
+
             # 라벨 대체 예제
             - source_labels: ["pod"]
               target_label: "instance"         # 대상 라벨
               replacement: "${1}"              # 대체 값
-        
+
         # 추가 대상 예제 - Node Exporter
         - targetName: "node-exporter"
           type: "PodMonitor"
