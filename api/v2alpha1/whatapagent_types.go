@@ -191,6 +191,22 @@ type NodeAgentComponentSpec struct {
 	// PodAnnotations to be added to the NodeAgent pod template
 	// +optional
 	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
+	// NodeAgentContainer defines configuration specific to the whatap-node-agent container
+	// +optional
+	NodeAgentContainer *ContainerSpec     `json:"nodeAgentContainer,omitempty"`
+	// NodeHelperContainer defines configuration specific to the whatap-node-helper container
+	// +optional
+	NodeHelperContainer *ContainerSpec    `json:"nodeHelperContainer,omitempty"`
+}
+
+// ContainerSpec defines configuration for a specific container
+type ContainerSpec struct {
+	// Resources defines the resource requirements for the container
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// Envs defines environment variables for the container
+	// +optional
+	Envs []corev1.EnvVar `json:"envs,omitempty"`
 }
 
 type AgentComponentSpec struct {

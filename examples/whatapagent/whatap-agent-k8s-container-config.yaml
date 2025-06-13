@@ -1,0 +1,54 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  license: "your-license-key"
+  host: "whatap-server"
+  port: "6600"
+  features:
+    k8sAgent:
+      nodeAgent:
+        enabled: true
+        # Common configuration for the NodeAgent daemonset
+        labels:
+          app: "whatap-node-agent"
+        podLabels:
+          component: "monitoring"
+
+        # Configuration specific to the whatap-node-agent container
+        nodeAgentContainer:
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "350Mi"
+            limits:
+              cpu: "300m"
+              memory: "500Mi"
+          envs:
+            # The whatap_server_agent_enabled environment variable is automatically added
+            # for server agent integration. You can override it if needed.
+            - name: whatap_server_agent_enabled
+              value: "true"
+            - name: NODE_AGENT_CUSTOM_ENV
+              value: "custom-value"
+            - name: NODE_AGENT_LOG_LEVEL
+              value: "debug"
+
+        # Configuration specific to the whatap-node-helper container
+        nodeHelperContainer:
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "150Mi"
+            limits:
+              cpu: "200m"
+              memory: "300Mi"
+          envs:
+            - name: NODE_HELPER_CUSTOM_ENV
+              value: "helper-value"
+            - name: NODE_HELPER_LOG_LEVEL
+              value: "info"
+
+      masterAgent:
+        enabled: true

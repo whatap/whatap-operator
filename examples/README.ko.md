@@ -305,6 +305,164 @@ WhatapAgent CR은 마스터 에이전트와 노드 에이전트 모두에 대한
 
 4. **노드 유지 관리**: 노드가 코든(cordon)되거나 유지 관리를 위해 표시된 경우, 적절한 톨러레이션이 있는 모니터링 에이전트는 계속 실행되어 유지 관리 과정 중에도 가시성을 제공할 수 있습니다.
 
+### K8s 에이전트에 사용자 정의 환경 변수 추가
+
+[whatap-agent-k8s-envs.yaml](whatapagent/whatap-agent-k8s-envs.yaml) - Whatap 에이전트에 사용자 정의 환경 변수를 추가하는 방법을 보여줍니다.
+
+### K8s 에이전트의 컨테이너별 구성
+
+[whatap-agent-k8s-container-config.yaml](whatapagent/whatap-agent-k8s-container-config.yaml) - whatap-node-agent와 whatap-node-helper 컨테이너를 별도로 구성하는 방법을 보여줍니다.
+
+#### 컨테이너별 구성 이해하기
+
+NodeAgent 데몬셋은 두 개의 컨테이너로 구성됩니다:
+- **whatap-node-agent**: 노드 메트릭을 수집하는 메인 컨테이너
+- **whatap-node-helper**: 컨테이너 메트릭 수집을 지원하는 헬퍼 컨테이너
+
+NodeAgent 스펙에서 `nodeAgentContainer`와 `nodeHelperContainer` 필드를 사용하여 이러한 컨테이너를 별도로 구성할 수 있습니다. 이를 통해 다음과 같은 작업이 가능합니다:
+
+- 각 컨테이너에 대해 다른 리소스 요구 사항 설정
+- 각 컨테이너에 대해 다른 환경 변수 구성
+- 각 컨테이너의 특정 역할에 따라 최적화
+
+```yaml
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  features:
+    k8sAgent:
+      nodeAgent:
+        enabled: true
+        # whatap-node-agent 컨테이너에 대한 특정 구성
+        nodeAgentContainer:
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "350Mi"
+            limits:
+              cpu: "300m"
+              memory: "500Mi"
+          envs:
+            - name: NODE_AGENT_CUSTOM_ENV
+              value: "custom-value"
+
+        # whatap-node-helper 컨테이너에 대한 특정 구성
+        nodeHelperContainer:
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "150Mi"
+            limits:
+              cpu: "200m"
+              memory: "300Mi"
+          envs:
+            - name: NODE_HELPER_CUSTOM_ENV
+              value: "helper-value"
+```
+
+이 기능은 다음과 같은 경우에 특히 유용합니다:
+1. 두 컨테이너 간의 리소스 할당을 미세 조정해야 하는 경우
+2. 한 컨테이너에는 특정 환경 변수를 설정하고 다른 컨테이너에는 설정하지 않아야 하는 경우
+3. 각 컨테이너의 워크로드에 따라 리소스를 할당하여 성능을 최적화하려는 경우
+
+#### Kubernetes에서 환경 변수 이해하기
+
+Kubernetes 파드의 환경 변수는 컨테이너에서 실행되는 애플리케이션에 구성을 전달하는 방법을 제공합니다. 모니터링 에이전트의 경우 환경 변수를 다음과 같은 용도로 사용할 수 있습니다:
+
+- 에이전트 동작 및 기능 구성
+- 모니터링 매개변수 및 임계값 설정
+- 외부 서비스 또는 데이터 소스에 연결
+- 특정 모니터링 기능 활성화 또는 비활성화
+
+Whatap Operator는 WhatapAgent CR을 통해 마스터 에이전트와 노드 에이전트 모두에 대해 사용자 정의 환경 변수를 지정할 수 있도록 합니다.
+
+```yaml
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  license: "your-license-key"
+  host: "whatap-server"
+  port: "6600"
+  features:
+    k8sAgent:
+      masterAgent:
+        enabled: true
+        # 마스터 에이전트용 사용자 정의 환경 변수
+        envs:
+          - name: CUSTOM_ENV_VAR1
+            value: "value1"
+          - name: CUSTOM_ENV_VAR2
+            value: "value2"
+      nodeAgent:
+        enabled: true
+        # 노드 에이전트용 사용자 정의 환경 변수
+        envs:
+          - name: NODE_CUSTOM_ENV_VAR1
+            value: "node_value1"
+          - name: NODE_CUSTOM_ENV_VAR2
+            value: "node_value2"
+          # ConfigMap에서 환경 변수 가져오기
+          - name: CONFIG_ENV_VAR
+            valueFrom:
+              configMapKeyRef:
+                name: my-config-map
+                key: config-key
+          # Secret에서 환경 변수 가져오기
+          - name: SECRET_ENV_VAR
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: secret-key
+```
+
+#### 환경 변수 소스 유형
+
+환경 변수는 여러 가지 방법으로 지정할 수 있습니다:
+
+1. **직접 값**: CR에서 직접 값 설정
+   ```yaml
+   - name: ENV_NAME
+     value: "env_value"
+   ```
+
+2. **ConfigMap에서**: ConfigMap의 값 참조
+   ```yaml
+   - name: ENV_NAME
+     valueFrom:
+       configMapKeyRef:
+         name: my-config-map
+         key: config-key
+   ```
+
+3. **Secret에서**: Secret의 값 참조
+   ```yaml
+   - name: ENV_NAME
+     valueFrom:
+       secretKeyRef:
+         name: my-secret
+         key: secret-key
+   ```
+
+4. **필드에서**: 파드 또는 컨테이너의 필드 참조
+   ```yaml
+   - name: NODE_NAME
+     valueFrom:
+       fieldRef:
+         fieldPath: spec.nodeName
+   ```
+
+#### 사용자 정의 환경 변수의 일반적인 사용 사례
+
+1. **에이전트 구성**: 에이전트별 구성 매개변수 설정
+2. **프록시 설정**: 아웃바운드 연결을 위한 프록시 구성
+3. **디버그 수준**: 문제 해결을 위한 로깅 또는 디버그 수준 설정
+4. **기능 플래그**: 특정 모니터링 기능 활성화 또는 비활성화
+5. **통합 설정**: 다른 시스템과의 통합 구성
+
 ### 시크릿 기반 구성
 
 [whatap-agent-secret.yaml](whatapagent/whatap-agent-secret.yaml) - CR에 직접 지정하는 대신 Kubernetes 시크릿을 사용하여 Whatap 자격 증명을 저장합니다.
@@ -344,10 +502,7 @@ kubectl apply -f https://raw.githubusercontent.com/whatap/whatap-operator/main/e
 시크릿 기반 접근 방식을 사용하려면 먼저 Whatap 자격 증명으로 시크릿을 생성하세요:
 
 ```bash
-kubectl create secret generic whatap-credentials --namespace whatap-monitoring \
-  --from-literal=license=$WHATAP_LICENSE \
-  --from-literal=host=$WHATAP_HOST \
-  --from-literal=port=$WHATAP_PORT
+kubectl create secret generic whatap-credentials --namespace whatap-monitoring --from-literal=license=$WHATAP_LICENSE --from-literal=host=$WHATAP_HOST --from-literal=port=$WHATAP_PORT
 ```
 
 그런 다음 시크릿을 사용하는 구성을 적용하세요:

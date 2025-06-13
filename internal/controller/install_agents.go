@@ -308,6 +308,78 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		}
 	}
 
+	// Get node helper container resources
+	helperResources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceMemory: resourceMustParse("100Mi"),
+			corev1.ResourceCPU:    resourceMustParse("100m"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resourceMustParse("350Mi"),
+			corev1.ResourceCPU:    resourceMustParse("200m"),
+		},
+	}
+	if nodeSpec.NodeHelperContainer != nil && nodeSpec.NodeHelperContainer.Resources.Limits != nil {
+		helperResources = nodeSpec.NodeHelperContainer.Resources
+	}
+
+	// Get node helper container environment variables
+	helperEnvs := []corev1.EnvVar{
+		{
+			Name: "NODE_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+			},
+		},
+	}
+	if nodeSpec.NodeHelperContainer != nil && len(nodeSpec.NodeHelperContainer.Envs) > 0 {
+		helperEnvs = append(helperEnvs, nodeSpec.NodeHelperContainer.Envs...)
+	}
+
+	// Get node agent container resources
+	agentResources := *res
+	if nodeSpec.NodeAgentContainer != nil && nodeSpec.NodeAgentContainer.Resources.Limits != nil {
+		agentResources = nodeSpec.NodeAgentContainer.Resources
+	}
+
+	// Get node agent container environment variables
+	agentEnvs := []corev1.EnvVar{
+		{
+			Name: "NODE_IP",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"},
+			},
+		},
+		{
+			Name: "NODE_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+			},
+		},
+		getWhatapLicenseEnvVar(cr),
+		getWhatapHostEnvVar(cr),
+		getWhatapPortEnvVar(cr),
+		{
+			Name: "WHATAP_MEM_LIMIT",
+			ValueFrom: &corev1.EnvVarSource{
+				ResourceFieldRef: &corev1.ResourceFieldSelector{
+					ContainerName: "whatap-node-agent",
+					Resource:      "limits.memory",
+				},
+			},
+		},
+		{Name: "HOST_PREFIX", Value: "/rootfs"},
+		{Name: "whatap_server_agent_enabled", Value: "true"},
+	}
+
+	// Add container-specific environment variables if provided
+	if nodeSpec.NodeAgentContainer != nil && len(nodeSpec.NodeAgentContainer.Envs) > 0 {
+		agentEnvs = append(agentEnvs, nodeSpec.NodeAgentContainer.Envs...)
+	} else if len(nodeSpec.Envs) > 0 {
+		// For backward compatibility, use the nodeSpec.Envs if NodeAgentContainer.Envs is not provided
+		agentEnvs = append(agentEnvs, nodeSpec.Envs...)
+	}
+
 	return appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{"name": "whatap-node-agent"},
@@ -325,24 +397,8 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						Image:   image,
 						Command: []string{"/data/agent/node/cadvisor_helper", "-port", "6801"},
 						Ports:   []corev1.ContainerPort{{Name: "helperport", ContainerPort: 6801}},
-						Env: []corev1.EnvVar{
-							{
-								Name: "NODE_NAME",
-								ValueFrom: &corev1.EnvVarSource{
-									FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-								},
-							},
-						},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceMemory: resourceMustParse("100Mi"),
-								corev1.ResourceCPU:    resourceMustParse("100m"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceMemory: resourceMustParse("350Mi"),
-								corev1.ResourceCPU:    resourceMustParse("200m"),
-							},
-						},
+						Env:     helperEnvs,
+						Resources: helperResources,
 						VolumeMounts: []corev1.VolumeMount{
 							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true},
 							{Name: "hostsys", MountPath: "/sys", ReadOnly: true},
@@ -355,34 +411,8 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						Image:   image,
 						Command: []string{"/bin/entrypoint.sh"},
 						Ports:   []corev1.ContainerPort{{Name: "nodeport", ContainerPort: 6600}},
-						Env: []corev1.EnvVar{
-							{
-								Name: "NODE_IP",
-								ValueFrom: &corev1.EnvVarSource{
-									FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"},
-								},
-							},
-							{
-								Name: "NODE_NAME",
-								ValueFrom: &corev1.EnvVarSource{
-									FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-								},
-							},
-							getWhatapLicenseEnvVar(cr),
-							getWhatapHostEnvVar(cr),
-							getWhatapPortEnvVar(cr),
-							{
-								Name: "WHATAP_MEM_LIMIT",
-								ValueFrom: &corev1.EnvVarSource{
-									ResourceFieldRef: &corev1.ResourceFieldSelector{
-										ContainerName: "whatap-node-agent",
-										Resource:      "limits.memory",
-									},
-								},
-							},
-							{Name: "HOST_PREFIX", Value: "/rootfs"},
-						},
-						Resources: *res,
+						Env:     agentEnvs,
+						Resources: agentResources,
 						VolumeMounts: []corev1.VolumeMount{
 							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true},
 							{Name: "start-script-volume", MountPath: "/bin/entrypoint.sh", SubPath: "entrypoint.sh", ReadOnly: true},
@@ -658,7 +688,7 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 		cr1.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"*"},
-				Resources: []string{"pods", "services", "endpoints", "namespaces"},
+				Resources: []string{"pods", "services", "endpoints", "namespaces", "configmaps"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
@@ -796,39 +826,9 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 							Image:           "whatap/open_agent:latest",
 							ImagePullPolicy: corev1.PullAlways,
 							Env: append([]corev1.EnvVar{
-								{
-									Name: "WHATAP_LICENSE",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "whatap-credentials",
-											},
-											Key: "license",
-										},
-									},
-								},
-								{
-									Name: "WHATAP_HOST",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "whatap-credentials",
-											},
-											Key: "host",
-										},
-									},
-								},
-								{
-									Name: "WHATAP_PORT",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "whatap-credentials",
-											},
-											Key: "port",
-										},
-									},
-								},
+								getWhatapLicenseEnvVar(cr),
+								getWhatapHostEnvVar(cr),
+								getWhatapPortEnvVar(cr),
 							}, openAgentSpec.Envs...),
 							VolumeMounts: []corev1.VolumeMount{
 								{

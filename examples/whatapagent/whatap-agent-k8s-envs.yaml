@@ -1,0 +1,38 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  license: "x41pl22ek7jhv-z43cebasdv4il7-z62p3l35fj5502"
+  host: "15.165.146.117"
+  port: "6600"
+  features:
+    k8sAgent:
+      masterAgent:
+        enabled: true
+        # Custom environment variables for MasterAgent
+        envs:
+          - name: CUSTOM_ENV_VAR1
+            value: "value1"
+          - name: CUSTOM_ENV_VAR2
+            value: "value2"
+      nodeAgent:
+        enabled: true
+        # Custom environment variables for NodeAgent
+        envs:
+          - name: NODE_CUSTOM_ENV_VAR1
+            value: "node_value1"
+          - name: NODE_CUSTOM_ENV_VAR2
+            value: "node_value2"
+          # Environment variable from ConfigMap
+          - name: CONFIG_ENV_VAR
+            valueFrom:
+              configMapKeyRef:
+                name: my-config-map
+                key: config-key
+          # Environment variable from Secret
+          - name: SECRET_ENV_VAR
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: secret-key

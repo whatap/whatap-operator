@@ -305,6 +305,164 @@ This ensures that the node agent will run on all nodes, including master/control
 
 4. **Node Maintenance**: When nodes are cordoned or marked for maintenance, monitoring agents with appropriate tolerations can continue to run and provide visibility during the maintenance process.
 
+### K8s Agent with Custom Environment Variables
+
+[whatap-agent-k8s-envs.yaml](whatapagent/whatap-agent-k8s-envs.yaml) - Shows how to add custom environment variables to the Whatap agents.
+
+### K8s Agent with Container-Specific Configuration
+
+[whatap-agent-k8s-container-config.yaml](whatapagent/whatap-agent-k8s-container-config.yaml) - Shows how to configure the whatap-node-agent and whatap-node-helper containers separately.
+
+#### Understanding Container-Specific Configuration
+
+The NodeAgent daemonset consists of two containers:
+- **whatap-node-agent**: The main container that collects node metrics
+- **whatap-node-helper**: A helper container that assists with container metrics collection
+
+You can configure these containers separately by using the `nodeAgentContainer` and `nodeHelperContainer` fields in the NodeAgent spec. This allows you to:
+
+- Set different resource requirements for each container
+- Configure different environment variables for each container
+- Optimize each container according to its specific role
+
+```yaml
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  features:
+    k8sAgent:
+      nodeAgent:
+        enabled: true
+        # Configuration specific to the whatap-node-agent container
+        nodeAgentContainer:
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "350Mi"
+            limits:
+              cpu: "300m"
+              memory: "500Mi"
+          envs:
+            - name: NODE_AGENT_CUSTOM_ENV
+              value: "custom-value"
+
+        # Configuration specific to the whatap-node-helper container
+        nodeHelperContainer:
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "150Mi"
+            limits:
+              cpu: "200m"
+              memory: "300Mi"
+          envs:
+            - name: NODE_HELPER_CUSTOM_ENV
+              value: "helper-value"
+```
+
+This feature is particularly useful when:
+1. You need to fine-tune resource allocation between the two containers
+2. You need to set specific environment variables for one container but not the other
+3. You want to optimize performance by allocating resources according to each container's workload
+
+#### Understanding Environment Variables in Kubernetes
+
+Environment variables in Kubernetes pods provide a way to pass configuration to applications running in containers. For monitoring agents, environment variables can be used to:
+
+- Configure agent behavior and features
+- Set monitoring parameters and thresholds
+- Connect to external services or data sources
+- Enable or disable specific monitoring capabilities
+
+The Whatap Operator allows you to specify custom environment variables for both the master agent and node agent through the WhatapAgent CR.
+
+```yaml
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  license: "your-license-key"
+  host: "whatap-server"
+  port: "6600"
+  features:
+    k8sAgent:
+      masterAgent:
+        enabled: true
+        # Custom environment variables for MasterAgent
+        envs:
+          - name: CUSTOM_ENV_VAR1
+            value: "value1"
+          - name: CUSTOM_ENV_VAR2
+            value: "value2"
+      nodeAgent:
+        enabled: true
+        # Custom environment variables for NodeAgent
+        envs:
+          - name: NODE_CUSTOM_ENV_VAR1
+            value: "node_value1"
+          - name: NODE_CUSTOM_ENV_VAR2
+            value: "node_value2"
+          # Environment variable from ConfigMap
+          - name: CONFIG_ENV_VAR
+            valueFrom:
+              configMapKeyRef:
+                name: my-config-map
+                key: config-key
+          # Environment variable from Secret
+          - name: SECRET_ENV_VAR
+            valueFrom:
+              secretKeyRef:
+                name: my-secret
+                key: secret-key
+```
+
+#### Types of Environment Variable Sources
+
+You can specify environment variables in several ways:
+
+1. **Direct Value**: Set the value directly in the CR
+   ```yaml
+   - name: ENV_NAME
+     value: "env_value"
+   ```
+
+2. **From ConfigMap**: Reference a value from a ConfigMap
+   ```yaml
+   - name: ENV_NAME
+     valueFrom:
+       configMapKeyRef:
+         name: my-config-map
+         key: config-key
+   ```
+
+3. **From Secret**: Reference a value from a Secret
+   ```yaml
+   - name: ENV_NAME
+     valueFrom:
+       secretKeyRef:
+         name: my-secret
+         key: secret-key
+   ```
+
+4. **From Field**: Reference a field from the pod or container
+   ```yaml
+   - name: NODE_NAME
+     valueFrom:
+       fieldRef:
+         fieldPath: spec.nodeName
+   ```
+
+#### Common Use Cases for Custom Environment Variables
+
+1. **Agent Configuration**: Set agent-specific configuration parameters
+2. **Proxy Settings**: Configure proxies for outbound connections
+3. **Debug Levels**: Set logging or debug levels for troubleshooting
+4. **Feature Flags**: Enable or disable specific monitoring features
+5. **Integration Settings**: Configure integration with other systems
+
 ### Secret-based Configuration
 
 [whatap-agent-secret.yaml](whatapagent/whatap-agent-secret.yaml) - Uses a Kubernetes secret to store Whatap credentials instead of specifying them directly in the CR.
