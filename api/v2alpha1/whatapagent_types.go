@@ -93,6 +93,9 @@ type OpenAgentTargetSpec struct {
 	// MetricRelabelConfigs defines the metric relabeling configurations
 	// +optional
 	MetricRelabelConfigs []MetricRelabelConfig `json:"metricRelabelConfigs,omitempty"`
+
+	// +kubebuilder:default=true
+	Enabled bool `json:"enabled"`
 }
 
 // OpenAgentEndpoint defines an endpoint for the OpenAgent to scrape metrics from

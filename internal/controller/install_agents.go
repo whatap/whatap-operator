@@ -556,9 +556,15 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent) string {
 
 	// Convert targets to interface{} for YAML marshaling
 	for _, target := range cr.Spec.Features.OpenAgent.Targets {
+		// Skip disabled targets
+		if !target.Enabled {
+			continue
+		}
+
 		targetMap := make(map[string]interface{})
 		targetMap["targetName"] = target.TargetName
 		targetMap["type"] = target.Type
+		targetMap["enabled"] = target.Enabled
 
 		// Add namespaceSelector if present
 		if len(target.NamespaceSelector.MatchNames) > 0 || len(target.NamespaceSelector.MatchLabels) > 0 || len(target.NamespaceSelector.MatchExpressions) > 0 {

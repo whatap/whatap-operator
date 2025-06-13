@@ -14,6 +14,8 @@ spec:
         targets:
           - targetName: kube-apiserver
             type: ServiceMonitor
+            # This target is enabled (default is true if not specified)
+            enabled: true
             namespaceSelector:
               matchNames:
                 - "default"
@@ -32,3 +34,19 @@ spec:
               - source_labels: ["__name__"]
                 regex: "apiserver_request_total"
                 action: "keep"
+
+          # Example of a disabled target
+          - targetName: node-exporter
+            type: PodMonitor
+            # This target is disabled and will be skipped
+            enabled: false
+            namespaceSelector:
+              matchNames:
+                - "monitoring"
+            selector:
+              matchLabels:
+                app: "node-exporter"
+            endpoints:
+              - port: "metrics"
+                path: "/metrics"
+                interval: "30s"
