@@ -1290,6 +1290,9 @@ spec:
                           description: OpenAgentTargetSpec defines a target for the
                             OpenAgent to scrape metrics from
                           properties:
+                            enabled:
+                              default: true
+                              type: boolean
                             endpoints:
                               description: Endpoints defines the endpoints to scrape
                                 metrics from
@@ -1458,6 +1461,7 @@ spec:
                               - StaticEndpoints
                               type: string
                           required:
+                          - enabled
                           - targetName
                           - type
                           type: object
