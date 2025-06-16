@@ -30,7 +30,7 @@ spec:
             # for server agent integration. You can override it if needed.
             - name: whatap_server_agent_enabled
               value: "true"
-            - name: NODE_AGENT_CUSTOM_ENV
+            - name: whatap_server_agent_enabled_pcode
               value: "custom-value"
             - name: NODE_AGENT_LOG_LEVEL
               value: "debug"
