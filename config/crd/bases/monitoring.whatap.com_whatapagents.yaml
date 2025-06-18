@@ -1300,7 +1300,7 @@ spec:
                                 description: OpenAgentEndpoint defines an endpoint
                                   for the OpenAgent to scrape metrics from
                                 properties:
-                                  enabled:
+                                  addNodeLabel:
                                     default: false
                                     type: string
                                   interval:
@@ -1329,7 +1329,7 @@ spec:
                                         type: boolean
                                     type: object
                                 required:
-                                - enabled
+                                - addNodeLabel
                                 - port
                                 type: object
                               type: array
