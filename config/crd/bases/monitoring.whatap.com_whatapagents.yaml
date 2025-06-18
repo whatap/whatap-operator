@@ -1300,6 +1300,9 @@ spec:
                                 description: OpenAgentEndpoint defines an endpoint
                                   for the OpenAgent to scrape metrics from
                                 properties:
+                                  enabled:
+                                    default: false
+                                    type: string
                                   interval:
                                     description: Interval is the scrape interval for
                                       this endpoint
@@ -1326,6 +1329,7 @@ spec:
                                         type: boolean
                                     type: object
                                 required:
+                                - enabled
                                 - port
                                 type: object
                               type: array
