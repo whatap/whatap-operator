@@ -6,6 +6,7 @@ import (
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -54,15 +55,81 @@ func (r *WhatapAgentReconciler) ensureWebhookTLSSecret(ctx context.Context) erro
 }
 
 func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
-	// ex) whatap-master-agent Deployment 삭제
-	_ = r.Delete(ctx, &appsv1.Deployment{
+	logger := log.FromContext(ctx)
+	logger.Info("Cleaning up Whatap agents and resources")
+
+	// Delete Master Agent Deployment
+	if err := r.Delete(ctx, &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-master-agent", Namespace: r.DefaultNamespace},
-	})
-	_ = r.Delete(ctx, &appsv1.DaemonSet{
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete Master Agent Deployment")
+		}
+	}
+
+	// Delete Node Agent DaemonSet
+	if err := r.Delete(ctx, &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-node-agent", Namespace: r.DefaultNamespace},
-	})
-	// node-agent DaemonSet, GPU, api-server, etcd, scheduler, openAgent 등도 모두 Delete
-	// ignore NotFound 에러
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete Node Agent DaemonSet")
+		}
+	}
+
+	// Delete OpenAgent resources
+	// Delete OpenAgent Deployment
+	if err := r.Delete(ctx, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent", Namespace: r.DefaultNamespace},
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete OpenAgent Deployment")
+		}
+	}
+
+	// Delete OpenAgent ConfigMap
+	if err := r.Delete(ctx, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-config", Namespace: r.DefaultNamespace},
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete OpenAgent ConfigMap")
+		}
+	}
+
+	// Delete OpenAgent ServiceAccount
+	if err := r.Delete(ctx, &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-sa", Namespace: r.DefaultNamespace},
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete OpenAgent ServiceAccount")
+		}
+	}
+
+	// Delete OpenAgent ClusterRole
+	if err := r.Delete(ctx, &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-role"},
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete OpenAgent ClusterRole")
+		}
+	}
+
+	// Delete OpenAgent ClusterRoleBinding
+	if err := r.Delete(ctx, &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-role-binding"},
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete OpenAgent ClusterRoleBinding")
+		}
+	}
+
+	logger.Info("Cleanup completed")
 	return nil
 }
 
@@ -184,10 +251,12 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 		}
 	} else {
-		// The object is being deleted
+ 	// The object is being deleted
 		if controllerutil.ContainsFinalizer(whatapAgent, whatapFinalizer) {
 			// our finalizer is present, so let's handle any external dependency
 			if err := r.cleanupAgents(ctx); err != nil {
+				logger.Error(err, "Failed to clean up agents")
+				// Continue with finalizer removal even if cleanup fails
 			}
 		}
 		// remove our finalizer from the list and update it.
@@ -217,12 +286,13 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Kubernetes Monitoring
 	k8sAgentSpec := whatapAgent.Spec.Features.K8sAgent
 	openAgentSpec := whatapAgent.Spec.Features.OpenAgent
-	if k8sAgentSpec.GpuMonitoring.Enabled {
-		logger.Info("createOrUpdate Whatap GPU Monitoring ConfigMap/dcgm-exporter-csv")
-		if err := createOrUpdateGpuConfigMap(ctx, r, logger, whatapAgent); err != nil {
-			logger.Error(err, "Failed to createOrUpdate GPU Monitoring ConfigMap")
-		}
-	}
+	// GPU ConfigMap is now created by Helm, so we don't need to create it here
+	// if k8sAgentSpec.GpuMonitoring.Enabled {
+	// 	logger.Info("createOrUpdate Whatap GPU Monitoring ConfigMap/dcgm-exporter-csv")
+	// 	if err := createOrUpdateGpuConfigMap(ctx, r, logger, whatapAgent); err != nil {
+	// 		logger.Error(err, "Failed to createOrUpdate GPU Monitoring ConfigMap")
+	// 	}
+	// }
 
 	if k8sAgentSpec.MasterAgent.Enabled {
 		logger.Info("createOrUpdate Whatap Master Agent")
