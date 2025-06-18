@@ -1329,7 +1329,6 @@ spec:
                                         type: boolean
                                     type: object
                                 required:
-                                - addNodeLabel
                                 - port
                                 type: object
                               type: array
