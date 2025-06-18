@@ -117,7 +117,7 @@ type OpenAgentEndpoint struct {
 
 	// +kubebuilder:default=false
 	// +optional
-	AddNodeLabel string `json:"addNodeLabel,omitempty"`
+	AddNodeLabel bool `json:"addNodeLabel,omitempty"`
 }
 
 // TLSConfig defines the TLS configuration for an endpoint
