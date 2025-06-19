@@ -7,12 +7,47 @@ spec:
   host: "15.165.146.117"
   port: "6600"
   features:
+    # APM configuration with custom image and additional arguments
+    apm:
+      instrumentation:
+        targets:
+          - name: "java-app"
+            enabled: true
+            language: "java"
+            whatapApmVersions:
+              java: "2.2.58"
+            # Custom image name for APM agent
+            customImageName: "my-registry.example.com/whatap/apm-init-java:2.2.58"
+            # Additional arguments for APM agent
+            additionalArgs:
+              license: "x43a42205jmf3-x5u4rg9ronek18-z3088t61gv7v40"
+              "whatap.server.host": "15.165.146.117"
+              "whatap.app.name": "my-java-app"
+            namespaceSelector:
+              matchNames:
+                - "default"
+            podSelector:
+              matchLabels:
+                app: "java-app"
+            config:
+              mode: "default"
+
     k8sAgent:
-      # Custom agent image name
+      # Custom agent image name for Kubernetes agent
       agentImageName: "my-registry.example.com/whatap/kube_agent"
-      # Custom agent image version
+      # Custom agent image version for Kubernetes agent
       agentImageVersion: "v1.2.3"
       masterAgent:
         enabled: true
       nodeAgent:
         enabled: true
+
+    # OpenAgent configuration with custom image
+    openAgent:
+      enabled: true
+      # Custom image name for OpenAgent
+      imageName: "my-registry.example.com/whatap/open_agent"
+      # Custom image version for OpenAgent
+      imageVersion: "v1.2.3"
+      globalInterval: "60s"
+      globalPath: "/metrics"

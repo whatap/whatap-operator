@@ -18,7 +18,7 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	initContainers := []corev1.Container{
 		{
 			Name:  "whatap-agent-init",
-			Image: fmt.Sprintf("public.ecr.aws/whatap/apm-init-%s:%s", lang, version),
+			Image: getAgentImage(target, lang, version),
 			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      "whatap-agent-volume",
@@ -30,19 +30,28 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 
 	// 2️⃣ ConfigMap 기반 config 생성 (mode가 configMapRef 때만 추가)
 	if target.Config.Mode == "configMapRef" && target.Config.ConfigMapRef != nil {
-		initContainers = append(initContainers, corev1.Container{
-			Name:    "whatap-config-init",
-			Image:   "alpine:3.18",
-			Command: []string{"sh", "-c"},
-			Args: []string{
-				fmt.Sprintf(`
+		// Build the command with basic configuration
+		command := fmt.Sprintf(`
 					cp /config-volume/whatap.conf /whatap-agent/ && \
 					echo "license=%s" >> /whatap-agent/whatap.conf && \
 					echo "whatap.server.host=%s" >> /whatap-agent/whatap.conf && \
 					echo "whatap.server.port=%s" >> /whatap-agent/whatap.conf && \
-					echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf
-					`, cr.Spec.License, cr.Spec.Host, cr.Spec.Port),
-			},
+					echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`, 
+					cr.Spec.License, cr.Spec.Host, cr.Spec.Port)
+
+		// Add additional arguments if provided
+		if len(target.AdditionalArgs) > 0 {
+			for key, value := range target.AdditionalArgs {
+				command += fmt.Sprintf(` && \
+					echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
+			}
+		}
+
+		initContainers = append(initContainers, corev1.Container{
+			Name:    "whatap-config-init",
+			Image:   "alpine:3.18",
+			Command: []string{"sh", "-c"},
+			Args: []string{command},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
 				{Name: "config-volume", MountPath: "/config-volume"},
@@ -62,13 +71,21 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 		})
 	} else if lang == "java" {
 		// 3️⃣ Java 기본 whatap.conf 생성 (ConfigMap 사용 안할 때)
+		// Build the command with basic configuration
+		command := fmt.Sprintf(`echo "license=%s" > /whatap-agent/whatap.conf && echo "whatap.server.host=%s" >> /whatap-agent/whatap.conf && echo "whatap.server.port=%s" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`, cr.Spec.License, cr.Spec.Host, cr.Spec.Port)
+
+		// Add additional arguments if provided
+		if len(target.AdditionalArgs) > 0 {
+			for key, value := range target.AdditionalArgs {
+				command += fmt.Sprintf(` && echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
+			}
+		}
+
 		initContainers = append(initContainers, corev1.Container{
 			Name:    "whatap-config-init",
 			Image:   "alpine:3.18",
 			Command: []string{"sh", "-c"},
-			Args: []string{
-				fmt.Sprintf(`echo "license=%s" > /whatap-agent/whatap.conf && echo "whatap.server.host=%s" >> /whatap-agent/whatap.conf &&echo "whatap.server.port=%s" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`, cr.Spec.License, cr.Spec.Host, cr.Spec.Port),
-			},
+			Args: []string{command},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
 			},
@@ -287,6 +304,16 @@ func matchesNamespaceSelector(namespaceName string, namespaceLabels map[string]s
 
 	return true
 }
+// getAgentImage returns the image name to use for the agent
+// If a custom image name is provided, it will be used
+// Otherwise, the default image name format will be used
+func getAgentImage(target monitoringv2alpha1.TargetSpec, lang, version string) string {
+	if target.CustomImageName != "" {
+		return target.CustomImageName
+	}
+	return fmt.Sprintf("public.ecr.aws/whatap/apm-init-%s:%s", lang, version)
+}
+
 func appendIfNotExists(volumes []corev1.Volume, newVol corev1.Volume) []corev1.Volume {
 	for _, v := range volumes {
 		if v.Name == newVol.Name {

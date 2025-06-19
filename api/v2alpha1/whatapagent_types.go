@@ -57,6 +57,12 @@ type OpenAgentSpec struct {
 	// Targets defines the list of targets to scrape metrics from
 	// +optional
 	Targets []OpenAgentTargetSpec `json:"targets,omitempty"`
+	// ImageName defines the name of the OpenAgent image to use
+	// +optional
+	ImageName string `json:"imageName,omitempty"`
+	// ImageVersion defines the version of the OpenAgent image to use
+	// +optional
+	ImageVersion string `json:"imageVersion,omitempty"`
 	// Labels to be added to the OpenAgent deployment
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
@@ -239,6 +245,13 @@ type TargetSpec struct {
 	Enabled           bool              `json:"enabled"`  // +kubebuilder:default=true
 	Language          string            `json:"language"` // +kubebuilder:validation:Enum=java;python;php;dotnet;nodejs;golang
 	WhatapApmVersions map[string]string `json:"whatapApmVersions"`
+	// CustomImageName allows specifying a full custom image name for the agent
+	// If not provided, the default image name format will be used
+	// +optional
+	CustomImageName string `json:"customImageName,omitempty"`
+	// AdditionalArgs allows specifying additional arguments for the agent
+	// +optional
+	AdditionalArgs map[string]string `json:"additionalArgs,omitempty"`
 	NamespaceSelector NamespaceSelector `json:"namespaceSelector"`
 	PodSelector       PodSelector       `json:"podSelector"`
 	Config            ConfigSpec        `json:"config"`

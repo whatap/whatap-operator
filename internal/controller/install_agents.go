@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"gopkg.in/yaml.v2"
+	"time"
 
 	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
@@ -768,125 +769,145 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 	}
 	logResult(logger, "Whatap", "OpenAgent ConfigMap", op)
 
-	// Create Deployment
-	deploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "whatap-open-agent",
-			Namespace: r.DefaultNamespace,
-			Labels: map[string]string{
-				"app": "whatap-open-agent",
+	// Create or update the Deployment with retry logic
+	// This helps handle concurrent modification errors
+	maxRetries := 3
+	retryCount := 0
+	var deployOp controllerutil.OperationResult
+
+	for retryCount < maxRetries {
+		// Get a fresh deployment object for each retry
+		deploy := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "whatap-open-agent",
+				Namespace: r.DefaultNamespace,
 			},
-		},
-	}
-
-	// Get the OpenAgent spec for easier access
-	openAgentSpec := cr.Spec.Features.OpenAgent
-
-	// Apply custom labels if provided
-	if openAgentSpec.Labels != nil {
-		if deploy.Labels == nil {
-			deploy.Labels = make(map[string]string)
 		}
-		for k, v := range openAgentSpec.Labels {
-			deploy.Labels[k] = v
-		}
-	}
 
-	// Apply custom annotations if provided
-	if openAgentSpec.Annotations != nil {
-		if deploy.Annotations == nil {
-			deploy.Annotations = make(map[string]string)
-		}
-		for k, v := range openAgentSpec.Annotations {
-			deploy.Annotations[k] = v
-		}
-	}
+		// Get the OpenAgent spec for easier access
+		openAgentSpec := cr.Spec.Features.OpenAgent
 
-	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-		// Create base labels for pod template
-		podLabels := map[string]string{"app": "whatap-open-agent"}
-		if openAgentSpec.PodLabels != nil {
-			for k, v := range openAgentSpec.PodLabels {
-				podLabels[k] = v
+		// Set up base labels
+		deploy.Labels = map[string]string{
+			"app": "whatap-open-agent",
+		}
+
+		// Apply custom labels if provided
+		if openAgentSpec.Labels != nil {
+			for k, v := range openAgentSpec.Labels {
+				deploy.Labels[k] = v
 			}
 		}
 
-		// Create pod annotations if provided
-		var podAnnotations map[string]string
-		if openAgentSpec.PodAnnotations != nil {
-			podAnnotations = make(map[string]string)
-			for k, v := range openAgentSpec.PodAnnotations {
-				podAnnotations[k] = v
+		// Apply custom annotations if provided
+		if openAgentSpec.Annotations != nil {
+			if deploy.Annotations == nil {
+				deploy.Annotations = make(map[string]string)
+			}
+			for k, v := range openAgentSpec.Annotations {
+				deploy.Annotations[k] = v
 			}
 		}
 
-		deploy.Spec = appsv1.DeploymentSpec{
-			Replicas: int32Ptr(1),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "whatap-open-agent",
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels:      podLabels,
-					Annotations: podAnnotations,
-				},
-				Spec: corev1.PodSpec{
-					ServiceAccountName: "whatap-open-agent-sa",
-					// Apply tolerations from CR if specified
-					Tolerations: openAgentSpec.Tolerations,
-					Containers: []corev1.Container{
-						{
-							Name:            "whatap-open-agent",
-							Image:           "whatap/open_agent:latest",
-							ImagePullPolicy: corev1.PullAlways,
-							Env: append([]corev1.EnvVar{
-								getWhatapLicenseEnvVar(cr),
-								getWhatapHostEnvVar(cr),
-								getWhatapPortEnvVar(cr),
-							}, openAgentSpec.Envs...),
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "config-volume",
-									MountPath: "/app/scrape_config.yaml",
-									SubPath:   "scrape_config.yaml",
-								},
-								{
-									Name:      "logs-volume",
-									MountPath: "/app/logs",
-								},
-							},
-						},
+		deployOp, err = controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+			// Create base labels for pod template
+			podLabels := map[string]string{"app": "whatap-open-agent"}
+			if openAgentSpec.PodLabels != nil {
+				for k, v := range openAgentSpec.PodLabels {
+					podLabels[k] = v
+				}
+			}
+
+			// Create pod annotations if provided
+			var podAnnotations map[string]string
+			if openAgentSpec.PodAnnotations != nil {
+				podAnnotations = make(map[string]string)
+				for k, v := range openAgentSpec.PodAnnotations {
+					podAnnotations[k] = v
+				}
+			}
+
+			deploy.Spec = appsv1.DeploymentSpec{
+				Replicas: int32Ptr(1),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "whatap-open-agent",
 					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "config-volume",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "whatap-open-agent-config",
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels:      podLabels,
+						Annotations: podAnnotations,
+					},
+					Spec: corev1.PodSpec{
+						ServiceAccountName: "whatap-open-agent-sa",
+						// Apply tolerations from CR if specified
+						Tolerations: openAgentSpec.Tolerations,
+						Containers: []corev1.Container{
+							{
+								Name:            "whatap-open-agent",
+								Image:           getOpenAgentImage(openAgentSpec),
+								ImagePullPolicy: corev1.PullAlways,
+								Env: append([]corev1.EnvVar{
+									getWhatapLicenseEnvVar(cr),
+									getWhatapHostEnvVar(cr),
+									getWhatapPortEnvVar(cr),
+								}, openAgentSpec.Envs...),
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      "config-volume",
+										MountPath: "/app/scrape_config.yaml",
+										SubPath:   "scrape_config.yaml",
+									},
+									{
+										Name:      "logs-volume",
+										MountPath: "/app/logs",
 									},
 								},
 							},
 						},
-						{
-							Name: "logs-volume",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
+						Volumes: []corev1.Volume{
+							{
+								Name: "config-volume",
+								VolumeSource: corev1.VolumeSource{
+									ConfigMap: &corev1.ConfigMapVolumeSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "whatap-open-agent-config",
+										},
+									},
+								},
+							},
+							{
+								Name: "logs-volume",
+								VolumeSource: corev1.VolumeSource{
+									EmptyDir: &corev1.EmptyDirVolumeSource{},
+								},
 							},
 						},
 					},
 				},
-			},
+			}
+			return nil
+		})
+
+		if err == nil {
+			// Success, break out of the retry loop
+			logResult(logger, "Whatap", "OpenAgent Deployment", deployOp)
+			break
 		}
-		return nil
-	})
-	if err != nil {
-		logger.Error(err, "Failed to create/update Deployment for OpenAgent")
-		return err
+
+		// Check if we should retry
+		if retryCount < maxRetries-1 {
+			retryCount++
+			logger.Info("Retrying deployment update due to conflict", "attempt", retryCount, "maxRetries", maxRetries)
+			// Simple exponential backoff
+			time.Sleep(time.Duration(retryCount*100) * time.Millisecond)
+		} else {
+			// Max retries reached, return the error
+			logger.Error(err, "Failed to create/update Deployment for OpenAgent after retries")
+			return err
+		}
 	}
-	logResult(logger, "Whatap", "OpenAgent Deployment", op)
 
 	return nil
 }
@@ -944,4 +965,22 @@ func getWhatapPortEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 			},
 		},
 	}
+}
+
+// getOpenAgentImage returns the image string for the OpenAgent
+// If custom image name or version is provided in the CR, it will use those values
+// Otherwise, it falls back to the default values
+func getOpenAgentImage(spec monitoringv2alpha1.OpenAgentSpec) string {
+	imageName := "whatap/open_agent"
+	imageVersion := "latest"
+
+	if spec.ImageName != "" {
+		imageName = spec.ImageName
+	}
+
+	if spec.ImageVersion != "" {
+		imageVersion = spec.ImageVersion
+	}
+
+	return fmt.Sprintf("%s:%s", imageName, imageVersion)
 }

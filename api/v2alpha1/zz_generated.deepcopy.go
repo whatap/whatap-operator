@@ -544,6 +544,13 @@ func (in *TargetSpec) DeepCopyInto(out *TargetSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.AdditionalArgs != nil {
+		in, out := &in.AdditionalArgs, &out.AdditionalArgs
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	in.NamespaceSelector.DeepCopyInto(&out.NamespaceSelector)
 	in.PodSelector.DeepCopyInto(&out.PodSelector)
 	in.Config.DeepCopyInto(&out.Config)

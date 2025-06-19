@@ -11,6 +11,9 @@ spec:
         enabled: true
         globalInterval: "60s"
         globalPath: "/metrics"
+        # Custom image name and version for OpenAgent
+        imageName: "custom-registry.example.com/whatap/open_agent"
+        imageVersion: "v1.2.3"
         targets:
           - targetName: kube-apiserver
             type: ServiceMonitor

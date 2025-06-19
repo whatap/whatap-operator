@@ -14,6 +14,15 @@ spec:
             whatapApmVersions:
               java: "2.2.58"                   # 사용할 APM 에이전트 버전
 
+            # 커스텀 에이전트 이미지 이름 (생략 시 기본 이미지 사용)
+            # customImageName: "my-registry.example.com/whatap/apm-init-java:2.2.58"
+
+            # 추가 에이전트 인자 설정
+            additionalArgs:
+              license: "x43a42205jmf3-x5u4rg9ronek18-z3088t61gv7v40"  # 라이센스 키 설정
+              "whatap.server.host": "15.165.146.117"                  # 서버 호스트 설정
+              "whatap.app.name": "my-java-app"                        # 애플리케이션 이름 설정
+
             # 대상 네임스페이스 선택 (다음 중 하나 사용)
             namespaceSelector:
               # 특정 네임스페이스 이름으로 선택
@@ -174,6 +183,8 @@ spec:
       enabled: true                            # OpenAgent 활성화
       globalInterval: "60s"                    # 기본 스크래핑 간격
       globalPath: "/metrics"                   # 기본 메트릭 경로
+      imageName: "custom-registry.example.com/whatap/open_agent"  # OpenAgent 이미지 이름 (기본값: whatap/open_agent)
+      imageVersion: "v1.2.3"                   # OpenAgent 이미지 버전 (기본값: latest)
 
       # OpenAgent Deployment에 추가할 라벨
       labels:
