@@ -855,11 +855,6 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 								}, openAgentSpec.Envs...),
 								VolumeMounts: []corev1.VolumeMount{
 									{
-										Name:      "config-volume",
-										MountPath: "/app/scrape_config.yaml",
-										SubPath:   "scrape_config.yaml",
-									},
-									{
 										Name:      "logs-volume",
 										MountPath: "/app/logs",
 									},
@@ -867,16 +862,6 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 							},
 						},
 						Volumes: []corev1.Volume{
-							{
-								Name: "config-volume",
-								VolumeSource: corev1.VolumeSource{
-									ConfigMap: &corev1.ConfigMapVolumeSource{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "whatap-open-agent-config",
-										},
-									},
-								},
-							},
 							{
 								Name: "logs-volume",
 								VolumeSource: corev1.VolumeSource{
