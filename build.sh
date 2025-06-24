@@ -3,15 +3,12 @@ set -euo pipefail
 
 # Display usage information
 function show_usage {
-  echo "❗ 사용법: ./build.sh <VERSION> [<ARCH>] [<OPTIONS>]"
+  echo "❗ 사용법: ./build.sh <VERSION> [<ARCH>] [<REGISTRY>]"
   echo "  <VERSION>: 빌드할 버전 (예: 1.7.15)"
   echo "  <ARCH>: 빌드할 아키텍처 (옵션: amd64, arm64, all) [기본값: all]"
-  echo "  <OPTIONS>:"
-  echo "    --local: 로컬에만 빌드하고 레지스트리에 푸시하지 않음"
-  echo "    --registry=<REGISTRY>: 사용할 레지스트리 (기본값: public.ecr.aws/whatap)"
+  echo "  <REGISTRY>: 사용할 레지스트리 (기본값: public.ecr.aws/whatap)"
   echo "예: ./build.sh 1.7.15 arm64"
-  echo "    ./build.sh 1.7.15 arm64 --local"
-  echo "    ./build.sh 1.7.15 all --registry=docker.io/myuser"
+  echo "    ./build.sh 1.7.15 all docker.io/myuser"
 }
 
 # Check if at least one argument is provided
@@ -22,31 +19,7 @@ fi
 
 VERSION=$1
 ARCH=${2:-all}  # Default to 'all' if not specified
-
-# Default values
-PUSH_FLAG="--push"
-REGISTRY="public.ecr.aws/whatap"
-
-# Parse additional options
-shift
-if [ $# -ge 1 ]; then
-  shift  # Skip ARCH if provided
-  for arg in "$@"; do
-    case $arg in
-      --local)
-        PUSH_FLAG="--load"
-        ;;
-      --registry=*)
-        REGISTRY="${arg#*=}"
-        ;;
-      *)
-        echo "❗ 알 수 없는 옵션: $arg"
-        show_usage
-        exit 1
-        ;;
-    esac
-  done
-fi
+REGISTRY=${3:-public.ecr.aws/whatap}  # Default registry
 
 # Set the platforms based on the architecture parameter
 case $ARCH in
@@ -73,22 +46,49 @@ esac
 export IMG="${REGISTRY}/whatap-operator:${VERSION}"
 export IMG_LATEST="${REGISTRY}/whatap-operator:latest"
 
-# Check if --load is used with multiple platforms (not supported by Docker)
-if [ "$PUSH_FLAG" = "--load" ] && [[ "$PLATFORMS" == *","* ]]; then
-  echo "❗ 오류: --local 옵션은 다중 아키텍처 빌드에서 사용할 수 없습니다."
-  echo "   단일 아키텍처를 지정하세요 (예: amd64 또는 arm64)"
-  exit 1
-fi
-
 echo "🚀 Building for $ARCH_MSG"
-if [ "$PUSH_FLAG" = "--push" ]; then
-  echo "🚀 Building and pushing both tags: ${IMG} and ${IMG_LATEST}"
-else
-  echo "🚀 Building locally (no push) with tags: ${IMG} and ${IMG_LATEST}"
-fi
+echo "🚀 Building and pushing both tags: ${IMG} and ${IMG_LATEST}"
 
 # Create a temporary Dockerfile.cross for multi-platform build
-sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
+cat > Dockerfile.cross << 'EOF'
+# Build the manager binary
+FROM --platform=${BUILDPLATFORM} golang:1.24.3 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /workspace
+# Copy the Go Modules manifests
+COPY go.mod go.mod
+COPY go.sum go.sum
+# cache deps before building and copying source so that we don't need to re-download as much
+# and so that source changes don't invalidate our downloaded layer
+RUN go mod download
+
+# Copy the go source
+COPY cmd/main.go cmd/main.go
+COPY api/ api/
+COPY internal/ internal/
+
+# Build
+# the GOARCH has not a default value to allow the binary be built according to the host where the command
+# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
+# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
+# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
+ARG VERSION=dev
+ARG BUILD_TIME=unknown
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -ldflags "-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o manager cmd/main.go
+# Use distroless as minimal base image to package the manager binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/manager .
+USER 65532:65532
+
+ENTRYPOINT ["/manager"]
+EOF
 
 # Create or use existing buildx builder
 if ! docker buildx inspect whatap-operator-builder &>/dev/null; then
@@ -97,38 +97,15 @@ fi
 docker buildx use whatap-operator-builder
 
 # Build with both tags in a single command
-set +e  # Don't exit on error for better error handling
-docker buildx build ${PUSH_FLAG} \
+docker buildx build --push \
   --platform=${PLATFORMS} \
   --build-arg VERSION=${VERSION} \
   --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --tag ${IMG} \
   --tag ${IMG_LATEST} \
   -f Dockerfile.cross .
-BUILD_RESULT=$?
-set -e  # Restore exit on error
-
-# Handle build errors
-if [ $BUILD_RESULT -ne 0 ]; then
-  echo "❗ 빌드 실패 (코드: $BUILD_RESULT)"
-
-  if [ "$PUSH_FLAG" = "--push" ]; then
-    echo "💡 팁: 레지스트리 인증 문제가 있을 수 있습니다. 다음 옵션을 시도해보세요:"
-    echo "   1. 로컬 빌드만 하려면: ./build.sh $VERSION $ARCH --local"
-    echo "   2. 다른 레지스트리 사용: ./build.sh $VERSION $ARCH --registry=docker.io/yourname"
-    echo "   3. AWS ECR에 로그인: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws"
-  else
-    echo "💡 팁: Docker 설정이나 디스크 공간을 확인하세요."
-  fi
-
-  exit $BUILD_RESULT
-fi
 
 # Clean up
 rm Dockerfile.cross
 
-if [ "$PUSH_FLAG" = "--push" ]; then
-  echo "✅ 빌드 및 푸시 완료: $ARCH_MSG"
-else
-  echo "✅ 로컬 빌드 완료: $ARCH_MSG"
-fi
+echo "✅ 빌드 및 푸시 완료: $ARCH_MSG"
