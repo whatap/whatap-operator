@@ -21,9 +21,45 @@ BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 echo "🔐 Logging in to AWS ECR Public..."
 aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/whatap
 
+# Function to build binaries without make (fallback)
+function build_binaries_direct() {
+  echo "📦 Creating bin directory..."
+  mkdir -p bin
+
+  echo "📦 Running go fmt..."
+  go fmt ./...
+
+  echo "📦 Running go vet..."
+  go vet ./...
+
+  echo "📦 Building binary for linux/amd64..."
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.amd64 cmd/main.go
+
+  echo "📦 Building binary for linux/arm64..."
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.arm64 cmd/main.go
+
+  echo "📦 Building binary for local architecture..."
+  CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o bin/manager cmd/main.go
+}
+
 # Pre-compile binaries for fast multi-platform build
 echo "📦 Pre-compiling binaries for different architectures..."
-make build-fast
+
+# Check if make is available
+if command -v make >/dev/null 2>&1; then
+  echo "✅ Using make for building..."
+  make build-fast
+else
+  echo "⚠️  make command not found!"
+  echo "📋 To install make on Ubuntu/Debian:"
+  echo "   sudo apt update && sudo apt install -y build-essential"
+  echo ""
+  echo "📋 To install make on CentOS/RHEL:"
+  echo "   sudo yum install -y make"
+  echo ""
+  echo "🔄 Using direct build approach as fallback..."
+  build_binaries_direct
+fi
 
 # Build and push whatap-operator images for both architectures (fast approach)
 echo "🔨 Building and pushing whatap-operator images using fast approach..."
@@ -34,6 +70,13 @@ if ! docker buildx inspect whatap-operator-builder &>/dev/null; then
   docker buildx create --name whatap-operator-builder
 fi
 docker buildx use whatap-operator-builder
+
+# Backup original .dockerignore and use .dockerignore.fast for fast builds
+echo "📦 Switching to .dockerignore.fast for fast builds..."
+if [ -f .dockerignore ]; then
+  cp .dockerignore .dockerignore.backup
+fi
+cp .dockerignore.fast .dockerignore
 
 # Build and push amd64 image using fast Dockerfile
 echo "🔨 Building and pushing amd64 image..."
@@ -52,6 +95,15 @@ docker buildx build --push \
   --build-arg BUILD_TIME=${BUILD_TIME} \
   --tag public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64 \
   -f Dockerfile.fast .
+
+# Restore original .dockerignore
+echo "📦 Restoring original .dockerignore..."
+if [ -f .dockerignore.backup ]; then
+  mv .dockerignore.backup .dockerignore
+else
+  # If no backup exists, remove the temporary .dockerignore
+  rm -f .dockerignore
+fi
 
 # Handle whatap-operator images for public ECR
 echo "📥 Pulling whatap-operator images..."
