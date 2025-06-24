@@ -1,0 +1,4 @@
+
+  echo "🚀 Optimizing Go module and build cache..."
+  go mod download
+  go mod tidy

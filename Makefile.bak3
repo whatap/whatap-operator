@@ -149,31 +149,6 @@ build-arm64: manifests generate fmt vet ## Build manager binary for linux/arm64
 build-local: manifests generate fmt vet ## Build manager binary for local architecture
 	CGO_ENABLED=0 go build -installsuffix cgo -ldflags="-w -s" -o bin/manager cmd/main.go
 
-# Cache optimization targets
-.PHONY: cache-optimize
-cache-optimize: ## Optimize Go module and build cache
-	@echo "🚀 Optimizing Go module cache..."
-	go mod download
-	go mod tidy
-	@echo "📦 Build cache location: $(shell go env GOCACHE)"
-	@echo "📦 Module cache location: $(shell go env GOMODCACHE)"
-
-.PHONY: cache-clean
-cache-clean: ## Clean Go build and module cache
-	@echo "🧹 Cleaning Go build cache..."
-	go clean -cache
-	@echo "🧹 Cleaning Go module cache..."
-	go clean -modcache
-
-.PHONY: cache-info
-cache-info: ## Display cache information
-	@echo "📊 Go Cache Information:"
-	@echo "  Build cache: $(shell go env GOCACHE)"
-	@echo "  Module cache: $(shell go env GOMODCACHE)"
-	@echo "  Build cache size: $(shell du -sh $(shell go env GOCACHE) 2>/dev/null | cut -f1 || echo 'N/A')"
-	@echo "  Module cache size: $(shell du -sh $(shell go env GOMODCACHE) 2>/dev/null | cut -f1 || echo 'N/A')"
-
-
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go

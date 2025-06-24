@@ -1,0 +1,9 @@
+
+# Optimize Go module and build cache
+echo "🚀 Optimizing Go module and build cache..."
+echo "📦 Downloading and tidying Go modules..."
+go mod download
+go mod tidy
+echo "📊 Cache information:"
+echo "  Build cache: $(go env GOCACHE)"
+echo "  Module cache: $(go env GOMODCACHE)"

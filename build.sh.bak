@@ -21,15 +21,6 @@ BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 echo "🔐 Logging in to AWS ECR Public..."
 aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/whatap
 
-# Optimize Go module and build cache
-echo "🚀 Optimizing Go module and build cache..."
-echo "📦 Downloading and tidying Go modules..."
-go mod download
-go mod tidy
-echo "📊 Cache information:"
-echo "  Build cache: $(go env GOCACHE)"
-echo "  Module cache: $(go env GOMODCACHE)"
-
 # Function to build binaries without make (fallback)
 function build_binaries_direct() {
   echo "📦 Creating bin directory..."
@@ -42,13 +33,13 @@ function build_binaries_direct() {
   go vet ./...
 
   echo "📦 Building binary for linux/amd64..."
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.amd64 cmd/main.go
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.amd64 cmd/main.go
 
   echo "📦 Building binary for linux/arm64..."
-  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.arm64 cmd/main.go
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.arm64 cmd/main.go
 
   echo "📦 Building binary for local architecture..."
-  CGO_ENABLED=0 go build -installsuffix cgo -ldflags="-w -s" -o bin/manager cmd/main.go
+  CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o bin/manager cmd/main.go
 }
 
 # Pre-compile binaries for fast multi-platform build
@@ -111,8 +102,8 @@ fi
 
 # Handle whatap-operator images for public ECR
 echo "📥 Pulling whatap-operator images..."
-docker pull --platform linux/amd64 public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64
-docker pull --platform linux/arm64 public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
+docker pull -q public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64
+docker pull -q public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
 
 # Check if manifest exists and handle it for whatap-operator
 echo "🔍 Checking if manifest exists for whatap-operator:${AGENT_VERSION}..."

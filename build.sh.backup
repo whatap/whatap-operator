@@ -25,6 +25,10 @@ aws ecr-public get-login-password --region us-east-1 | docker login --username A
 echo "🚀 Optimizing Go module and build cache..."
 echo "📦 Downloading and tidying Go modules..."
 go mod download
+
+  echo "🚀 Optimizing Go module and build cache..."
+  go mod download
+  go mod tidy
 go mod tidy
 echo "📊 Cache information:"
 echo "  Build cache: $(go env GOCACHE)"
