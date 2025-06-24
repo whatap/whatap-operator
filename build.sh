@@ -90,12 +90,7 @@ docker buildx build --push --platform=linux/amd64 --build-arg VERSION=${AGENT_VE
 
 # Build and push arm64 image using fast Dockerfile
 echo "🔨 Building and pushing arm64 image..."
-docker buildx build --push \
-  --platform=linux/arm64 \
-  --build-arg VERSION=${AGENT_VERSION} \
-  --build-arg BUILD_TIME=${BUILD_TIME} \
-  --tag public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64 \
-  -f Dockerfile.fast .
+docker buildx build --push --platform=linux/arm64 --build-arg VERSION=${AGENT_VERSION} --build-arg BUILD_TIME=${BUILD_TIME} --tag public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64 -f Dockerfile.fast .
 
 # Restore original .dockerignore
 echo "📦 Restoring original .dockerignore..."
