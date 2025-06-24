@@ -956,7 +956,7 @@ func getWhatapPortEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 // If custom image name or version is provided in the CR, it will use those values
 // Otherwise, it falls back to the default values
 func getOpenAgentImage(spec monitoringv2alpha1.OpenAgentSpec) string {
-	imageName := "whatap/open_agent"
+	imageName := "public.ecr.aws/whatap/open_agent"
 	imageVersion := "latest"
 
 	if spec.ImageName != "" {
