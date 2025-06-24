@@ -125,6 +125,8 @@ public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION} \
 --amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 \
 --amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
 
+
+
 # Handle latest tag manifest for whatap-operator
 echo "🔍 Checking if manifest exists for whatap-operator:latest..."
 OPERATOR_LATEST_MANIFEST=$(docker manifest inspect public.ecr.aws/whatap/whatap-operator:latest 2>&1 || true)
