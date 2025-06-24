@@ -40,17 +40,30 @@ case $ARCH in
 esac
 
 export IMG="public.ecr.aws/whatap/whatap-operator:${VERSION}"
+export IMG_LATEST="public.ecr.aws/whatap/whatap-operator:latest"
 
 echo "🚀 Building for $ARCH_MSG"
-echo "🚀 export IMG=${IMG}"
-echo "🚀 make docker-buildx VERSION=${VERSION} PLATFORMS=${PLATFORMS}"
+echo "🚀 Building and pushing both tags: ${IMG} and ${IMG_LATEST}"
 
-# Build images for the specified architecture
-make docker-buildx VERSION="${VERSION}" PLATFORMS="${PLATFORMS}"
+# Create a temporary Dockerfile.cross for multi-platform build
+sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
 
-# Tag the latest version
-echo "🚀 Tagging latest version"
-export IMG_LATEST="public.ecr.aws/whatap/whatap-operator:latest"
-make docker-buildx VERSION="${VERSION}" IMG="${IMG_LATEST}" PLATFORMS="${PLATFORMS}"
+# Create or use existing buildx builder
+if ! docker buildx inspect whatap-operator-builder &>/dev/null; then
+  docker buildx create --name whatap-operator-builder
+fi
+docker buildx use whatap-operator-builder
+
+# Build and push with both tags in a single command
+docker buildx build --push \
+  --platform=${PLATFORMS} \
+  --build-arg VERSION=${VERSION} \
+  --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --tag ${IMG} \
+  --tag ${IMG_LATEST} \
+  -f Dockerfile.cross .
+
+# Clean up
+rm Dockerfile.cross
 
 echo "✅ Build and push completed for $ARCH_MSG"
