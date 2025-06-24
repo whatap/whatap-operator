@@ -86,66 +86,68 @@ cp .dockerignore.fast .dockerignore
 
 # Build and push amd64 image using fast Dockerfile
 echo "🔨 Building and pushing amd64 image..."
-docker buildx build --push --platform=linux/amd64 --build-arg VERSION=${AGENT_VERSION} --build-arg BUILD_TIME=${BUILD_TIME} --tag public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 -f Dockerfile.fast .
+docker buildx build --push --build-arg VERSION=${AGENT_VERSION} --build-arg BUILD_TIME=${BUILD_TIME} --tag public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 -f Dockerfile.fast .
 
 # Build and push arm64 image using fast Dockerfile
 echo "🔨 Building and pushing arm64 image..."
-docker buildx build --push --platform=linux/arm64 --build-arg VERSION=${AGENT_VERSION} --build-arg BUILD_TIME=${BUILD_TIME} --tag public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64 -f Dockerfile.fast .
-
-# Restore original .dockerignore
-echo "📦 Restoring original .dockerignore..."
-if [ -f .dockerignore.backup ]; then
-  mv .dockerignore.backup .dockerignore
-else
-  # If no backup exists, remove the temporary .dockerignore
-  rm -f .dockerignore
-fi
-
-# Handle whatap-operator images for public ECR
-echo "📥 Pulling whatap-operator images..."
-docker pull --platform linux/amd64 public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64
-docker pull --platform linux/arm64 public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
-
-# Check if manifest exists and handle it for whatap-operator
-echo "🔍 Checking if manifest exists for whatap-operator:${AGENT_VERSION}..."
-OPERATOR_MANIFEST=$(docker manifest inspect public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION} 2>&1 || true)
-
-# Check if "no such manifest" string is included
-if echo "$OPERATOR_MANIFEST" | grep -q "no such manifest"; then
-  echo "whatap-operator 매니페스트가 존재하지 않습니다. 삭제를 건너뜁니다."
-else
-  echo "whatap-operator 매니페스트가 존재합니다. 삭제를 진행합니다."
-  docker manifest rm public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}
-fi
-
-# Create manifest for whatap-operator versioned tag
-echo "📦 Creating manifest for whatap-operator:${AGENT_VERSION}..."
-docker manifest create \
-public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION} \
---amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 \
---amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
-
-
-
-# Handle latest tag manifest for whatap-operator
-echo "🔍 Checking if manifest exists for whatap-operator:latest..."
-OPERATOR_LATEST_MANIFEST=$(docker manifest inspect public.ecr.aws/whatap/whatap-operator:latest 2>&1 || true)
-if ! echo "$OPERATOR_LATEST_MANIFEST" | grep -q "no such manifest"; then
-  echo "whatap-operator latest 매니페스트가 존재합니다. 삭제를 진행합니다."
-  docker manifest rm public.ecr.aws/whatap/whatap-operator:latest
-fi
-
-# Create manifest for whatap-operator latest tag
-echo "📦 Creating manifest for whatap-operator:latest..."
-docker manifest create \
-public.ecr.aws/whatap/whatap-operator:latest \
---amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 \
---amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
-
-# Push whatap-operator manifests
-echo "🚀 Pushing whatap-operator manifests..."
-docker manifest push public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}
-docker manifest push public.ecr.aws/whatap/whatap-operator:latest
+docker buildx build --push --build-arg VERSION=${AGENT_VERSION} --build-arg BUILD_TIME=${BUILD_TIME} --tag public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64 -f Dockerfile.fast .
+docker buildx imagetools create -t public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION} \
+    public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 \
+    public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
+## Restore original .dockerignore
+#echo "📦 Restoring original .dockerignore..."
+#if [ -f .dockerignore.backup ]; then
+#  mv .dockerignore.backup .dockerignore
+#else
+#  # If no backup exists, remove the temporary .dockerignore
+#  rm -f .dockerignore
+#fi
+#
+## Handle whatap-operator images for public ECR
+#echo "📥 Pulling whatap-operator images..."
+#docker pull --platform linux/amd64 public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64
+#docker pull --platform linux/arm64 public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
+#
+## Check if manifest exists and handle it for whatap-operator
+#echo "🔍 Checking if manifest exists for whatap-operator:${AGENT_VERSION}..."
+#OPERATOR_MANIFEST=$(docker manifest inspect public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION} 2>&1 || true)
+#
+## Check if "no such manifest" string is included
+#if echo "$OPERATOR_MANIFEST" | grep -q "no such manifest"; then
+#  echo "whatap-operator 매니페스트가 존재하지 않습니다. 삭제를 건너뜁니다."
+#else
+#  echo "whatap-operator 매니페스트가 존재합니다. 삭제를 진행합니다."
+#  docker manifest rm public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}
+#fi
+#
+## Create manifest for whatap-operator versioned tag
+#echo "📦 Creating manifest for whatap-operator:${AGENT_VERSION}..."
+#docker manifest create \
+#public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION} \
+#--amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 \
+#--amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
+#
+#
+#
+## Handle latest tag manifest for whatap-operator
+#echo "🔍 Checking if manifest exists for whatap-operator:latest..."
+#OPERATOR_LATEST_MANIFEST=$(docker manifest inspect public.ecr.aws/whatap/whatap-operator:latest 2>&1 || true)
+#if ! echo "$OPERATOR_LATEST_MANIFEST" | grep -q "no such manifest"; then
+#  echo "whatap-operator latest 매니페스트가 존재합니다. 삭제를 진행합니다."
+#  docker manifest rm public.ecr.aws/whatap/whatap-operator:latest
+#fi
+#
+## Create manifest for whatap-operator latest tag
+#echo "📦 Creating manifest for whatap-operator:latest..."
+#docker manifest create \
+#public.ecr.aws/whatap/whatap-operator:latest \
+#--amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 \
+#--amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
+#
+## Push whatap-operator manifests
+#echo "🚀 Pushing whatap-operator manifests..."
+#docker manifest push public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}
+#docker manifest push public.ecr.aws/whatap/whatap-operator:latest
 
 
 echo ""

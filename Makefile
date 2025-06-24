@@ -135,7 +135,7 @@ build: manifests generate fmt vet ## Build manager binary.
 
 # Fast multi-platform build targets
 .PHONY: build-fast
-build-fast: cache-optimize build-amd64 build-arm64 build-local ## Build binaries for all architectures (fast approach)
+build-fast: cache-optimize build-amd64 build-arm64 ## Build binaries for all architectures (fast approach)
 
 .PHONY: build-amd64
 build-amd64: manifests generate fmt vet ## Build manager binary for linux/amd64
