@@ -929,7 +929,7 @@ func getWhatapHostEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: "whatap-credentials",
 				},
-				Key: "host",
+				Key: "WHATAP_HOST",
 			},
 		},
 	}
@@ -946,7 +946,7 @@ func getWhatapPortEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: "whatap-credentials",
 				},
-				Key: "port",
+				Key: "WHATAP_PORT",
 			},
 		},
 	}
