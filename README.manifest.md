@@ -2,7 +2,7 @@
 
 This guide explains how to combine existing architecture-specific Docker images into a single multi-architecture image using Docker manifest lists.
 
-> **Note:** If you're using the `build.sh` script to build your images, you don't need to run `create-manifest.sh` separately. The `build.sh` script already includes the manifest creation functionality.
+> **Note:** If you're using the `build.sh` script to build your images, you don't need to run `create-manifest.sh` separately. The `build.sh` script already includes the manifest creation functionality. You can also use `build.sh` with the `--manifest-only` flag to create manifest lists without rebuilding the images: `./build.sh 1.9.78 public.ecr.aws/whatap --manifest-only`
 
 ## Problem
 
@@ -49,9 +49,11 @@ This will:
 The script uses the Docker manifest command to create a manifest list that references both architecture-specific images:
 
 ```bash
-docker manifest create ${IMG} ${IMG}-amd64 ${IMG}-arm64
+docker manifest create ${IMG} --amend ${IMG}-amd64 --amend ${IMG}-arm64
 docker manifest push ${IMG}
 ```
+
+The `--amend` flag is used to handle cases where the source images might already be manifest lists themselves. Without this flag, you might encounter errors like "image is a manifest list" when trying to create a manifest list that includes another manifest list.
 
 When a client pulls the combined image, Docker automatically selects the appropriate architecture-specific image based on the client's platform.
 

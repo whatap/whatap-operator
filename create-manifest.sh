@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Note: This script is provided for convenience, but you can also use build.sh with the --manifest-only flag:
+# ./build.sh <VERSION> [<REGISTRY>] --manifest-only
+
 # Display usage information
 function show_usage {
   echo "❗ 사용법: ./create-manifest.sh <VERSION> [<REGISTRY>]"
@@ -8,6 +11,8 @@ function show_usage {
   echo "  <REGISTRY>: 사용할 레지스트리 (기본값: public.ecr.aws/whatap)"
   echo "예: ./create-manifest.sh 1.9.78"
   echo "    ./create-manifest.sh 1.9.78 docker.io/myuser"
+  echo ""
+  echo "대체 방법: ./build.sh <VERSION> [<REGISTRY>] --manifest-only"
 }
 
 # Check if at least one argument is provided
@@ -33,7 +38,7 @@ echo "   - ${IMG}"
 
 # Create and push manifest list for version tag
 echo "🔨 Creating and pushing manifest list for ${IMG}..."
-docker manifest create ${IMG} ${IMG}-amd64 ${IMG}-arm64
+docker manifest create ${IMG} --amend ${IMG}-amd64 --amend ${IMG}-arm64
 docker manifest push ${IMG}
 
 echo "✅ 매니페스트 생성 및 푸시 완료: ${IMG}"
