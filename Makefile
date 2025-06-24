@@ -133,6 +133,22 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
+# Fast multi-platform build targets
+.PHONY: build-fast
+build-fast: build-amd64 build-arm64 build-local ## Build binaries for all architectures (fast approach)
+
+.PHONY: build-amd64
+build-amd64: manifests generate fmt vet ## Build manager binary for linux/amd64
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.amd64 cmd/main.go
+
+.PHONY: build-arm64
+build-arm64: manifests generate fmt vet ## Build manager binary for linux/arm64
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.arm64 cmd/main.go
+
+.PHONY: build-local
+build-local: manifests generate fmt vet ## Build manager binary for local architecture
+	CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o bin/manager cmd/main.go
+
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
