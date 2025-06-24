@@ -95,7 +95,7 @@ cat > Dockerfile.multi << EOF
 FROM gcr.io/distroless/static:nonroot
 
 # Copy the pre-compiled binary
-COPY ./bin/manager /manager
+COPY manager /manager
 
 USER 65532:65532
 ENTRYPOINT ["/manager"]
@@ -113,7 +113,7 @@ echo "🔨 Building and pushing Docker images..."
 # Build and push for each architecture
 if [[ "$PLATFORMS" == *"linux/amd64"* ]]; then
   echo "🔨 Building and pushing amd64 image..."
-  cp bin/manager.linux.amd64 bin/manager
+  cp bin/manager.linux.amd64 manager
   docker buildx build --push \
     --platform=linux/amd64 \
     --tag ${IMG}-amd64 \
@@ -122,7 +122,7 @@ fi
 
 if [[ "$PLATFORMS" == *"linux/arm64"* ]]; then
   echo "🔨 Building and pushing arm64 image..."
-  cp bin/manager.linux.arm64 bin/manager
+  cp bin/manager.linux.arm64 manager
   docker buildx build --push \
     --platform=linux/arm64 \
     --tag ${IMG}-arm64 \
@@ -150,7 +150,7 @@ docker manifest push ${IMG_LATEST}
 
 # Clean up
 rm Dockerfile.multi
-rm -f bin/manager
+rm -f manager
 
 # Print summary
 echo ""
