@@ -158,7 +158,8 @@ if [[ "$PLATFORMS" == *"linux/arm64"* ]]; then
 fi
 
 eval ${MANIFEST_CMD}
-docker manifest push ${IMG}
+docker manifest create ${IMG}
+docker push ${IMG}
 
 # Create manifest list for latest tag
 MANIFEST_CMD="docker manifest create ${IMG_LATEST}"
