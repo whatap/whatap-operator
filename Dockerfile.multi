@@ -1,8 +1,0 @@
-# Use distroless as minimal base image
-FROM gcr.io/distroless/static:nonroot
-
-# Copy the pre-compiled binary
-COPY bin/manager /manager
-
-USER 65532:65532
-ENTRYPOINT ["/manager"]

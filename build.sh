@@ -3,9 +3,12 @@ set -euo pipefail
 
 # Display usage information
 function show_usage {
-  echo "❗ 사용법: ./build.sh <VERSION>"
+  echo "❗ 사용법: ./build.sh <VERSION> [<ARCH>] [<REGISTRY>]"
   echo "  <VERSION>: 빌드할 버전 (예: 1.7.15)"
-  echo "예: ./build.sh 1.7.15"
+  echo "  <ARCH>: 빌드할 아키텍처 (옵션: amd64, arm64, all) [기본값: all]"
+  echo "  <REGISTRY>: 사용할 레지스트리 (기본값: public.ecr.aws/whatap)"
+  echo "예: ./build.sh 1.7.15 arm64"
+  echo "    ./build.sh 1.7.15 all docker.io/myuser"
 }
 
 # Check if at least one argument is provided
@@ -14,151 +17,95 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 
-AGENT_VERSION=$1
-BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+VERSION=$1
+ARCH=${2:-all}  # Default to 'all' if not specified
+REGISTRY=${3:-public.ecr.aws/whatap}  # Default registry
 
-# Login to AWS ECR Public
-echo "🔐 Logging in to AWS ECR Public..."
-aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/whatap
+# Set the platforms based on the architecture parameter
+case $ARCH in
+  amd64)
+    PLATFORMS="linux/amd64"
+    ARCH_MSG="amd64"
+    ;;
+  arm64)
+    PLATFORMS="linux/arm64"
+    ARCH_MSG="arm64"
+    ;;
+  all)
+    PLATFORMS="linux/arm64,linux/amd64"
+    ARCH_MSG="all architectures (linux/arm64, linux/amd64)"
+    ;;
+  *)
+    echo "❗ 지원하지 않는 아키텍처입니다: $ARCH"
+    show_usage
+    exit 1
+    ;;
+esac
 
-# Optimize Go module and build cache
-echo "🚀 Optimizing Go module and build cache..."
-echo "📦 Downloading and tidying Go modules..."
-go mod download
-go mod tidy
-echo "📊 Cache information:"
-echo "  Build cache: $(go env GOCACHE)"
-echo "  Module cache: $(go env GOMODCACHE)"
+# Set image names with the specified registry
+export IMG="${REGISTRY}/whatap-operator:${VERSION}"
+export IMG_LATEST="${REGISTRY}/whatap-operator:latest"
 
-# Function to build binaries without make (fallback)
-function build_binaries_direct() {
-  echo "📦 Creating bin directory..."
-  mkdir -p bin
+echo "🚀 Building for $ARCH_MSG"
+echo "🚀 Building and pushing both tags: ${IMG} and ${IMG_LATEST}"
 
-  echo "📦 Running go fmt..."
-  go fmt ./...
+# Create a temporary Dockerfile.cross for multi-platform build
+cat > Dockerfile.cross << 'EOF'
+# Build the manager binary
+FROM --platform=${BUILDPLATFORM} golang:1.24.3 AS builder
+ARG TARGETOS
+ARG TARGETARCH
 
-  echo "📦 Running go vet..."
-  go vet ./...
+WORKDIR /workspace
+# Copy the Go Modules manifests
+COPY go.mod go.mod
+COPY go.sum go.sum
+# cache deps before building and copying source so that we don't need to re-download as much
+# and so that source changes don't invalidate our downloaded layer
+RUN go mod download
 
-  echo "📦 Building binary for linux/amd64..."
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.amd64 cmd/main.go
+# Copy the go source
+COPY cmd/main.go cmd/main.go
+COPY api/ api/
+COPY internal/ internal/
 
-  echo "📦 Building binary for linux/arm64..."
-  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.arm64 cmd/main.go
-}
+# Build
+# the GOARCH has not a default value to allow the binary be built according to the host where the command
+# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
+# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
+# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
+ARG VERSION=dev
+ARG BUILD_TIME=unknown
 
-# Pre-compile binaries for fast multi-platform build
-echo "📦 Pre-compiling binaries for different architectures..."
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
+    go build -ldflags "-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
+    -o manager cmd/main.go
+# Use distroless as minimal base image to package the manager binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/manager .
+USER 65532:65532
 
-# Check if make is available
-if command -v make >/dev/null 2>&1; then
-  echo "✅ Using make for building..."
-  make build-fast
-else
-  echo "⚠️  make command not found!"
-  echo "📋 To install make on Ubuntu/Debian:"
-  echo "   sudo apt update && sudo apt install -y build-essential"
-  echo ""
-  echo "📋 To install make on CentOS/RHEL:"
-  echo "   sudo yum install -y make"
-  echo ""
-  echo "🔄 Using direct build approach as fallback..."
-  build_binaries_direct
-fi
-
-# Build and push whatap-operator images for both architectures (fast approach)
-echo "🔨 Building and pushing whatap-operator images using fast approach..."
+ENTRYPOINT ["/manager"]
+EOF
 
 # Create or use existing buildx builder
 if ! docker buildx inspect whatap-operator-builder &>/dev/null; then
-  echo "📦 Creating buildx builder..."
   docker buildx create --name whatap-operator-builder
 fi
 docker buildx use whatap-operator-builder
 
-# Backup original .dockerignore and use .dockerignore.fast for fast builds
-echo "📦 Switching to .dockerignore.fast for fast builds..."
-if [ -f .dockerignore ]; then
-  cp .dockerignore .dockerignore.backup
-fi
-cp .dockerignore.fast .dockerignore
+# Build with both tags in a single command
+docker buildx build --push \
+  --platform=${PLATFORMS} \
+  --build-arg VERSION=${VERSION} \
+  --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --tag ${IMG} \
+  --tag ${IMG_LATEST} \
+  -f Dockerfile.cross .
 
-# Build and push amd64 image using fast Dockerfile
-echo "🔨 Building and pushing amd64 image..."
-docker buildx build --push --build-arg VERSION=${AGENT_VERSION} --build-arg BUILD_TIME=${BUILD_TIME} --tag public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 -f Dockerfile.fast .
+# Clean up
+rm Dockerfile.cross
 
-# Build and push arm64 image using fast Dockerfile
-echo "🔨 Building and pushing arm64 image..."
-docker buildx build --push --build-arg VERSION=${AGENT_VERSION} --build-arg BUILD_TIME=${BUILD_TIME} --tag public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64 -f Dockerfile.fast .
-docker buildx imagetools create -t public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION} -t public.ecr.aws/whatap/whatap-operator:latest \
-    public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 \
-    public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
-## Restore original .dockerignore
-#echo "📦 Restoring original .dockerignore..."
-#if [ -f .dockerignore.backup ]; then
-#  mv .dockerignore.backup .dockerignore
-#else
-#  # If no backup exists, remove the temporary .dockerignore
-#  rm -f .dockerignore
-#fi
-#
-## Handle whatap-operator images for public ECR
-#echo "📥 Pulling whatap-operator images..."
-#docker pull --platform linux/amd64 public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64
-#docker pull --platform linux/arm64 public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
-#
-## Check if manifest exists and handle it for whatap-operator
-#echo "🔍 Checking if manifest exists for whatap-operator:${AGENT_VERSION}..."
-#OPERATOR_MANIFEST=$(docker manifest inspect public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION} 2>&1 || true)
-#
-## Check if "no such manifest" string is included
-#if echo "$OPERATOR_MANIFEST" | grep -q "no such manifest"; then
-#  echo "whatap-operator 매니페스트가 존재하지 않습니다. 삭제를 건너뜁니다."
-#else
-#  echo "whatap-operator 매니페스트가 존재합니다. 삭제를 진행합니다."
-#  docker manifest rm public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}
-#fi
-#
-## Create manifest for whatap-operator versioned tag
-#echo "📦 Creating manifest for whatap-operator:${AGENT_VERSION}..."
-#docker manifest create \
-#public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION} \
-#--amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 \
-#--amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
-#
-#
-#
-## Handle latest tag manifest for whatap-operator
-#echo "🔍 Checking if manifest exists for whatap-operator:latest..."
-#OPERATOR_LATEST_MANIFEST=$(docker manifest inspect public.ecr.aws/whatap/whatap-operator:latest 2>&1 || true)
-#if ! echo "$OPERATOR_LATEST_MANIFEST" | grep -q "no such manifest"; then
-#  echo "whatap-operator latest 매니페스트가 존재합니다. 삭제를 진행합니다."
-#  docker manifest rm public.ecr.aws/whatap/whatap-operator:latest
-#fi
-#
-## Create manifest for whatap-operator latest tag
-#echo "📦 Creating manifest for whatap-operator:latest..."
-#docker manifest create \
-#public.ecr.aws/whatap/whatap-operator:latest \
-#--amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-amd64 \
-#--amend public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}-arm64
-#
-## Push whatap-operator manifests
-#echo "🚀 Pushing whatap-operator manifests..."
-#docker manifest push public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}
-#docker manifest push public.ecr.aws/whatap/whatap-operator:latest
-
-
-echo ""
-echo "📋 Build Summary:"
-echo "  Version: $AGENT_VERSION"
-echo "  Registry: public.ecr.aws/whatap"
-echo "  Architectures: linux/amd64, linux/arm64"
-echo "  Images:"
-echo "    - public.ecr.aws/whatap/whatap-operator:${AGENT_VERSION}"
-echo "    - public.ecr.aws/whatap/whatap-operator:latest"
-echo ""
-
-echo "✅ 매니페스트 생성 및 푸시 완료: 멀티 아키텍처 (linux/amd64, linux/arm64)"
-echo "🎉 The whatap-operator multi-architecture manifest creation was successful!"
+echo "✅ 빌드 및 푸시 완료: $ARCH_MSG"
