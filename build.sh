@@ -46,9 +46,6 @@ function build_binaries_direct() {
 
   echo "📦 Building binary for linux/arm64..."
   CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -installsuffix cgo -ldflags="-w -s" -o bin/manager.linux.arm64 cmd/main.go
-
-  echo "📦 Building binary for local architecture..."
-  CGO_ENABLED=0 go build -installsuffix cgo -ldflags="-w -s" -o bin/manager cmd/main.go
 }
 
 # Pre-compile binaries for fast multi-platform build
