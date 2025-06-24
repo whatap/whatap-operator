@@ -32,8 +32,8 @@ case $ARCH in
     ARCH_MSG="arm64"
     ;;
   all)
-    PLATFORMS="linux/arm64,linux/amd64,linux/s390x,linux/ppc64le"
-    ARCH_MSG="all architectures (linux/arm64, linux/amd64, linux/s390x, linux/ppc64le)"
+    PLATFORMS="linux/arm64,linux/amd64"
+    ARCH_MSG="all architectures (linux/arm64, linux/amd64)"
     ;;
   *)
     echo "❗ 지원하지 않는 아키텍처입니다: $ARCH"
