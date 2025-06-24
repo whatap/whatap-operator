@@ -16,9 +16,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     k8sAgent:
       masterAgent:
@@ -62,9 +59,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     apm:
       instrumentation:
@@ -94,9 +88,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     openAgent:
         enabled: true
@@ -135,9 +126,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     apm:
       instrumentation:
@@ -170,6 +158,29 @@ spec:
 # 전체 예제는 파일을 참조하세요
 ```
 
+### 오퍼레이터 예제 구성
+
+[whatap-agent-operator-example.yaml](whatapagent/whatap-agent-operator-example.yaml) - Whatap 오퍼레이터와 함께 사용하기 위한 실용적인 예제 구성으로, APM, K8sAgent 및 OpenAgent를 포함하며 한국어 주석이 있습니다.
+
+```yaml
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  features:
+    ### APM 설정 - 애플리케이션 성능 모니터링을 위한 에이전트 자동 주입
+    apm:
+      instrumentation:
+        targets:
+          - name: "sample-app"
+            enabled: true
+            language: "java"
+            whatapApmVersions:
+              java: "latest"
+            # ... (전체 예제는 파일을 참조하세요)
+```
+
 ### 커스텀 리소스 요구사항이 있는 K8s 에이전트
 
 [whatap-agent-k8s-resources.yaml](whatapagent/whatap-agent-k8s-resources.yaml) - Whatap 마스터 에이전트와 노드 에이전트에 대한 커스텀 리소스 요구사항(CPU 및 메모리)을 구성합니다.
@@ -192,9 +203,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     k8sAgent:
       masterAgent:
@@ -255,9 +263,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     k8sAgent:
       masterAgent:
@@ -384,9 +389,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     k8sAgent:
       masterAgent:
@@ -502,7 +504,7 @@ kubectl apply -f https://raw.githubusercontent.com/whatap/whatap-operator/main/e
 시크릿 기반 접근 방식을 사용하려면 먼저 Whatap 자격 증명으로 시크릿을 생성하세요:
 
 ```bash
-kubectl create secret generic whatap-credentials --namespace whatap-monitoring --from-literal=license=$WHATAP_LICENSE --from-literal=host=$WHATAP_HOST --from-literal=port=$WHATAP_PORT
+kubectl create secret generic whatap-credentials --namespace whatap-monitoring --from-literal=WHATAP_LICENSE=$WHATAP_LICENSE --from-literal=WHATAP_HOST=$WHATAP_HOST --from-literal=WHATAP_PORT=$WHATAP_PORT
 ```
 
 그런 다음 시크릿을 사용하는 구성을 적용하세요:

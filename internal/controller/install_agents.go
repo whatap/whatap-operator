@@ -404,11 +404,11 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 				ServiceAccountName: "whatap",
 				Containers: []corev1.Container{
 					{
-						Name:    "whatap-node-helper",
-						Image:   image,
-						Command: []string{"/data/agent/node/cadvisor_helper", "-port", "6801"},
-						Ports:   []corev1.ContainerPort{{Name: "helperport", ContainerPort: 6801}},
-						Env:     helperEnvs,
+						Name:      "whatap-node-helper",
+						Image:     image,
+						Command:   []string{"/data/agent/node/cadvisor_helper", "-port", "6801"},
+						Ports:     []corev1.ContainerPort{{Name: "helperport", ContainerPort: 6801}},
+						Env:       helperEnvs,
 						Resources: helperResources,
 						VolumeMounts: []corev1.VolumeMount{
 							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true},
@@ -418,11 +418,11 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						},
 					},
 					{
-						Name:    "whatap-node-agent",
-						Image:   image,
-						Command: []string{"/bin/entrypoint.sh"},
-						Ports:   []corev1.ContainerPort{{Name: "nodeport", ContainerPort: 6600}},
-						Env:     agentEnvs,
+						Name:      "whatap-node-agent",
+						Image:     image,
+						Command:   []string{"/bin/entrypoint.sh"},
+						Ports:     []corev1.ContainerPort{{Name: "nodeport", ContainerPort: 6600}},
+						Env:       agentEnvs,
 						Resources: agentResources,
 						VolumeMounts: []corev1.VolumeMount{
 							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true},
@@ -912,7 +912,7 @@ func getWhatapLicenseEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: "whatap-credentials",
 				},
-				Key: "license",
+				Key: "WHATAP_LICENSE",
 			},
 		},
 	}

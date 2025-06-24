@@ -1,0 +1,90 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  features:
+    ### APM 설정 - 애플리케이션 성능 모니터링을 위한 에이전트 자동 주입
+    apm:
+      instrumentation:
+        targets:
+          - name: "sample-app"
+            enabled: true
+            language: "java"
+            whatapApmVersions:
+              java: "latest"
+            namespaceSelector:
+              matchNames:
+                - "default"
+            podSelector:
+              matchLabels:
+                app: "sample-app"
+            config:
+              mode: "default"
+
+    ### K8sAgent 설정 - 쿠버네티스 모니터링을 위한 에이전트
+    k8sAgent:
+      namespace: "whatap-monitoring"
+
+      # 마스터 에이전트 설정 (클러스터 수준 메트릭 수집)
+      masterAgent:
+        enabled: true
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "400Mi"
+          limits:
+            cpu: "500m"
+            memory: "600Mi"
+
+      # 노드 에이전트 설정 (노드 및 컨테이너 수준 메트릭 수집)
+      nodeAgent:
+        enabled: true
+        resources:
+          requests:
+            cpu: "150m"
+            memory: "350Mi"
+          limits:
+            cpu: "300m"
+            memory: "500Mi"
+
+      # 추가 모니터링 구성 요소
+      gpuMonitoring:
+        enabled: false
+      apiserverMonitoring:
+        enabled: true
+      etcdMonitoring:
+        enabled: false
+      schedulerMonitoring:
+        enabled: false
+
+    ### OpenAgent 설정 - Prometheus 형식의 메트릭 수집
+    openAgent:
+      enabled: true
+      globalInterval: "60s"
+      globalPath: "/metrics"
+
+      # 쿠버네티스 API 서버 대상 설정
+      targets:
+        - targetName: "kube-apiserver"
+          type: "ServiceMonitor"
+          namespaceSelector:
+            matchNames:
+              - "kube-system"
+          selector:
+            matchLabels:
+              component: "apiserver"
+              provider: "kubernetes"
+          endpoints:
+            - port: "https"
+              path: "/metrics"
+              interval: "30s"
+              scheme: "https"
+              tlsConfig:
+                insecureSkipVerify: true
+
+# 참고: 시크릿 기반 자격 증명 사용 시 다음 명령으로 시크릿을 생성하세요:
+# kubectl create secret generic whatap-credentials --namespace whatap-monitoring \
+#   --from-literal=license=$WHATAP_LICENSE \
+#   --from-literal=host=$WHATAP_HOST \
+#   --from-literal=port=$WHATAP_PORT

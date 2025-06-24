@@ -16,9 +16,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     k8sAgent:
       masterAgent:
@@ -62,9 +59,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     apm:
       instrumentation:
@@ -94,9 +88,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     openAgent:
         enabled: true
@@ -135,9 +126,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     apm:
       instrumentation:
@@ -170,6 +158,29 @@ spec:
 # See the file for the complete example
 ```
 
+### Operator Example Configuration
+
+[whatap-agent-operator-example.yaml](whatapagent/whatap-agent-operator-example.yaml) - A practical example configuration for using with the Whatap Operator, including APM, K8sAgent, and OpenAgent with Korean comments.
+
+```yaml
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  features:
+    ### APM 설정 - 애플리케이션 성능 모니터링을 위한 에이전트 자동 주입
+    apm:
+      instrumentation:
+        targets:
+          - name: "sample-app"
+            enabled: true
+            language: "java"
+            whatapApmVersions:
+              java: "latest"
+            # ... (see the file for complete example)
+```
+
 ### K8s Agent with Custom Resource Requirements
 
 [whatap-agent-k8s-resources.yaml](whatapagent/whatap-agent-k8s-resources.yaml) - Configures custom resource requirements (CPU and memory) for the Whatap master agent and node agent.
@@ -192,9 +203,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     k8sAgent:
       masterAgent:
@@ -255,9 +263,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     k8sAgent:
       masterAgent:
@@ -384,9 +389,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     k8sAgent:
       masterAgent:
@@ -503,9 +505,9 @@ To use the secret-based approach, first create a secret with your Whatap credent
 
 ```bash
 kubectl create secret generic whatap-credentials --namespace whatap-monitoring \
-  --from-literal=license=$WHATAP_LICENSE \
-  --from-literal=host=$WHATAP_HOST \
-  --from-literal=port=$WHATAP_PORT
+  --from-literal=WHATAP_LICENSE=$WHATAP_LICENSE \
+  --from-literal=WHATAP_HOST=$WHATAP_HOST \
+  --from-literal=WHATAP_PORT=$WHATAP_PORT
 ```
 
 Then apply the configuration that uses the secret:
