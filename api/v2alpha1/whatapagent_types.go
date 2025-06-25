@@ -39,9 +39,9 @@ type WhatapAgentSpec struct {
 }
 
 type FeaturesSpec struct {
-	Apm       ApmSpec       `json:"apm"`
-	OpenAgent OpenAgentSpec `json:"openAgent"`
-	K8sAgent  K8sAgentSpec  `json:"k8sAgent"`
+	Apm       ApmSpec       `json:"apm,omitempty"`
+	OpenAgent OpenAgentSpec `json:"openAgent,omitempty"`
+	K8sAgent  K8sAgentSpec  `json:"k8sAgent,omitempty"`
 }
 
 // OpenAgentSpec defines the openAgent enablement and configuration
