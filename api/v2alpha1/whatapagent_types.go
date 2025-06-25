@@ -238,8 +238,9 @@ type ApmSpec struct {
 // InstrumentationSpec holds instrumentation targets
 type InstrumentationSpec struct {
 	// +kubebuilder:default=false
-	Enabled bool         `json:"enabled,omitempty"`
-	Targets []TargetSpec `json:"targets"`
+	Enabled bool `json:"enabled,omitempty"`
+	// +optional
+	Targets []TargetSpec `json:"targets,omitempty"`
 }
 
 type TargetSpec struct {
@@ -254,9 +255,9 @@ type TargetSpec struct {
 	// AdditionalArgs allows specifying additional arguments for the agent
 	// +optional
 	AdditionalArgs    map[string]string `json:"additionalArgs,omitempty"`
-	NamespaceSelector NamespaceSelector `json:"namespaceSelector"`
-	PodSelector       PodSelector       `json:"podSelector"`
-	Config            ConfigSpec        `json:"config"`
+	NamespaceSelector NamespaceSelector `json:"namespaceSelector,omitempty"`
+	PodSelector       PodSelector       `json:"podSelector,omitempty"`
+	Config            ConfigSpec        `json:"config,omitempty"`
 }
 
 // NamespaceSelector matches specific namespaces
