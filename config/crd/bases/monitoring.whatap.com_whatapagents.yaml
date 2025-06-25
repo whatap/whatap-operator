@@ -48,7 +48,7 @@ spec:
                         description: InstrumentationSpec holds instrumentation targets
                         properties:
                           enabled:
-                            default: true
+                            default: false
                             type: boolean
                           targets:
                             items:
@@ -199,11 +199,8 @@ spec:
                               type: object
                             type: array
                         required:
-                        - enabled
                         - targets
                         type: object
-                    required:
-                    - instrumentation
                     type: object
                   k8sAgent:
                     properties:
