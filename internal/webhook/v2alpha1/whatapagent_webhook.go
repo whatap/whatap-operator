@@ -86,7 +86,19 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		ns = defaultNS
 	}
 
-	for _, target := range whatapAgentCustomResource.Spec.Features.Apm.Instrumentation.Targets {
+	// Check if APM instrumentation is enabled before processing targets
+	// Handle the case where instrumentation field might be omitted (zero value)
+	instrumentation := whatapAgentCustomResource.Spec.Features.Apm.Instrumentation
+	if !instrumentation.Enabled {
+		return nil
+	}
+
+	// Additional safety check: if targets slice is nil or empty, nothing to process
+	if len(instrumentation.Targets) == 0 {
+		return nil
+	}
+
+	for _, target := range instrumentation.Targets {
 		if !target.Enabled {
 			continue
 		}

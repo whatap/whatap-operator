@@ -6,6 +6,7 @@ spec:
   features:
     apm:
       instrumentation:
+        enabled: true
         targets: []
     openAgent:
         enabled: true

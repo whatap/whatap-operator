@@ -7,6 +7,7 @@ spec:
     ### APM 설정 - 애플리케이션 성능 모니터링을 위한 에이전트 자동 주입
     apm:
       instrumentation:
+        enabled: true
         targets:
           - name: "sample-app"
             enabled: true

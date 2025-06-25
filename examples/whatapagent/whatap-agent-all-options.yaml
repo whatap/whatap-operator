@@ -7,6 +7,7 @@ spec:
     ### APM 자동 설치 설정 - 애플리케이션 성능 모니터링을 위한 에이전트 자동 주입
     apm:
       instrumentation:
+        enabled: true
         targets:
           - name: "hello-world"                # 대상 애플리케이션 이름
             enabled: true                      # 이 대상에 대한 APM 활성화 여부

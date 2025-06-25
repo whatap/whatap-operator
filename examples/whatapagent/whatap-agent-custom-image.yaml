@@ -7,6 +7,7 @@ spec:
     # APM configuration with custom image and additional arguments
     apm:
       instrumentation:
+        enabled: true
         targets:
           - name: "java-app"
             enabled: true

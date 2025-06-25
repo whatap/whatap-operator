@@ -47,6 +47,9 @@ spec:
                       instrumentation:
                         description: InstrumentationSpec holds instrumentation targets
                         properties:
+                          enabled:
+                            default: true
+                            type: boolean
                           targets:
                             items:
                               properties:
@@ -196,6 +199,7 @@ spec:
                               type: object
                             type: array
                         required:
+                        - enabled
                         - targets
                         type: object
                     required:

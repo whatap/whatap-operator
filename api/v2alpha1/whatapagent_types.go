@@ -232,11 +232,13 @@ type AgentComponentSpec struct {
 
 // ApmSpec defines APM-specific settings
 type ApmSpec struct {
-	Instrumentation InstrumentationSpec `json:"instrumentation"`
+	Instrumentation InstrumentationSpec `json:"instrumentation,omitempty"`
 }
 
 // InstrumentationSpec holds instrumentation targets
 type InstrumentationSpec struct {
+	// +kubebuilder:default=false
+	Enabled bool         `json:"enabled,omitempty"`
 	Targets []TargetSpec `json:"targets"`
 }
 
