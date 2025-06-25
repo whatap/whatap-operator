@@ -161,9 +161,9 @@ type K8sAgentSpec struct {
 	MasterAgent         MasterAgentComponentSpec `json:"masterAgent"`
 	NodeAgent           NodeAgentComponentSpec   `json:"nodeAgent"`
 	GpuMonitoring       AgentComponentSpec       `json:"gpuMonitoring"`
-	ApiserverMonitoring AgentComponentSpec       `json:"apiserverMonitoring"`
-	EtcdMonitoring      AgentComponentSpec       `json:"etcdMonitoring"`
-	SchedulerMonitoring AgentComponentSpec       `json:"schedulerMonitoring"`
+	ApiserverMonitoring AgentComponentSpec       `json:"apiserverMonitoring,omitempty"`
+	EtcdMonitoring      AgentComponentSpec       `json:"etcdMonitoring,omitempty"`
+	SchedulerMonitoring AgentComponentSpec       `json:"schedulerMonitoring,omitempty"`
 }
 
 type MasterAgentComponentSpec struct {
@@ -251,7 +251,7 @@ type TargetSpec struct {
 	CustomImageName string `json:"customImageName,omitempty"`
 	// AdditionalArgs allows specifying additional arguments for the agent
 	// +optional
-	AdditionalArgs map[string]string `json:"additionalArgs,omitempty"`
+	AdditionalArgs    map[string]string `json:"additionalArgs,omitempty"`
 	NamespaceSelector NamespaceSelector `json:"namespaceSelector"`
 	PodSelector       PodSelector       `json:"podSelector"`
 	Config            ConfigSpec        `json:"config"`

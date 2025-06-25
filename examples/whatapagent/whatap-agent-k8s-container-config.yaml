@@ -3,9 +3,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "your-license-key"
-  host: "whatap-server"
-  port: "6600"
   features:
     k8sAgent:
       nodeAgent:
@@ -52,3 +49,9 @@ spec:
 
       masterAgent:
         enabled: true
+
+# 참고: 시크릿 기반 자격 증명 사용 시 다음 명령으로 시크릿을 생성하세요:
+# kubectl create secret generic whatap-credentials --namespace whatap-monitoring \
+#   --from-literal=license=$WHATAP_LICENSE \
+#   --from-literal=host=$WHATAP_HOST \
+#   --from-literal=port=$WHATAP_PORT

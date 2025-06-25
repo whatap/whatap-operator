@@ -19,9 +19,8 @@ spec:
 
             # 추가 에이전트 인자 설정
             additionalArgs:
-              license: "x43a42205jmf3-x5u4rg9ronek18-z3088t61gv7v40"  # 라이센스 키 설정
-              "whatap.server.host": "15.165.146.117"                  # 서버 호스트 설정
               "whatap.app.name": "my-java-app"                        # 애플리케이션 이름 설정
+              # 참고: license와 whatap.server.host는 시크릿을 통해 설정하는 것을 권장합니다
 
             # 대상 네임스페이스 선택 (다음 중 하나 사용)
             namespaceSelector:

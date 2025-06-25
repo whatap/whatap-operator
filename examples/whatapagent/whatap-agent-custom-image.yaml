@@ -3,9 +3,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "x41pl22ek7jhv-z43cebasdv4il7-z62p3l35fj5502"
-  host: "15.165.146.117"
-  port: "6600"
   features:
     # APM configuration with custom image and additional arguments
     apm:
@@ -20,9 +17,8 @@ spec:
             customImageName: "my-registry.example.com/whatap/apm-init-java:2.2.58"
             # Additional arguments for APM agent
             additionalArgs:
-              license: "x43a42205jmf3-x5u4rg9ronek18-z3088t61gv7v40"
-              "whatap.server.host": "15.165.146.117"
               "whatap.app.name": "my-java-app"
+              # 참고: license와 host는 시크릿을 통해 설정하는 것을 권장합니다
             namespaceSelector:
               matchNames:
                 - "default"
@@ -51,3 +47,9 @@ spec:
       imageVersion: "v1.2.3"
       globalInterval: "60s"
       globalPath: "/metrics"
+
+# 참고: 시크릿 기반 자격 증명 사용 시 다음 명령으로 시크릿을 생성하세요:
+# kubectl create secret generic whatap-credentials --namespace whatap-monitoring \
+#   --from-literal=license=$WHATAP_LICENSE \
+#   --from-literal=host=$WHATAP_HOST \
+#   --from-literal=port=$WHATAP_PORT

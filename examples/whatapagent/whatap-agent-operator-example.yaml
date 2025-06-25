@@ -24,8 +24,6 @@ spec:
 
     ### K8sAgent 설정 - 쿠버네티스 모니터링을 위한 에이전트
     k8sAgent:
-      namespace: "whatap-monitoring"
-
       # 마스터 에이전트 설정 (클러스터 수준 메트릭 수집)
       masterAgent:
         enabled: true

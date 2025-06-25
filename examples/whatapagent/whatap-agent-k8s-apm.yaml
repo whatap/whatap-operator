@@ -3,9 +3,6 @@ kind: WhatapAgent
 metadata:
   name: whatap
 spec:
-  license: "x41pl22ek7jhv-z43cebasdv4il7-z62p3l35fj5502"
-  host: "15.165.146.117"
-  port: "6600"
   features:
     apm:
       instrumentation:
@@ -23,8 +20,18 @@ spec:
                 app: "hello-world"
             config:
               mode: default
+    openAgent:
+      enabled: false
     k8sAgent:
       masterAgent:
         enabled: true
       nodeAgent:
         enabled: true
+      apiserverMonitoring:
+        enabled: false
+      etcdMonitoring:
+        enabled: false
+      schedulerMonitoring:
+        enabled: false
+      gpuMonitoring:
+        enabled: false
