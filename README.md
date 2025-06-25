@@ -1,3 +1,6 @@
+
+![architecture.png](docs/src/img/architecture.png)
+
 # Whatap Operator Examples
 
 This directory contains example configurations for the Whatap Operator. These examples demonstrate different ways to configure the Whatap monitoring solution in your Kubernetes cluster.
