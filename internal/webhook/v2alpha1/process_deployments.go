@@ -7,6 +7,61 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// Helper functions to get environment variables for Whatap credentials
+// These functions check if the values are provided in the CR spec, and if not,
+// they use the values from the whatap-credentials secret
+
+func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
+	if cr.Spec.License != "" {
+		return corev1.EnvVar{Name: "WHATAP_LICENSE", Value: cr.Spec.License}
+	}
+	return corev1.EnvVar{
+		Name: "WHATAP_LICENSE",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "whatap-credentials",
+				},
+				Key: "WHATAP_LICENSE",
+			},
+		},
+	}
+}
+
+func getWhatapHostEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
+	if cr.Spec.Host != "" {
+		return corev1.EnvVar{Name: "WHATAP_HOST", Value: cr.Spec.Host}
+	}
+	return corev1.EnvVar{
+		Name: "WHATAP_HOST",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "whatap-credentials",
+				},
+				Key: "WHATAP_HOST",
+			},
+		},
+	}
+}
+
+func getWhatapPortEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
+	if cr.Spec.Port != "" {
+		return corev1.EnvVar{Name: "WHATAP_PORT", Value: cr.Spec.Port}
+	}
+	return corev1.EnvVar{
+		Name: "WHATAP_PORT",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "whatap-credentials",
+				},
+				Key: "WHATAP_PORT",
+			},
+		},
+	}
+}
+
 // Deployment 처리
 
 // PodSpec 수정 (자동 주입 핵심 로직)
@@ -30,14 +85,13 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 
 	// 2️⃣ ConfigMap 기반 config 생성 (mode가 configMapRef 때만 추가)
 	if target.Config.Mode == "configMapRef" && target.Config.ConfigMapRef != nil {
-		// Build the command with basic configuration
-		command := fmt.Sprintf(`
+		// Build the command with basic configuration using environment variables
+		command := `
 					cp /config-volume/whatap.conf /whatap-agent/ && \
-					echo "license=%s" >> /whatap-agent/whatap.conf && \
-					echo "whatap.server.host=%s" >> /whatap-agent/whatap.conf && \
-					echo "whatap.server.port=%s" >> /whatap-agent/whatap.conf && \
-					echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`, 
-					cr.Spec.License, cr.Spec.Host, cr.Spec.Port)
+					echo "license=${WHATAP_LICENSE}" >> /whatap-agent/whatap.conf && \
+					echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && \
+					echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && \
+					echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
 
 		// Add additional arguments if provided
 		if len(target.AdditionalArgs) > 0 {
@@ -47,16 +101,22 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 			}
 		}
 
-		initContainers = append(initContainers, corev1.Container{
+		configInitContainer := corev1.Container{
 			Name:    "whatap-config-init",
 			Image:   "alpine:3.18",
 			Command: []string{"sh", "-c"},
-			Args: []string{command},
+			Args:    []string{command},
+			Env: []corev1.EnvVar{
+				getWhatapLicenseEnvVar(cr),
+				getWhatapHostEnvVar(cr),
+				getWhatapPortEnvVar(cr),
+			},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
 				{Name: "config-volume", MountPath: "/config-volume"},
 			},
-		})
+		}
+		initContainers = append(initContainers, configInitContainer)
 
 		// ConfigMap 마운트 추가
 		podSpec.Volumes = appendIfNotExists(podSpec.Volumes, corev1.Volume{
@@ -71,8 +131,8 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 		})
 	} else if lang == "java" {
 		// 3️⃣ Java 기본 whatap.conf 생성 (ConfigMap 사용 안할 때)
-		// Build the command with basic configuration
-		command := fmt.Sprintf(`echo "license=%s" > /whatap-agent/whatap.conf && echo "whatap.server.host=%s" >> /whatap-agent/whatap.conf && echo "whatap.server.port=%s" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`, cr.Spec.License, cr.Spec.Host, cr.Spec.Port)
+		// Build the command with basic configuration using environment variables
+		command := `echo "license=${WHATAP_LICENSE}" > /whatap-agent/whatap.conf && echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
 
 		// Add additional arguments if provided
 		if len(target.AdditionalArgs) > 0 {
@@ -81,15 +141,21 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 			}
 		}
 
-		initContainers = append(initContainers, corev1.Container{
+		configInitContainer := corev1.Container{
 			Name:    "whatap-config-init",
 			Image:   "alpine:3.18",
 			Command: []string{"sh", "-c"},
-			Args: []string{command},
+			Args:    []string{command},
+			Env: []corev1.EnvVar{
+				getWhatapLicenseEnvVar(cr),
+				getWhatapHostEnvVar(cr),
+				getWhatapPortEnvVar(cr),
+			},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
 			},
-		})
+		}
+		initContainers = append(initContainers, configInitContainer)
 	}
 
 	podSpec.InitContainers = append(podSpec.InitContainers, initContainers...)
@@ -109,26 +175,46 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 			agentOption := "-javaagent:/whatap-agent/whatap.agent.java.jar"
 			podSpec.Containers[i].Env = injectJavaToolOptions(container.Env, agentOption, logger)
 
-			// 🔹 Java 전용 환경변수 추가
+			// 🔹 Java 전용 환경변수 추가 (secret 기반)
+			licenseEnv := getWhatapLicenseEnvVar(cr)
+			licenseEnv.Name = "license" // Java agent expects "license" env var name
+
+			hostEnv := getWhatapHostEnvVar(cr)
+			hostEnv.Name = "whatap.server.host" // Java agent expects "whatap.server.host" env var name
+
 			podSpec.Containers[i].Env = append(podSpec.Containers[i].Env,
-				corev1.EnvVar{Name: "license", Value: cr.Spec.License},
-				corev1.EnvVar{Name: "whatap.server.host", Value: cr.Spec.Host},
+				licenseEnv,
+				hostEnv,
 				corev1.EnvVar{Name: "whatap.micro.enabled", Value: "true"},
 				corev1.EnvVar{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
 				corev1.EnvVar{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 				corev1.EnvVar{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
 			)
 		case "python":
+			// 🔹 Python 전용 환경변수 추가 (secret 기반)
+			licenseEnv := getWhatapLicenseEnvVar(cr)
+			licenseEnv.Name = "license" // Python agent expects "license" env var name
+
+			hostEnv := getWhatapHostEnvVar(cr)
+			hostEnv.Name = "whatap_server_host" // Python agent expects "whatap_server_host" env var name
+
 			podSpec.Containers[i].Env = append(container.Env,
-				corev1.EnvVar{Name: "license", Value: cr.Spec.License},
-				corev1.EnvVar{Name: "whatap_server_host", Value: cr.Spec.Host},
+				licenseEnv,
+				hostEnv,
 				corev1.EnvVar{Name: "app_name", Value: container.Name},
 				corev1.EnvVar{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
 			)
 		case "nodejs":
+			// 🔹 Node.js 전용 환경변수 추가 (secret 기반)
+			licenseEnv := getWhatapLicenseEnvVar(cr)
+			licenseEnv.Name = "WHATAP_LICENSE" // Node.js agent expects "WHATAP_LICENSE" env var name
+
+			hostEnv := getWhatapHostEnvVar(cr)
+			hostEnv.Name = "WHATAP_SERVER_HOST" // Node.js agent expects "WHATAP_SERVER_HOST" env var name
+
 			podSpec.Containers[i].Env = append(container.Env,
-				corev1.EnvVar{Name: "WHATAP_LICENSE", Value: cr.Spec.License},
-				corev1.EnvVar{Name: "WHATAP_SERVER_HOST", Value: cr.Spec.Host},
+				licenseEnv,
+				hostEnv,
 				corev1.EnvVar{Name: "WHATAP_MICRO_ENABLED", Value: "true"},
 			)
 		case "php", "dotnet", "golang":

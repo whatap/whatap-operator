@@ -84,6 +84,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	ns := whatapAgentCustomResource.Spec.Features.K8sAgent.Namespace
 	if ns == "" {
 		ns = defaultNS
+		whatapWebhookLogger.Info("default namespace is set to " + ns)
 	}
 
 	// Check if APM instrumentation is enabled before processing targets
