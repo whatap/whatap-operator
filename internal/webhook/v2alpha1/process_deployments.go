@@ -54,83 +54,82 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	}
 
 	// 2️⃣ ConfigMap 기반 config 생성 (mode가 configMapRef 때만 추가)
-	logger.Info("Using ConfigMap-based configuration", "configMapName", target.Config.ConfigMapRef.Name, "namespace", target.Config.ConfigMapRef.Namespace)
 	if target.Config.Mode == "configMapRef" && target.Config.ConfigMapRef != nil {
-		if target.Config.Mode == "configMapRef" && target.Config.ConfigMapRef != nil {
-			// Build the command with basic configuration using environment variables
-			command := `
-					cp /config-volume/whatap.conf /whatap-agent/ && \
-					echo "license=${WHATAP_LICENSE}" >> /whatap-agent/whatap.conf && \
-					echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && \
-					echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && \
-					echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
+		logger.Info("Using ConfigMap-based configuration", "configMapName", target.Config.ConfigMapRef.Name, "namespace", target.Config.ConfigMapRef.Namespace)
+		// Build the command with basic configuration using environment variables
+		command := `
+				cp /config-volume/whatap.conf /whatap-agent/ && \
+				echo "license=${WHATAP_LICENSE}" >> /whatap-agent/whatap.conf && \
+				echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && \
+				echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && \
+				echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
 
-			// Add additional arguments if provided
-			if len(target.AdditionalArgs) > 0 {
-				for key, value := range target.AdditionalArgs {
-					command += fmt.Sprintf(` && \
-					echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
-				}
+		// Add additional arguments if provided
+		if len(target.AdditionalArgs) > 0 {
+			for key, value := range target.AdditionalArgs {
+				command += fmt.Sprintf(` && \
+				echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
 			}
+		}
 
-			configInitContainer := corev1.Container{
-				Name:    "whatap-config-init",
-				Image:   "alpine:3.18",
-				Command: []string{"sh", "-c"},
-				Args:    []string{command},
-				Env: []corev1.EnvVar{
-					getWhatapLicenseEnvVar(cr),
-					getWhatapHostEnvVar(cr),
-					getWhatapPortEnvVar(cr),
-				},
-				VolumeMounts: []corev1.VolumeMount{
-					{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
-					{Name: "config-volume", MountPath: "/config-volume"},
-				},
-			}
-			initContainers = append(initContainers, configInitContainer)
+		configInitContainer := corev1.Container{
+			Name:    "whatap-config-init",
+			Image:   "alpine:3.18",
+			Command: []string{"sh", "-c"},
+			Args:    []string{command},
+			Env: []corev1.EnvVar{
+				getWhatapLicenseEnvVar(cr),
+				getWhatapHostEnvVar(cr),
+				getWhatapPortEnvVar(cr),
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
+				{Name: "config-volume", MountPath: "/config-volume"},
+			},
+		}
+		initContainers = append(initContainers, configInitContainer)
 
-			// ConfigMap 마운트 추가
-			podSpec.Volumes = appendIfNotExists(podSpec.Volumes, corev1.Volume{
-				Name: "config-volume",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: target.Config.ConfigMapRef.Name,
-						},
+		// ConfigMap 마운트 추가
+		podSpec.Volumes = appendIfNotExists(podSpec.Volumes, corev1.Volume{
+			Name: "config-volume",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: target.Config.ConfigMapRef.Name,
 					},
 				},
-			})
-			logger.Info("Using default Java configuration (no ConfigMap)", "language", lang)
-		} else if lang == "java" {
-			// 3️⃣ Java 기본 whatap.conf 생성 (ConfigMap 사용 안할 때)
-			// Build the command with basic configuration using environment variables
-			command := `echo "license=${WHATAP_LICENSE}" > /whatap-agent/whatap.conf && echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
+			},
+		})
+	} else if lang == "java" {
+		// 3️⃣ Java 기본 whatap.conf 생성 (ConfigMap 사용 안할 때)
+		logger.Info("Using default Java configuration (no ConfigMap)", "language", lang)
+		// Build the command with basic configuration using environment variables
+		command := `echo "license=${WHATAP_LICENSE}" > /whatap-agent/whatap.conf && echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
 
-			// Add additional arguments if provided
-			if len(target.AdditionalArgs) > 0 {
-				for key, value := range target.AdditionalArgs {
-					command += fmt.Sprintf(` && echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
-				}
+		// Add additional arguments if provided
+		if len(target.AdditionalArgs) > 0 {
+			for key, value := range target.AdditionalArgs {
+				command += fmt.Sprintf(` && echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
 			}
-
- 		configInitContainer := corev1.Container{
- 			Name:    "whatap-config-init",
- 			Image:   "alpine:3.18",
- 			Command: []string{"sh", "-c"},
- 			Args:    []string{command},
- 			Env: []corev1.EnvVar{
- 				getWhatapLicenseEnvVar(cr),
- 				getWhatapHostEnvVar(cr),
- 				getWhatapPortEnvVar(cr),
- 			},
- 			VolumeMounts: []corev1.VolumeMount{
- 				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
- 			},
- 		}
-			initContainers = append(initContainers, configInitContainer)
-			logger.Info("No configuration mode specified, skipping config init container", "language", lang)
 		}
+
+		configInitContainer := corev1.Container{
+			Name:    "whatap-config-init",
+			Image:   "alpine:3.18",
+			Command: []string{"sh", "-c"},
+			Args:    []string{command},
+			Env: []corev1.EnvVar{
+				getWhatapLicenseEnvVar(cr),
+				getWhatapHostEnvVar(cr),
+				getWhatapPortEnvVar(cr),
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
+			},
+		}
+		initContainers = append(initContainers, configInitContainer)
+	} else {
+		logger.Info("No configuration mode specified, skipping config init container", "language", lang)
 	}
 
 	podSpec.InitContainers = append(podSpec.InitContainers, initContainers...)
