@@ -145,11 +145,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 			}
 		}
 
-		whatapWebhookLogger.Info("injected Whatap APM into Pod",
-			"pod", podIdentifier,
-			"language", target.Language,
-			"version", target.WhatapApmVersions[target.Language],
-		)
+		whatapWebhookLogger.Info("injected Whatap APM into Pod", "pod", podIdentifier, "language", target.Language, "version", target.WhatapApmVersions[target.Language])
 		break
 	}
 	return nil

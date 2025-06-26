@@ -532,7 +532,7 @@ func installSchedulerMonitor(ctx context.Context, r *WhatapAgentReconciler, logg
 }
 
 // generateScrapeConfig generates the scrape_config.yaml content from the CR
-func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent) string {
+func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace string) string {
 	// Define the structure for the scrape config
 	type ScrapeConfig struct {
 		Global struct {
@@ -669,6 +669,81 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent) string {
 		config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
 	}
 
+	// Auto-add GPU monitoring target if gpuMonitoring is enabled
+	if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
+		// Check for duplicate targets to avoid conflicts
+		gpuTargetName := "dcgm-exporter-auto"
+		isDuplicate := false
+
+		for _, existingTarget := range config.Features.OpenAgent.Targets {
+			if targetMap, ok := existingTarget.(map[string]interface{}); ok {
+				if targetName, exists := targetMap["targetName"]; exists && targetName == gpuTargetName {
+					isDuplicate = true
+					break
+				}
+				// Also check if there's already a target for whatap-node-agent pods
+				if selector, exists := targetMap["selector"]; exists {
+					if selectorMap, ok := selector.(map[string]interface{}); ok {
+						if matchLabels, exists := selectorMap["matchLabels"]; exists {
+							if labelsMap, ok := matchLabels.(map[string]string); ok {
+								if labelsMap["name"] == "whatap-node-agent" {
+									isDuplicate = true
+									break
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Only add GPU target if no duplicate exists
+		if !isDuplicate {
+			gpuTargetMap := make(map[string]interface{})
+			gpuTargetMap["targetName"] = gpuTargetName
+			gpuTargetMap["type"] = "PodMonitor"
+			gpuTargetMap["enabled"] = true
+
+			// Use dynamic namespace with proper priority
+			targetNamespace := defaultNamespace // Use the passed default namespace
+			if cr.Spec.Features.K8sAgent.Namespace != "" {
+				// Override with CR-specified namespace if provided
+				targetNamespace = cr.Spec.Features.K8sAgent.Namespace
+			}
+
+			// Set namespace selector to target the appropriate namespace
+			nsSelector := make(map[string]interface{})
+			nsSelector["matchNames"] = []string{targetNamespace}
+			gpuTargetMap["namespaceSelector"] = nsSelector
+
+			// Set pod selector to target whatap-node-agent pods
+			selector := make(map[string]interface{})
+			selector["matchLabels"] = map[string]string{
+				"name": "whatap-node-agent",
+			}
+			gpuTargetMap["selector"] = selector
+
+			// Set endpoint configuration for DCGM exporter with customizable options
+			endpoints := make([]interface{}, 1)
+			endpointMap := make(map[string]interface{})
+			endpointMap["port"] = "9400"
+			endpointMap["path"] = "/metrics"
+
+			// Allow customization of scraping interval
+			interval := "30s" // Default interval
+			if cr.Spec.Features.OpenAgent.GlobalInterval != "" {
+				interval = cr.Spec.Features.OpenAgent.GlobalInterval
+			}
+			endpointMap["interval"] = interval
+
+			endpointMap["scheme"] = "http"
+			endpoints[0] = endpointMap
+			gpuTargetMap["endpoints"] = endpoints
+
+			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, gpuTargetMap)
+		}
+	}
+
 	// Marshal to YAML
 	yamlBytes, err := yaml.Marshal(config)
 	if err != nil {
@@ -757,7 +832,7 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 	}
 	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
 		// Generate scrape_config.yaml content from CR
-		scrapeConfig := generateScrapeConfig(cr)
+		scrapeConfig := generateScrapeConfig(cr, r.DefaultNamespace)
 		cm.Data = map[string]string{
 			"scrape_config.yaml": scrapeConfig,
 		}
