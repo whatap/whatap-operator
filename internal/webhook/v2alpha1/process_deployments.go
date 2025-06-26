@@ -9,8 +9,7 @@ import (
 
 
 // Helper functions to get environment variables for Whatap credentials
-// These functions use the values from the CR spec, which are populated during CR validation
-// from the whatap-credentials secret if they were initially empty
+// These functions use values from the CR spec, which are guaranteed to be populated
 
 func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 	return corev1.EnvVar{Name: "WHATAP_LICENSE", Value: cr.Spec.License}

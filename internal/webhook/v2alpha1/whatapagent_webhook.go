@@ -47,15 +47,6 @@ func SetupWhatapAgentWebhookWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	// Register the WhatapAgent webhook for defaulting (mutating) - populate credentials
-	if err := ctrl.NewWebhookManagedBy(mgr).
-		For(&monitoringv2alpha1.WhatapAgent{}).
-		WithDefaulter(&WhatapAgentCredentialDefaulter{client: mgr.GetClient()}).
-		WithDefaulterCustomPath("/whatap-defaulting--v2alpha1-whatapagent").
-		Complete(); err != nil {
-		return err
-	}
-
 	// Register the WhatapAgent webhook for validation
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&monitoringv2alpha1.WhatapAgent{}).
@@ -249,7 +240,6 @@ type WhatapAgentCustomValidator struct {
 }
 
 var _ webhook.CustomValidator = &WhatapAgentCustomValidator{}
-
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type WhatapAgent.
 func (v *WhatapAgentCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {

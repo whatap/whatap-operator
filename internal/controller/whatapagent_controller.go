@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"os"
+
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -230,6 +232,53 @@ func failurePtr(p admissionregistrationv1.FailurePolicyType) *admissionregistrat
 
 var sideEffectNone = admissionregistrationv1.SideEffectClassNone
 
+// populateCredentialsFromEnv populates the CR.Spec fields from environment variables if they are empty
+func (r *WhatapAgentReconciler) populateCredentialsFromEnv(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) (bool, error) {
+	logger := log.FromContext(ctx)
+	updated := false
+
+	// Populate License if empty
+	if whatapAgent.Spec.License == "" {
+		license := os.Getenv("WHATAP_LICENSE")
+		if license != "" {
+			whatapAgent.Spec.License = license
+			logger.Info("Populated License from environment variable", "license", license)
+			updated = true
+		}
+	}
+
+	// Populate Host if empty
+	if whatapAgent.Spec.Host == "" {
+		host := os.Getenv("WHATAP_HOST")
+		if host != "" {
+			whatapAgent.Spec.Host = host
+			logger.Info("Populated Host from environment variable", "host", host)
+			updated = true
+		}
+	}
+
+	// Populate Port if empty
+	if whatapAgent.Spec.Port == "" {
+		port := os.Getenv("WHATAP_PORT")
+		if port != "" {
+			whatapAgent.Spec.Port = port
+			logger.Info("Populated Port from environment variable", "port", port)
+			updated = true
+		}
+	}
+
+	// Update the CR if any fields were populated
+	if updated {
+		if err := r.Update(ctx, whatapAgent); err != nil {
+			logger.Error(err, "Failed to update WhatapAgent CR with populated credentials")
+			return false, err
+		}
+		logger.Info("Successfully updated WhatapAgent CR with credentials from environment variables")
+	}
+
+	return updated, nil
+}
+
 // Reconcile
 func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -240,8 +289,6 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	logger.Info("Reconciling WhatapAgent", "Name", whatapAgent.Name)
-
 	// Apply finalizer
 	if whatapAgent.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(whatapAgent, whatapFinalizer) {
@@ -251,7 +298,7 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 		}
 	} else {
- 	// The object is being deleted
+		// The object is being deleted
 		if controllerutil.ContainsFinalizer(whatapAgent, whatapFinalizer) {
 			// our finalizer is present, so let's handle any external dependency
 			if err := r.cleanupAgents(ctx); err != nil {
@@ -265,6 +312,18 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
+	}
+
+	logger.Info("Reconciling WhatapAgent", "Name", whatapAgent.Name)
+
+	// Populate credentials from environment variables if they are empty
+	if updated, err := r.populateCredentialsFromEnv(ctx, whatapAgent); err != nil {
+		logger.Error(err, "Failed to populate credentials from environment variables")
+		return ctrl.Result{}, err
+	} else if updated {
+		// If credentials were updated, requeue to process with the updated CR
+		logger.Info("Credentials were populated from environment variables, requeuing")
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// --- 1. create webhook service
