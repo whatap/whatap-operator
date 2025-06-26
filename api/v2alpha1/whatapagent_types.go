@@ -237,7 +237,7 @@ type ApmSpec struct {
 
 // InstrumentationSpec holds instrumentation targets
 type InstrumentationSpec struct {
-	// +kubebuilder:default=false
+	// +kubebuilder:default=true
 	Enabled bool `json:"enabled,omitempty"`
 	// +optional
 	Targets []TargetSpec `json:"targets,omitempty"`

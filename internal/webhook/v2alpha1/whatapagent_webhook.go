@@ -75,6 +75,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 
 	if err := d.client.Get(ctx, client.ObjectKey{Name: "whatap"}, &whatapAgentCustomResource); err != nil {
 		// CR이 아직 생성 안 됐으면 주입 안 함
+		whatapWebhookLogger.V(1).Info("WhatapAgent CR not found, skipping APM injection", "pod", pod.GetNamespace()+"/"+pod.GetName(), "error", err.Error())
 		return nil
 	}
 	defaultNS := os.Getenv("WHATAP_DEFAULT_NAMESPACE")
@@ -91,21 +92,47 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	// Handle the case where instrumentation field might be omitted (zero value)
 	instrumentation := whatapAgentCustomResource.Spec.Features.Apm.Instrumentation
 	if !instrumentation.Enabled {
+		whatapWebhookLogger.V(1).Info("APM instrumentation is disabled, skipping APM injection", "pod", pod.GetNamespace()+"/"+pod.GetName())
 		return nil
 	}
 
 	// Additional safety check: if targets slice is nil or empty, nothing to process
 	if len(instrumentation.Targets) == 0 {
+		whatapWebhookLogger.V(1).Info("No APM targets configured, skipping APM injection", "pod", pod.GetNamespace()+"/"+pod.GetName())
 		return nil
 	}
 
+	// Check if APM agent is already injected
+	if pod.Annotations != nil {
+		if injected, exists := pod.Annotations["whatap-apm-injected"]; exists && injected == "true" {
+			whatapWebhookLogger.V(1).Info("APM agent already injected, skipping APM injection", "pod", pod.GetNamespace()+"/"+pod.GetName())
+			return nil
+		}
+	}
+
+	podIdentifier := pod.GetNamespace() + "/" + pod.GetName()
+	if pod.GetName() == "" {
+		// Use namespace + generateName as alternative identifier for pods created by controllers
+		podIdentifier = pod.GetNamespace()
+		if pod.GetGenerateName() != "" {
+			podIdentifier += "/" + pod.GetGenerateName() + "*"
+		} else {
+			podIdentifier += "/unknown"
+		}
+	}
+
+	whatapWebhookLogger.V(1).Info("Processing APM injection for pod", "pod", podIdentifier, "targets", len(instrumentation.Targets))
+
+	injected := false
 	for _, target := range instrumentation.Targets {
 		if !target.Enabled {
+			whatapWebhookLogger.V(2).Info("Target is disabled, skipping", "pod", podIdentifier, "target", target.Name)
 			continue
 		}
 
 		// Check if pod labels match the PodSelector
 		if !matchesSelector(pod.Labels, target.PodSelector) {
+			whatapWebhookLogger.V(2).Info("Pod labels do not match target selector, skipping", "pod", podIdentifier, "target", target.Name, "podLabels", pod.Labels, "targetSelector", target.PodSelector)
 			continue
 		}
 
@@ -118,8 +145,12 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 
 		// Check if namespace matches the NamespaceSelector
 		if !matchesNamespaceSelector(pod.Namespace, namespace.Labels, target.NamespaceSelector) {
+			whatapWebhookLogger.V(2).Info("Namespace does not match target selector, skipping", "pod", podIdentifier, "target", target.Name, "namespace", pod.Namespace, "namespaceLabels", namespace.Labels, "targetNamespaceSelector", target.NamespaceSelector)
 			continue
 		}
+
+		// Target matched! Proceed with APM injection
+		whatapWebhookLogger.Info("Target matched for APM injection", "pod", podIdentifier, "target", target.Name, "language", target.Language)
 
 		// 4) PodSpec 변형 (initContainer, volumes, env 등)
 		patchPodTemplateSpec(&pod.Spec, whatapAgentCustomResource, target, whatapWebhookLogger)
@@ -134,20 +165,13 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		pod.Annotations["whatap-apm-language"] = target.Language
 		pod.Annotations["whatap-apm-version"] = target.WhatapApmVersions[target.Language]
 
-		// Get pod name or use namespace+generateName if name is empty
-		podIdentifier := pod.GetObjectMeta().GetName()
-		if podIdentifier == "" {
-			// Use namespace + generateName as alternative identifier
-			podIdentifier = pod.GetObjectMeta().GetNamespace()
-			if pod.GetObjectMeta().GetGenerateName() != "" {
-				podIdentifier += "/" + pod.GetObjectMeta().GetGenerateName() + "*"
-			} else {
-				podIdentifier += "/unknown"
-			}
-		}
-
-		whatapWebhookLogger.Info("injected Whatap APM into Pod", "pod", podIdentifier, "language", target.Language, "version", target.WhatapApmVersions[target.Language])
+		whatapWebhookLogger.Info("Successfully injected Whatap APM into Pod", "pod", podIdentifier, "target", target.Name, "language", target.Language, "version", target.WhatapApmVersions[target.Language])
+		injected = true
 		break
+	}
+
+	if !injected {
+		whatapWebhookLogger.V(1).Info("No matching targets found for pod, skipping APM injection", "pod", podIdentifier)
 	}
 	return nil
 }
