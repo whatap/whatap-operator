@@ -191,7 +191,7 @@ func main() {
 	}
 
 	caKeyFile := filepath.Join(certDir, "ca.key")
-	if err := os.WriteFile(caCertFile, caKey, 0o644); err != nil {
+	if err := os.WriteFile(caKeyFile, caKey, 0o644); err != nil {
 		setupLog.Error(err, "Failed to write caKeyFile file", "file", caKeyFile)
 		os.Exit(1)
 	}
