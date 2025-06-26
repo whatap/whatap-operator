@@ -47,6 +47,15 @@ func SetupWhatapAgentWebhookWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// Register the WhatapAgent webhook for defaulting (mutating) - populate credentials
+	if err := ctrl.NewWebhookManagedBy(mgr).
+		For(&monitoringv2alpha1.WhatapAgent{}).
+		WithDefaulter(&WhatapAgentCredentialDefaulter{client: mgr.GetClient()}).
+		WithDefaulterCustomPath("/whatap-defaulting--v2alpha1-whatapagent").
+		Complete(); err != nil {
+		return err
+	}
+
 	// Register the WhatapAgent webhook for validation
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&monitoringv2alpha1.WhatapAgent{}).
@@ -153,7 +162,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		whatapWebhookLogger.Info("Target matched for APM injection", "pod", podIdentifier, "target", target.Name, "language", target.Language)
 
 		// 4) PodSpec 변형 (initContainer, volumes, env 등)
-		patchPodTemplateSpec(&pod.Spec, whatapAgentCustomResource, target, whatapWebhookLogger)
+		patchPodTemplateSpec(&pod.Spec, whatapAgentCustomResource, target, ns, whatapWebhookLogger)
 		if pod.Annotations == nil {
 			pod.Annotations = map[string]string{}
 		}
@@ -176,11 +185,71 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	return nil
 }
 
+// WhatapAgentCredentialDefaulter handles defaulting for WhatapAgent resources
+type WhatapAgentCredentialDefaulter struct {
+	client client.Client
+}
+
+var _ webhook.CustomDefaulter = &WhatapAgentCredentialDefaulter{}
+
+// Default implements webhook.CustomDefaulter for WhatapAgent to populate credentials from environment variables
+func (d *WhatapAgentCredentialDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+	whatapagent, ok := obj.(*monitoringv2alpha1.WhatapAgent)
+	if !ok {
+		whatapWebhookLogger.Info("skipping non-WhatapAgent object")
+		return nil
+	}
+
+	whatapWebhookLogger.Info("Defaulting WhatapAgent credentials", "name", whatapagent.GetName())
+
+	// Get the default namespace for whatap-monitoring
+	defaultNS := os.Getenv("WHATAP_DEFAULT_NAMESPACE")
+	if defaultNS == "" {
+		defaultNS = "whatap-monitoring"
+	}
+
+	// Use the namespace from the CR spec if available, otherwise use default
+	namespace := whatapagent.Spec.Features.K8sAgent.Namespace
+	if namespace == "" {
+		namespace = defaultNS
+	}
+
+	// Populate License if empty
+	if whatapagent.Spec.License == "" {
+		license := os.Getenv("WHATAP_LICENSE")
+		if license != "" {
+			whatapagent.Spec.License = license
+			whatapWebhookLogger.Info("Populated License from environment variable", "namespace", namespace)
+		}
+	}
+
+	// Populate Host if empty
+	if whatapagent.Spec.Host == "" {
+		host := os.Getenv("WHATAP_HOST")
+		if host != "" {
+			whatapagent.Spec.Host = host
+			whatapWebhookLogger.Info("Populated Host from environment variable", "namespace", namespace)
+		}
+	}
+
+	// Populate Port if empty
+	if whatapagent.Spec.Port == "" {
+		port := os.Getenv("WHATAP_PORT")
+		if port != "" {
+			whatapagent.Spec.Port = port
+			whatapWebhookLogger.Info("Populated Port from environment variable", "namespace", namespace)
+		}
+	}
+
+	return nil
+}
+
 type WhatapAgentCustomValidator struct {
 	client client.Client
 }
 
 var _ webhook.CustomValidator = &WhatapAgentCustomValidator{}
+
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type WhatapAgent.
 func (v *WhatapAgentCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -189,6 +258,8 @@ func (v *WhatapAgentCustomValidator) ValidateCreate(ctx context.Context, obj run
 		return nil, fmt.Errorf("expected a WhatapAgent object but got %T", obj)
 	}
 	whatapWebhookLogger.Info("Validation for WhatapAgent upon creation", "name", whatapagent.GetName())
+
+	// Note: Credential population is now handled by the mutating webhook (WhatapAgentCredentialDefaulter)
 
 	// Validate required fields
 	//if err := validateRequiredFields(whatapagent); err != nil {
@@ -215,6 +286,8 @@ func (v *WhatapAgentCustomValidator) ValidateUpdate(ctx context.Context, oldObj,
 		return nil, fmt.Errorf("expected a WhatapAgent object for the newObj but got %T", newObj)
 	}
 	whatapWebhookLogger.Info("Validation for WhatapAgent upon update", "name", whatapagent.GetName())
+
+	// Note: Credential population is now handled by the mutating webhook (WhatapAgentCredentialDefaulter)
 
 	// Validate required fields
 	//if err := validateRequiredFields(whatapagent); err != nil {
