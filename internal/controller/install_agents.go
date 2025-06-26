@@ -740,6 +740,25 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			endpoints[0] = endpointMap
 			gpuTargetMap["endpoints"] = endpoints
 
+			// Add metricRelabelConfigs for GPU monitoring
+			metricRelabelConfigs := make([]interface{}, 2)
+
+			// First relabel config: add wtp_src label
+			relabelConfig1 := make(map[string]interface{})
+			relabelConfig1["target_label"] = "wtp_src"
+			relabelConfig1["replacement"] = "true"
+			relabelConfig1["action"] = "replace"
+			metricRelabelConfigs[0] = relabelConfig1
+
+			// Second relabel config: keep only DCGM metrics
+			relabelConfig2 := make(map[string]interface{})
+			relabelConfig2["source_labels"] = []string{"__name__"}
+			relabelConfig2["regex"] = "DCGM.*"
+			relabelConfig2["action"] = "keep"
+			metricRelabelConfigs[1] = relabelConfig2
+
+			gpuTargetMap["metricRelabelConfigs"] = metricRelabelConfigs
+
 			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, gpuTargetMap)
 		}
 	}
