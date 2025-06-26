@@ -195,9 +195,13 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 			hostEnv := getWhatapHostEnvVar(cr)
 			hostEnv.Name = "whatap.server.host" // Java agent expects "whatap.server.host" env var name
 
+			hostPort := getWhatapHostEnvVar(cr)
+			hostPort.Name = "whatap.server.port"
+
 			podSpec.Containers[i].Env = append(podSpec.Containers[i].Env,
 				licenseEnv,
 				hostEnv,
+				hostPort,
 				corev1.EnvVar{Name: "whatap.micro.enabled", Value: "true"},
 				corev1.EnvVar{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
 				corev1.EnvVar{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
