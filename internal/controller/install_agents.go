@@ -702,6 +702,7 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			gpuTargetMap := make(map[string]interface{})
 			gpuTargetMap["targetName"] = gpuTargetName
 			gpuTargetMap["type"] = "PodMonitor"
+			gpuTargetMap["addNodeLabel"] = true
 			gpuTargetMap["enabled"] = true
 
 			// Use dynamic namespace with proper priority
