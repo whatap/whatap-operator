@@ -732,9 +732,9 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 
 			// Allow customization of scraping interval
 			interval := "30s" // Default interval
-			if cr.Spec.Features.OpenAgent.GlobalInterval != "" {
-				interval = cr.Spec.Features.OpenAgent.GlobalInterval
-			}
+			//if cr.Spec.Features.OpenAgent.GlobalInterval != "" {
+			//	interval = cr.Spec.Features.OpenAgent.GlobalInterval
+			//}
 			endpointMap["interval"] = interval
 
 			endpointMap["scheme"] = "http"
