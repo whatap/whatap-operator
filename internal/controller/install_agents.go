@@ -535,25 +535,17 @@ func installSchedulerMonitor(ctx context.Context, r *WhatapAgentReconciler, logg
 func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace string) string {
 	// Define the structure for the scrape config
 	type ScrapeConfig struct {
-		Global struct {
-			ScrapeInterval string `yaml:"scrape_interval"`
-		} `yaml:"global"`
 		Features struct {
 			OpenAgent struct {
-				Enabled        bool          `yaml:"enabled"`
-				GlobalInterval string        `yaml:"globalInterval,omitempty"`
-				GlobalPath     string        `yaml:"globalPath,omitempty"`
-				Targets        []interface{} `yaml:"targets,omitempty"`
+				Enabled bool          `yaml:"enabled"`
+				Targets []interface{} `yaml:"targets,omitempty"`
 			} `yaml:"openAgent"`
 		} `yaml:"features"`
 	}
 
 	// Create the scrape config
 	config := ScrapeConfig{}
-	config.Global.ScrapeInterval = "15s" // Default interval
 	config.Features.OpenAgent.Enabled = cr.Spec.Features.OpenAgent.Enabled
-	config.Features.OpenAgent.GlobalInterval = cr.Spec.Features.OpenAgent.GlobalInterval
-	config.Features.OpenAgent.GlobalPath = cr.Spec.Features.OpenAgent.GlobalPath
 
 	// Convert targets to interface{} for YAML marshaling
 	for _, target := range cr.Spec.Features.OpenAgent.Targets {
@@ -621,7 +613,15 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			endpoints := make([]interface{}, 0)
 			for _, endpoint := range target.Endpoints {
 				endpointMap := make(map[string]interface{})
-				endpointMap["port"] = endpoint.Port
+
+				// Add port for PodMonitor/ServiceMonitor or address for StaticEndpoints
+				if endpoint.Port != "" {
+					endpointMap["port"] = endpoint.Port
+				}
+				if endpoint.Address != "" {
+					endpointMap["address"] = endpoint.Address
+				}
+
 				if endpoint.Path != "" {
 					endpointMap["path"] = endpoint.Path
 				}
@@ -636,34 +636,40 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 					tlsConfig["insecureSkipVerify"] = endpoint.TLSConfig.InsecureSkipVerify
 					endpointMap["tlsConfig"] = tlsConfig
 				}
+
+				// Add addNodeLabel if present
+				if endpoint.AddNodeLabel {
+					endpointMap["addNodeLabel"] = endpoint.AddNodeLabel
+				}
+
+				// Add metricRelabelConfigs if present at endpoint level
+				if len(endpoint.MetricRelabelConfigs) > 0 {
+					relabelConfigs := make([]interface{}, 0)
+					for _, relabelConfig := range endpoint.MetricRelabelConfigs {
+						relabelMap := make(map[string]interface{})
+						if len(relabelConfig.SourceLabels) > 0 {
+							relabelMap["source_labels"] = relabelConfig.SourceLabels
+						}
+						if relabelConfig.Regex != "" {
+							relabelMap["regex"] = relabelConfig.Regex
+						}
+						if relabelConfig.TargetLabel != "" {
+							relabelMap["target_label"] = relabelConfig.TargetLabel
+						}
+						if relabelConfig.Replacement != "" {
+							relabelMap["replacement"] = relabelConfig.Replacement
+						}
+						if relabelConfig.Action != "" {
+							relabelMap["action"] = relabelConfig.Action
+						}
+						relabelConfigs = append(relabelConfigs, relabelMap)
+					}
+					endpointMap["metricRelabelConfigs"] = relabelConfigs
+				}
+
 				endpoints = append(endpoints, endpointMap)
 			}
 			targetMap["endpoints"] = endpoints
-		}
-
-		// Add metricRelabelConfigs if present
-		if len(target.MetricRelabelConfigs) > 0 {
-			relabelConfigs := make([]interface{}, 0)
-			for _, relabelConfig := range target.MetricRelabelConfigs {
-				relabelMap := make(map[string]interface{})
-				if len(relabelConfig.SourceLabels) > 0 {
-					relabelMap["source_labels"] = relabelConfig.SourceLabels
-				}
-				if relabelConfig.Regex != "" {
-					relabelMap["regex"] = relabelConfig.Regex
-				}
-				if relabelConfig.TargetLabel != "" {
-					relabelMap["target_label"] = relabelConfig.TargetLabel
-				}
-				if relabelConfig.Replacement != "" {
-					relabelMap["replacement"] = relabelConfig.Replacement
-				}
-				if relabelConfig.Action != "" {
-					relabelMap["action"] = relabelConfig.Action
-				}
-				relabelConfigs = append(relabelConfigs, relabelMap)
-			}
-			targetMap["metricRelabelConfigs"] = relabelConfigs
 		}
 
 		config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
@@ -702,7 +708,6 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			gpuTargetMap := make(map[string]interface{})
 			gpuTargetMap["targetName"] = gpuTargetName
 			gpuTargetMap["type"] = "PodMonitor"
-			gpuTargetMap["addNodeLabel"] = true
 			gpuTargetMap["enabled"] = true
 
 			// Use dynamic namespace with proper priority
@@ -732,16 +737,14 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 
 			// Allow customization of scraping interval
 			interval := "30s" // Default interval
-			//if cr.Spec.Features.OpenAgent.GlobalInterval != "" {
-			//	interval = cr.Spec.Features.OpenAgent.GlobalInterval
-			//}
 			endpointMap["interval"] = interval
 
 			endpointMap["scheme"] = "http"
-			endpoints[0] = endpointMap
-			gpuTargetMap["endpoints"] = endpoints
 
-			// Add metricRelabelConfigs for GPU monitoring
+			// Add addNodeLabel at endpoint level
+			endpointMap["addNodeLabel"] = true
+
+			// Add metricRelabelConfigs at endpoint level for GPU monitoring
 			metricRelabelConfigs := make([]interface{}, 2)
 
 			// First relabel config: add wtp_src label
@@ -758,7 +761,10 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			relabelConfig2["action"] = "keep"
 			metricRelabelConfigs[1] = relabelConfig2
 
-			gpuTargetMap["metricRelabelConfigs"] = metricRelabelConfigs
+			endpointMap["metricRelabelConfigs"] = metricRelabelConfigs
+
+			endpoints[0] = endpointMap
+			gpuTargetMap["endpoints"] = endpoints
 
 			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, gpuTargetMap)
 		}

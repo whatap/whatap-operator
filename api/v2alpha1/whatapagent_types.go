@@ -48,12 +48,6 @@ type FeaturesSpec struct {
 type OpenAgentSpec struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled"`
-	// GlobalInterval defines the default scrape interval for all targets
-	// +optional
-	GlobalInterval string `json:"globalInterval,omitempty"`
-	// GlobalPath defines the default metrics path for all targets
-	// +optional
-	GlobalPath string `json:"globalPath,omitempty"`
 	// Targets defines the list of targets to scrape metrics from
 	// +optional
 	Targets []OpenAgentTargetSpec `json:"targets,omitempty"`
@@ -96,9 +90,6 @@ type OpenAgentTargetSpec struct {
 	Selector PodSelector `json:"selector,omitempty"`
 	// Endpoints defines the endpoints to scrape metrics from
 	Endpoints []OpenAgentEndpoint `json:"endpoints,omitempty"`
-	// MetricRelabelConfigs defines the metric relabeling configurations
-	// +optional
-	MetricRelabelConfigs []MetricRelabelConfig `json:"metricRelabelConfigs,omitempty"`
 
 	// +kubebuilder:default=true
 	Enabled bool `json:"enabled"`
@@ -106,8 +97,12 @@ type OpenAgentTargetSpec struct {
 
 // OpenAgentEndpoint defines an endpoint for the OpenAgent to scrape metrics from
 type OpenAgentEndpoint struct {
-	// Port is the port to scrape metrics from
-	Port string `json:"port"`
+	// Port is the port to scrape metrics from (for PodMonitor/ServiceMonitor)
+	// +optional
+	Port string `json:"port,omitempty"`
+	// Address is the address to scrape metrics from (for StaticEndpoints)
+	// +optional
+	Address string `json:"address,omitempty"`
 	// Path is the path to scrape metrics from
 	// +optional
 	Path string `json:"path,omitempty"`
@@ -120,6 +115,9 @@ type OpenAgentEndpoint struct {
 	// TLSConfig defines the TLS configuration for the endpoint
 	// +optional
 	TLSConfig *TLSConfig `json:"tlsConfig,omitempty"`
+	// MetricRelabelConfigs defines the metric relabeling configurations for this endpoint
+	// +optional
+	MetricRelabelConfigs []MetricRelabelConfig `json:"metricRelabelConfigs,omitempty"`
 
 	// +kubebuilder:default=false
 	// +optional
