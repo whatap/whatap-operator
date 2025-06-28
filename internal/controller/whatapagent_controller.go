@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"os"
+	"time"
 
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -37,13 +38,19 @@ type WhatapAgentReconciler struct {
 	ServerKey       []byte
 }
 
-func (r *WhatapAgentReconciler) ensureWebhookTLSSecret(ctx context.Context) error {
+func (r *WhatapAgentReconciler) ensureWebhookTLSSecret(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      webhookSecretName,
 			Namespace: r.DefaultNamespace,
 		},
 	}
+
+	// Set WhatapAgent instance as the owner and controller
+	if err := controllerutil.SetControllerReference(whatapAgent, secret, r.Scheme); err != nil {
+		return err
+	}
+
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
 		secret.Data = map[string][]byte{
 			"cert.pem": r.WebhookCABundle, // CA 번들
@@ -131,11 +138,41 @@ func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
 		}
 	}
 
+	// Delete MutatingWebhookConfiguration
+	if err := r.Delete(ctx, &admissionregistrationv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Name: webhookConfigurationName},
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete MutatingWebhookConfiguration")
+		}
+	}
+
+	// Delete Webhook Service
+	if err := r.Delete(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: webhookServiceName, Namespace: r.DefaultNamespace},
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete Webhook Service")
+		}
+	}
+
+	// Delete Webhook Secret
+	if err := r.Delete(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: webhookSecretName, Namespace: r.DefaultNamespace},
+	}); err != nil {
+		// Ignore NotFound errors
+		if client.IgnoreNotFound(err) != nil {
+			logger.Error(err, "Failed to delete Webhook Secret")
+		}
+	}
+
 	logger.Info("Cleanup completed")
 	return nil
 }
 
-func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context) error {
+func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      webhookServiceName,
@@ -146,6 +183,12 @@ func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context) error 
 			},
 		},
 	}
+
+	// Set WhatapAgent instance as the owner and controller
+	if err := controllerutil.SetControllerReference(whatapAgent, svc, r.Scheme); err != nil {
+		return err
+	}
+
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
 		svc.Spec = corev1.ServiceSpec{
 			Selector: map[string]string{
@@ -162,12 +205,18 @@ func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context) error 
 	})
 	return err
 }
-func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.Context) error {
+func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
 	mwc := &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: webhookConfigurationName,
 		},
 	}
+
+	// Set WhatapAgent instance as the owner and controller
+	if err := controllerutil.SetControllerReference(whatapAgent, mwc, r.Scheme); err != nil {
+		return err
+	}
+
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, mwc, func() error {
 		mwc.Webhooks = []admissionregistrationv1.MutatingWebhook{
 			{
@@ -327,18 +376,18 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// --- 1. create webhook service
-	if err := r.ensureWebhookService(ctx); err != nil {
+	if err := r.ensureWebhookService(ctx, whatapAgent); err != nil {
 		logger.Error(err, "failed to ensure ensureWebhookService")
 		return ctrl.Result{}, err
 	}
 
 	// --- 2. create webhook secret
-	if err := r.ensureWebhookTLSSecret(ctx); err != nil {
+	if err := r.ensureWebhookTLSSecret(ctx, whatapAgent); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	// 5) WebhookConfiguration 생성/업데이트
-	if err := r.ensureMutatingWebhookConfiguration(ctx); err != nil {
+	if err := r.ensureMutatingWebhookConfiguration(ctx, whatapAgent); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -390,7 +439,9 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			logger.Error(err, "Failed to install Open Agent")
 		}
 	}
-	return ctrl.Result{}, nil
+
+	// Schedule periodic reconciliation to ensure resources are maintained
+	return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
 }
 
 // 헬퍼: 슬라이스에 문자열이 있는지 확인
@@ -418,5 +469,15 @@ func (r *WhatapAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		// 1) Watch the cluster-scoped WhatapAgent so CR changes still reconcile
 		For(&monitoringv2alpha1.WhatapAgent{}).
+		// Watch for changes to resources created by this controller
+		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.DaemonSet{}).
+		Owns(&corev1.Service{}).
+		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.Secret{}).
+		Owns(&corev1.ServiceAccount{}).
+		Owns(&rbacv1.ClusterRole{}).
+		Owns(&rbacv1.ClusterRoleBinding{}).
+		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
 		Complete(r)
 }
