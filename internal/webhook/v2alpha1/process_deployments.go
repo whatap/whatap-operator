@@ -39,17 +39,38 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	}
 
 	// 1️⃣ InitContainer - 에이전트 복사
-	initContainers := []corev1.Container{
-		{
-			Name:  "whatap-agent-init",
-			Image: getAgentImage(target, lang, version),
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "whatap-agent-volume",
-					MountPath: "/whatap-agent",
+	var initContainers []corev1.Container
+
+	if lang == "python" {
+		// Python APM 전용 InitContainer - OpenTelemetry 방식
+		logger.Info("Using Python APM bootstrap init container", "version", version)
+		initContainers = []corev1.Container{
+			{
+				Name:  "whatap-python-bootstrap-init",
+				Image: getAgentImage(target, lang, version), // public.ecr.aws/whatap/apm-init-python:1.8.5
+				Command: []string{"/init.sh"},
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "whatap-agent-volume",
+						MountPath: "/whatap-agent",
+					},
 				},
 			},
-		},
+		}
+	} else {
+		// 기존 Java 및 기타 언어용 InitContainer
+		initContainers = []corev1.Container{
+			{
+				Name:  "whatap-agent-init",
+				Image: getAgentImage(target, lang, version),
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "whatap-agent-volume",
+						MountPath: "/whatap-agent",
+					},
+				},
+			},
+		}
 	}
 
 	// 2️⃣ ConfigMap 기반 config 생성 (mode가 configMapRef 때만 추가)
@@ -168,19 +189,29 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 				corev1.EnvVar{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
 			)
 		case "python":
- 		// 🔹 Python 전용 환경변수 추가 (CR 기반)
- 		licenseEnv := getWhatapLicenseEnvVar(cr)
- 		licenseEnv.Name = "license" // Python agent expects "license" env var name
+			logger.Info("Configuring Python APM agent injection (OpenTelemetry style)", "version", version)
 
- 		hostEnv := getWhatapHostEnvVar(cr)
- 		hostEnv.Name = "whatap_server_host" // Python agent expects "whatap_server_host" env var name
+			// 🔹 Python 전용 환경변수 추가 (CR 기반)
+			licenseEnv := getWhatapLicenseEnvVar(cr)
+			licenseEnv.Name = "license" // Python agent expects "license" env var name
+
+			hostEnv := getWhatapHostEnvVar(cr)
+			hostEnv.Name = "whatap_server_host" // Python agent expects "whatap_server_host" env var name
 
 			podSpec.Containers[i].Env = append(container.Env,
 				licenseEnv,
 				hostEnv,
 				corev1.EnvVar{Name: "app_name", Value: container.Name},
+				corev1.EnvVar{Name: "app_process_name", Value: "python"},
+				// 🔥 핵심: PYTHONPATH에 bootstrap 디렉터리 추가 - 가상환경 자동 호환!
+				corev1.EnvVar{Name: "PYTHONPATH", Value: "/whatap-agent/bootstrap:$PYTHONPATH"},
+				corev1.EnvVar{Name: "WHATAP_HOME", Value: "/whatap-agent"},
+				// 🔥 PATH에 bin 디렉터리 추가 (네이티브 명령어 사용)
+				corev1.EnvVar{Name: "PATH", Value: "/whatap-agent/bin:$PATH"},
 				corev1.EnvVar{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
 			)
+
+			// 🔥 명령어 변경 불필요! sitecustomize.py가 자동 처리
 		case "nodejs":
  		// 🔹 Node.js 전용 환경변수 추가 (CR 기반)
  		licenseEnv := getWhatapLicenseEnvVar(cr)
