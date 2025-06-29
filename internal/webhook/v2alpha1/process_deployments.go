@@ -14,6 +14,343 @@ func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 	return corev1.EnvVar{Name: "WHATAP_LICENSE", Value: cr.Spec.License}
 }
 
+// createAgentInitContainers creates the appropriate init containers based on language
+func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, lang, version string, logger logr.Logger) []corev1.Container {
+	baseVolumeMount := corev1.VolumeMount{
+		Name:      "whatap-agent-volume",
+		MountPath: "/whatap-agent",
+	}
+
+	if lang == "python" {
+		logger.Info("Using Python APM bootstrap init container", "version", version)
+		return []corev1.Container{
+			{
+				Name:         "whatap-python-bootstrap-init",
+				Image:        getAgentImage(target, lang, version),
+				Command:      []string{"/init.sh"},
+				VolumeMounts: []corev1.VolumeMount{baseVolumeMount},
+			},
+		}
+	}
+
+	// 기존 Java 및 기타 언어용 InitContainer
+	return []corev1.Container{
+		{
+			Name:         "whatap-agent-init",
+			Image:        getAgentImage(target, lang, version),
+			VolumeMounts: []corev1.VolumeMount{baseVolumeMount},
+		},
+	}
+}
+
+// createConfigInitContainer creates configuration init container based on mode and language
+func createConfigInitContainer(target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, lang string, logger logr.Logger) (*corev1.Container, *corev1.Volume) {
+	baseEnvVars := []corev1.EnvVar{
+		getWhatapLicenseEnvVar(cr),
+		getWhatapHostEnvVar(cr),
+		getWhatapPortEnvVar(cr),
+	}
+
+	if target.Config.Mode == "configMapRef" && target.Config.ConfigMapRef != nil {
+		return createConfigMapBasedContainer(target, baseEnvVars, logger)
+	}
+
+	switch lang {
+	case "java":
+		return createJavaConfigContainer(target, baseEnvVars, logger), nil
+	case "python":
+		return createPythonConfigContainer(target, baseEnvVars, logger), nil
+	default:
+		logger.Info("No configuration mode specified, skipping config init container", "language", lang)
+		return nil, nil
+	}
+}
+
+// createConfigMapBasedContainer creates config container for ConfigMap mode
+func createConfigMapBasedContainer(target monitoringv2alpha1.TargetSpec, baseEnvVars []corev1.EnvVar, logger logr.Logger) (*corev1.Container, *corev1.Volume) {
+	logger.Info("Using ConfigMap-based configuration", "configMapName", target.Config.ConfigMapRef.Name, "namespace", target.Config.ConfigMapRef.Namespace)
+
+	command := buildConfigCommand("cp /config-volume/whatap.conf /whatap-agent/ && ", target.AdditionalArgs)
+
+	container := &corev1.Container{
+		Name:    "whatap-config-init",
+		Image:   "alpine:3.18",
+		Command: []string{"sh", "-c"},
+		Args:    []string{command},
+		Env:     baseEnvVars,
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
+			{Name: "config-volume", MountPath: "/config-volume"},
+		},
+	}
+
+	volume := &corev1.Volume{
+		Name: "config-volume",
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: target.Config.ConfigMapRef.Name,
+				},
+			},
+		},
+	}
+
+	return container, volume
+}
+
+// createJavaConfigContainer creates config container for Java
+func createJavaConfigContainer(target monitoringv2alpha1.TargetSpec, baseEnvVars []corev1.EnvVar, logger logr.Logger) *corev1.Container {
+	logger.Info("Using default Java configuration (no ConfigMap)", "language", "java")
+
+	command := buildConfigCommand("", target.AdditionalArgs)
+
+	return &corev1.Container{
+		Name:    "whatap-config-init",
+		Image:   "alpine:3.18",
+		Command: []string{"sh", "-c"},
+		Args:    []string{command},
+		Env:     baseEnvVars,
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
+		},
+	}
+}
+
+// createPythonConfigContainer creates config container for Python
+func createPythonConfigContainer(target monitoringv2alpha1.TargetSpec, baseEnvVars []corev1.EnvVar, logger logr.Logger) *corev1.Container {
+	logger.Info("Using Python configuration with whatap.conf", "language", "python")
+
+	appName, appProcessName := getPythonAppConfig(target.AdditionalArgs)
+	command := buildPythonConfigCommand(target.AdditionalArgs)
+
+	envVars := append(baseEnvVars,
+		corev1.EnvVar{Name: "APP_NAME", Value: appName},
+		corev1.EnvVar{Name: "APP_PROCESS_NAME", Value: appProcessName},
+	)
+
+	return &corev1.Container{
+		Name:    "whatap-python-config-init",
+		Image:   "alpine:3.18",
+		Command: []string{"sh", "-c"},
+		Args:    []string{command},
+		Env:     envVars,
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
+		},
+	}
+}
+
+// buildConfigCommand builds the configuration command with additional args
+func buildConfigCommand(prefix string, additionalArgs map[string]string) string {
+	command := prefix + `echo "license=${WHATAP_LICENSE}" > /whatap-agent/whatap.conf && echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
+
+	for key, value := range additionalArgs {
+		command += fmt.Sprintf(` && echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
+	}
+
+	return command
+}
+
+// buildPythonConfigCommand builds Python-specific configuration command
+func buildPythonConfigCommand(additionalArgs map[string]string) string {
+	command := `echo "license=${WHATAP_LICENSE}" > /whatap-agent/whatap.conf && echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf`
+	command += ` && echo "app_name=${APP_NAME}" >> /whatap-agent/whatap.conf`
+	command += ` && echo "app_process_name=${APP_PROCESS_NAME}" >> /whatap-agent/whatap.conf`
+
+	for key, value := range additionalArgs {
+		if key != "app_name" && key != "app_process_name" && key != "OKIND" {
+			command += fmt.Sprintf(` && echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
+		}
+	}
+
+	return command
+}
+
+// getPythonAppConfig extracts Python app configuration from additional args
+func getPythonAppConfig(additionalArgs map[string]string) (string, string) {
+	appName := "python-app"
+	appProcessName := "python"
+
+	if additionalArgs != nil {
+		if val, exists := additionalArgs["app_name"]; exists {
+			appName = val
+		}
+		if val, exists := additionalArgs["app_process_name"]; exists {
+			appProcessName = val
+		}
+	}
+
+	return appName, appProcessName
+}
+
+// injectLanguageSpecificEnvVars injects environment variables based on language
+func injectLanguageSpecificEnvVars(container corev1.Container, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, lang, version string, logger logr.Logger) []corev1.EnvVar {
+	switch lang {
+	case "java":
+		return injectJavaEnvVars(container, cr, logger)
+	case "python":
+		return injectPythonEnvVars(container, target, cr, version, logger)
+	case "nodejs":
+		return injectNodejsEnvVars(container, cr)
+	case "php", "dotnet", "golang":
+		return injectBasicKubernetesEnvVars(container)
+	default:
+		logger.Info("Unsupported language. Skipping env injection.", "language", lang)
+		return container.Env
+	}
+}
+
+// injectJavaEnvVars handles Java-specific environment variable injection
+func injectJavaEnvVars(container corev1.Container, cr monitoringv2alpha1.WhatapAgent, logger logr.Logger) []corev1.EnvVar {
+	agentOption := "-javaagent:/whatap-agent/whatap.agent.java.jar"
+	envVars := injectJavaToolOptions(container.Env, agentOption, logger)
+
+	// Java 전용 환경변수 추가 (CR 기반)
+	licenseEnv := getWhatapLicenseEnvVar(cr)
+	licenseEnv.Name = "license" // Java agent expects "license" env var name
+
+	hostEnv := getWhatapHostEnvVar(cr)
+	hostEnv.Name = "whatap.server.host" // Java agent expects "whatap.server.host" env var name
+
+	portEnv := getWhatapPortEnvVar(cr)
+	portEnv.Name = "whatap.server.port"
+
+	javaEnvVars := []corev1.EnvVar{
+		licenseEnv,
+		hostEnv,
+		portEnv,
+		{Name: "whatap.micro.enabled", Value: "true"},
+		{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
+		{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+		{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
+	}
+
+	return append(envVars, javaEnvVars...)
+}
+
+// injectPythonEnvVars handles Python-specific environment variable injection
+func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, version string, logger logr.Logger) []corev1.EnvVar {
+	logger.Info("Configuring Python APM agent injection with whatap.conf", "version", version)
+
+	appName, appProcessName, okind := getPythonEnvConfig(container.Name, target.AdditionalArgs)
+
+	// Python 전용 환경변수 추가 (CR 기반)
+	licenseEnv := getWhatapLicenseEnvVar(cr)
+	licenseEnv.Name = "license" // Python agent expects "license" env var name
+
+	hostEnv := getWhatapHostEnvVar(cr)
+	hostEnv.Name = "whatap_server_host" // Python agent expects "whatap_server_host" env var name
+
+	portEnv := getWhatapPortEnvVar(cr)
+	portEnv.Name = "whatap_server_port"
+
+	// Python APM 환경변수 구성
+	envVars := []corev1.EnvVar{
+		// Whatap 서버 연결 정보
+		licenseEnv,
+		hostEnv,
+		portEnv,
+
+		// Python 애플리케이션 정보
+		{Name: "app_name", Value: appName},
+		{Name: "app_process_name", Value: appProcessName},
+
+		// Python 에이전트 경로 설정
+		{Name: "WHATAP_HOME", Value: "/whatap-agent"},
+		{Name: "PATH", Value: "/whatap-agent/bin:$PATH"},
+
+		// Whatap 설정
+		{Name: "whatap.micro.enabled", Value: "true"},
+
+		// Kubernetes 메타데이터
+		{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
+		{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+		{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
+	}
+
+	// Add OKIND if provided
+	if okind != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "OKIND", Value: okind})
+	}
+
+	// PYTHONPATH 안전하게 주입 (OpenTelemetry 방식)
+	envVars = injectPythonPath(envVars, "/whatap-agent/bootstrap", logger)
+
+	return append(container.Env, envVars...)
+}
+
+// injectNodejsEnvVars handles Node.js-specific environment variable injection
+func injectNodejsEnvVars(container corev1.Container, cr monitoringv2alpha1.WhatapAgent) []corev1.EnvVar {
+	// Node.js 전용 환경변수 추가 (CR 기반)
+	licenseEnv := getWhatapLicenseEnvVar(cr)
+	licenseEnv.Name = "WHATAP_LICENSE" // Node.js agent expects "WHATAP_LICENSE" env var name
+
+	hostEnv := getWhatapHostEnvVar(cr)
+	hostEnv.Name = "WHATAP_SERVER_HOST" // Node.js agent expects "WHATAP_SERVER_HOST" env var name
+
+	nodejsEnvVars := []corev1.EnvVar{
+		licenseEnv,
+		hostEnv,
+		{Name: "WHATAP_MICRO_ENABLED", Value: "true"},
+	}
+
+	return append(container.Env, nodejsEnvVars...)
+}
+
+// injectBasicKubernetesEnvVars handles basic Kubernetes environment variables for other languages
+func injectBasicKubernetesEnvVars(container corev1.Container) []corev1.EnvVar {
+	basicEnvVars := []corev1.EnvVar{
+		{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
+		{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+		{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
+	}
+
+	return append(container.Env, basicEnvVars...)
+}
+
+// getPythonEnvConfig extracts Python environment configuration from additional args
+func getPythonEnvConfig(containerName string, additionalArgs map[string]string) (string, string, string) {
+	appName := containerName // default to container name
+	appProcessName := "python" // default value
+	okind := "" // optional
+
+	if additionalArgs != nil {
+		if val, exists := additionalArgs["app_name"]; exists {
+			appName = val
+		}
+		if val, exists := additionalArgs["app_process_name"]; exists {
+			appProcessName = val
+		}
+		if val, exists := additionalArgs["OKIND"]; exists {
+			okind = val
+		}
+	}
+
+	return appName, appProcessName, okind
+}
+
+// wrapPythonCommand wraps Python application command with whatap-start-agent
+func wrapPythonCommand(container *corev1.Container, logger logr.Logger) {
+	if len(container.Command) > 0 || len(container.Args) > 0 {
+		originalCommand := container.Command
+		originalArgs := container.Args
+
+		// whatap-start-agent 뒤에 원본 명령어와 인자들을 직접 전달
+		newArgs := []string{}
+		if len(originalCommand) > 0 {
+			newArgs = append(newArgs, originalCommand...)
+		}
+		if len(originalArgs) > 0 {
+			newArgs = append(newArgs, originalArgs...)
+		}
+
+		logger.Info("Wrapping Python application command with whatap-start-agent", "originalCommand", originalCommand, "originalArgs", originalArgs)
+
+		container.Command = []string{"/whatap-agent/bin/whatap-start-agent"}
+		container.Args = newArgs
+	}
+}
+
 func getWhatapHostEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 	return corev1.EnvVar{Name: "WHATAP_HOST", Value: cr.Spec.Host}
 }
@@ -38,168 +375,15 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	}
 
 	// 1️⃣ InitContainer - 에이전트 복사
-	var initContainers []corev1.Container
+	initContainers := createAgentInitContainers(target, lang, version, logger)
 
-	if lang == "python" {
-		// Python APM 전용 InitContainer - OpenTelemetry 방식
-		logger.Info("Using Python APM bootstrap init container", "version", version)
-		initContainers = []corev1.Container{
-			{
-				Name:    "whatap-python-bootstrap-init",
-				Image:   getAgentImage(target, lang, version), // public.ecr.aws/whatap/apm-init-python:1.8.5
-				Command: []string{"/init.sh"},
-				VolumeMounts: []corev1.VolumeMount{
-					{
-						Name:      "whatap-agent-volume",
-						MountPath: "/whatap-agent",
-					},
-				},
-			},
+	// 2️⃣ Configuration init container 추가
+	configContainer, configVolume := createConfigInitContainer(target, cr, lang, logger)
+	if configContainer != nil {
+		initContainers = append(initContainers, *configContainer)
+		if configVolume != nil {
+			podSpec.Volumes = appendIfNotExists(podSpec.Volumes, *configVolume)
 		}
-	} else {
-		// 기존 Java 및 기타 언어용 InitContainer
-		initContainers = []corev1.Container{
-			{
-				Name:  "whatap-agent-init",
-				Image: getAgentImage(target, lang, version),
-				VolumeMounts: []corev1.VolumeMount{
-					{
-						Name:      "whatap-agent-volume",
-						MountPath: "/whatap-agent",
-					},
-				},
-			},
-		}
-	}
-
-	// 2️⃣ ConfigMap 기반 config 생성 (mode가 configMapRef 때만 추가)
-	if target.Config.Mode == "configMapRef" && target.Config.ConfigMapRef != nil {
-		logger.Info("Using ConfigMap-based configuration", "configMapName", target.Config.ConfigMapRef.Name, "namespace", target.Config.ConfigMapRef.Namespace)
-		// Build the command with basic configuration using environment variables
-		command := `
-				cp /config-volume/whatap.conf /whatap-agent/ && \
-				echo "license=${WHATAP_LICENSE}" >> /whatap-agent/whatap.conf && \
-				echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && \
-				echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && \
-				echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
-
-		// Add additional arguments if provided
-		if len(target.AdditionalArgs) > 0 {
-			for key, value := range target.AdditionalArgs {
-				command += fmt.Sprintf(` && \
-				echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
-			}
-		}
-
-		configInitContainer := corev1.Container{
-			Name:    "whatap-config-init",
-			Image:   "alpine:3.18",
-			Command: []string{"sh", "-c"},
-			Args:    []string{command},
-			Env: []corev1.EnvVar{
-				getWhatapLicenseEnvVar(cr),
-				getWhatapHostEnvVar(cr),
-				getWhatapPortEnvVar(cr),
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
-				{Name: "config-volume", MountPath: "/config-volume"},
-			},
-		}
-		initContainers = append(initContainers, configInitContainer)
-
-		// ConfigMap 마운트 추가
-		podSpec.Volumes = appendIfNotExists(podSpec.Volumes, corev1.Volume{
-			Name: "config-volume",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: target.Config.ConfigMapRef.Name,
-					},
-				},
-			},
-		})
-	} else if lang == "java" {
-		// 3️⃣ Java 기본 whatap.conf 생성 (ConfigMap 사용 안할 때)
-		logger.Info("Using default Java configuration (no ConfigMap)", "language", lang)
-		// Build the command with basic configuration using environment variables
-		command := `echo "license=${WHATAP_LICENSE}" > /whatap-agent/whatap.conf && echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
-
-		// Add additional arguments if provided
-		if len(target.AdditionalArgs) > 0 {
-			for key, value := range target.AdditionalArgs {
-				command += fmt.Sprintf(` && echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
-			}
-		}
-
-		configInitContainer := corev1.Container{
-			Name:    "whatap-config-init",
-			Image:   "alpine:3.18",
-			Command: []string{"sh", "-c"},
-			Args:    []string{command},
-			Env: []corev1.EnvVar{
-				getWhatapLicenseEnvVar(cr),
-				getWhatapHostEnvVar(cr),
-				getWhatapPortEnvVar(cr),
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
-			},
-		}
-		initContainers = append(initContainers, configInitContainer)
-	} else if lang == "python" {
-		// 4️⃣ Python whatap.conf 생성 (사용자 요구사항에 따라)
-		logger.Info("Using Python configuration with whatap.conf", "language", lang)
-
-		// Get app_name, app_process_name from AdditionalArgs
-		appName := "python-app"    // default value
-		appProcessName := "python" // default value
-
-		if target.AdditionalArgs != nil {
-			if val, exists := target.AdditionalArgs["app_name"]; exists {
-				appName = val
-			}
-			if val, exists := target.AdditionalArgs["app_process_name"]; exists {
-				appProcessName = val
-			}
-		}
-
-		// Build the command with Python-specific configuration
-		command := `echo "license=${WHATAP_LICENSE}" > /whatap-agent/whatap.conf && echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf`
-
-		// Add Python-specific configuration using environment variables
-		command += ` && echo "app_name=${APP_NAME}" >> /whatap-agent/whatap.conf`
-		command += ` && echo "app_process_name=${APP_PROCESS_NAME}" >> /whatap-agent/whatap.conf`
-
-		// Add additional arguments if provided
-		if len(target.AdditionalArgs) > 0 {
-			for key, value := range target.AdditionalArgs {
-				// Skip already handled keys
-				if key != "app_name" && key != "app_process_name" && key != "OKIND" {
-					command += fmt.Sprintf(` && echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
-				}
-			}
-		}
-
-		configInitContainer := corev1.Container{
-			Name:    "whatap-python-config-init",
-			Image:   "alpine:3.18",
-			Command: []string{"sh", "-c"},
-			Args:    []string{command},
-			Env: []corev1.EnvVar{
-				getWhatapLicenseEnvVar(cr),
-				getWhatapHostEnvVar(cr),
-				getWhatapPortEnvVar(cr),
-				corev1.EnvVar{Name: "APP_NAME", Value: appName},
-				corev1.EnvVar{Name: "APP_PROCESS_NAME", Value: appProcessName},
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
-			},
-		}
-		initContainers = append(initContainers, configInitContainer)
-	} else {
-		logger.Info("No configuration mode specified, skipping config init container", "language", lang)
 	}
 
 	podSpec.InitContainers = append(podSpec.InitContainers, initContainers...)
@@ -214,134 +398,11 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 
 	// 컨테이너별 환경변수 & 볼륨 마운트
 	for i, container := range podSpec.Containers {
-		switch lang {
-		case "java":
-			agentOption := "-javaagent:/whatap-agent/whatap.agent.java.jar"
-			podSpec.Containers[i].Env = injectJavaToolOptions(container.Env, agentOption, logger)
+		podSpec.Containers[i].Env = injectLanguageSpecificEnvVars(container, target, cr, lang, version, logger)
 
-			// 🔹 Java 전용 환경변수 추가 (CR 기반)
-			licenseEnv := getWhatapLicenseEnvVar(cr)
-			licenseEnv.Name = "license" // Java agent expects "license" env var name
-
-			hostEnv := getWhatapHostEnvVar(cr)
-			hostEnv.Name = "whatap.server.host" // Java agent expects "whatap.server.host" env var name
-
-			hostPort := getWhatapPortEnvVar(cr)
-			hostPort.Name = "whatap.server.port"
-
-			podSpec.Containers[i].Env = append(podSpec.Containers[i].Env,
-				licenseEnv,
-				hostEnv,
-				hostPort,
-				corev1.EnvVar{Name: "whatap.micro.enabled", Value: "true"},
-				corev1.EnvVar{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
-				corev1.EnvVar{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
-				corev1.EnvVar{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
-			)
-		case "python":
-			logger.Info("Configuring Python APM agent injection with whatap.conf", "version", version)
-
-			// Get app_name, app_process_name, OKIND from AdditionalArgs
-			appName := container.Name  // default to container name
-			appProcessName := "python" // default value
-			okind := ""                // optional
-
-			if target.AdditionalArgs != nil {
-				if val, exists := target.AdditionalArgs["app_name"]; exists {
-					appName = val
-				}
-				if val, exists := target.AdditionalArgs["app_process_name"]; exists {
-					appProcessName = val
-				}
-				if val, exists := target.AdditionalArgs["OKIND"]; exists {
-					okind = val
-				}
-			}
-
-			// 🔹 Python 전용 환경변수 추가 (CR 기반)
-			licenseEnv := getWhatapLicenseEnvVar(cr)
-			licenseEnv.Name = "license" // Python agent expects "license" env var name
-
-			hostEnv := getWhatapHostEnvVar(cr)
-			hostEnv.Name = "whatap_server_host" // Python agent expects "whatap_server_host" env var name
-
-			portEnv := getWhatapPortEnvVar(cr)
-			portEnv.Name = "whatap_server_port"
-
-			// Python APM 환경변수 구성
-			envVars := []corev1.EnvVar{
-				// Whatap 서버 연결 정보
-				licenseEnv,
-				hostEnv,
-				portEnv,
-
-				// Python 애플리케이션 정보
-				{Name: "app_name", Value: appName},
-				{Name: "app_process_name", Value: appProcessName},
-
-				// Python 에이전트 경로 설정
-				{Name: "WHATAP_HOME", Value: "/whatap-agent"},
-				{Name: "PATH", Value: "/whatap-agent/bin:$PATH"},
-
-				// Whatap 설정
-				{Name: "whatap.micro.enabled", Value: "true"},
-
-				// Kubernetes 메타데이터
-				{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
-				{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
-				{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
-			}
-
-			// Add OKIND if provided
-			if okind != "" {
-				envVars = append(envVars, corev1.EnvVar{Name: "OKIND", Value: okind})
-			}
-
-			// 🔥 PYTHONPATH 안전하게 주입 (OpenTelemetry 방식)
-			envVars = injectPythonPath(envVars, "/whatap-agent/bootstrap", logger)
-
-			podSpec.Containers[i].Env = append(container.Env, envVars...)
-
-			// 🔥 핵심: 사용자 애플리케이션 명령어를 whatap-start-agent로 래핑
-			if len(podSpec.Containers[i].Command) > 0 || len(podSpec.Containers[i].Args) > 0 {
-				originalCommand := podSpec.Containers[i].Command
-				originalArgs := podSpec.Containers[i].Args
-
-				// whatap-start-agent 뒤에 원본 명령어와 인자들을 직접 전달
-				newArgs := []string{}
-				if len(originalCommand) > 0 {
-					newArgs = append(newArgs, originalCommand...)
-				}
-				if len(originalArgs) > 0 {
-					newArgs = append(newArgs, originalArgs...)
-				}
-
-				logger.Info("Wrapping Python application command with whatap-start-agent", "originalCommand", originalCommand, "originalArgs", originalArgs)
-
-				podSpec.Containers[i].Command = []string{"/whatap-agent/bin/whatap-start-agent"}
-				podSpec.Containers[i].Args = newArgs
-			}
-		case "nodejs":
-			// 🔹 Node.js 전용 환경변수 추가 (CR 기반)
-			licenseEnv := getWhatapLicenseEnvVar(cr)
-			licenseEnv.Name = "WHATAP_LICENSE" // Node.js agent expects "WHATAP_LICENSE" env var name
-
-			hostEnv := getWhatapHostEnvVar(cr)
-			hostEnv.Name = "WHATAP_SERVER_HOST" // Node.js agent expects "WHATAP_SERVER_HOST" env var name
-
-			podSpec.Containers[i].Env = append(container.Env,
-				licenseEnv,
-				hostEnv,
-				corev1.EnvVar{Name: "WHATAP_MICRO_ENABLED", Value: "true"},
-			)
-		case "php", "dotnet", "golang":
-			podSpec.Containers[i].Env = append(container.Env,
-				corev1.EnvVar{Name: "NODE_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"}}},
-				corev1.EnvVar{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
-				corev1.EnvVar{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
-			)
-		default:
-			logger.Info("Unsupported language. Skipping env injection.", "language", lang)
+		// Python 전용: 사용자 애플리케이션 명령어를 whatap-start-agent로 래핑
+		if lang == "python" {
+			wrapPythonCommand(&podSpec.Containers[i], logger)
 		}
 
 		// 공통 볼륨 마운트
@@ -417,6 +478,72 @@ func hasLabels(labels, selector map[string]string) bool {
 	return true
 }
 
+// matchesLabelExpressions checks if labels match the given expressions
+func matchesLabelExpressions(labels map[string]string, expressions []monitoringv2alpha1.LabelSelectorRequirement) bool {
+	for _, req := range expressions {
+		if !matchesLabelExpression(labels, req) {
+			return false
+		}
+	}
+	return true
+}
+
+// matchesLabelExpression checks if labels match a single expression
+func matchesLabelExpression(labels map[string]string, req monitoringv2alpha1.LabelSelectorRequirement) bool {
+	switch req.Operator {
+	case "In":
+		return matchesInOperator(labels, req)
+	case "NotIn":
+		return matchesNotInOperator(labels, req)
+	case "Exists":
+		return matchesExistsOperator(labels, req)
+	case "DoesNotExist":
+		return matchesDoesNotExistOperator(labels, req)
+	default:
+		return false
+	}
+}
+
+// matchesInOperator checks if label value is in the specified values
+func matchesInOperator(labels map[string]string, req monitoringv2alpha1.LabelSelectorRequirement) bool {
+	value, exists := labels[req.Key]
+	if !exists {
+		return false
+	}
+	for _, v := range req.Values {
+		if value == v {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesNotInOperator checks if label value is not in the specified values
+func matchesNotInOperator(labels map[string]string, req monitoringv2alpha1.LabelSelectorRequirement) bool {
+	value, exists := labels[req.Key]
+	if !exists {
+		return true
+	}
+	for _, v := range req.Values {
+		if value == v {
+			return false
+		}
+	}
+	return true
+}
+
+// matchesExistsOperator checks if label exists
+func matchesExistsOperator(labels map[string]string, req monitoringv2alpha1.LabelSelectorRequirement) bool {
+	_, exists := labels[req.Key]
+	return exists
+}
+
+// matchesDoesNotExistOperator checks if label does not exist
+func matchesDoesNotExistOperator(labels map[string]string, req monitoringv2alpha1.LabelSelectorRequirement) bool {
+	_, exists := labels[req.Key]
+	return !exists
+}
+
 // matchesSelector checks if the given labels match the selector
 func matchesSelector(labels map[string]string, selector monitoringv2alpha1.PodSelector) bool {
 	// Check matchLabels
@@ -425,66 +552,14 @@ func matchesSelector(labels map[string]string, selector monitoringv2alpha1.PodSe
 	}
 
 	// Check matchExpressions
-	for _, req := range selector.MatchExpressions {
-		switch req.Operator {
-		case "In":
-			// The label must exist and its value must be in the specified values
-			value, exists := labels[req.Key]
-			if !exists {
-				return false
-			}
-			found := false
-			for _, v := range req.Values {
-				if value == v {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return false
-			}
-		case "NotIn":
-			// If the label exists, its value must not be in the specified values
-			value, exists := labels[req.Key]
-			if exists {
-				for _, v := range req.Values {
-					if value == v {
-						return false
-					}
-				}
-			}
-		case "Exists":
-			// The label must exist
-			_, exists := labels[req.Key]
-			if !exists {
-				return false
-			}
-		case "DoesNotExist":
-			// The label must not exist
-			_, exists := labels[req.Key]
-			if exists {
-				return false
-			}
-		}
-	}
-
-	return true
+	return matchesLabelExpressions(labels, selector.MatchExpressions)
 }
 
 // matchesNamespaceSelector checks if the given namespace matches the selector
 func matchesNamespaceSelector(namespaceName string, namespaceLabels map[string]string, selector monitoringv2alpha1.NamespaceSelector) bool {
 	// Check matchNames
-	if len(selector.MatchNames) > 0 {
-		found := false
-		for _, name := range selector.MatchNames {
-			if namespaceName == name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
+	if !matchesNamespaceNames(namespaceName, selector.MatchNames) {
+		return false
 	}
 
 	// Check matchLabels
@@ -493,50 +568,21 @@ func matchesNamespaceSelector(namespaceName string, namespaceLabels map[string]s
 	}
 
 	// Check matchExpressions
-	for _, req := range selector.MatchExpressions {
-		switch req.Operator {
-		case "In":
-			// The label must exist and its value must be in the specified values
-			value, exists := namespaceLabels[req.Key]
-			if !exists {
-				return false
-			}
-			found := false
-			for _, v := range req.Values {
-				if value == v {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return false
-			}
-		case "NotIn":
-			// If the label exists, its value must not be in the specified values
-			value, exists := namespaceLabels[req.Key]
-			if exists {
-				for _, v := range req.Values {
-					if value == v {
-						return false
-					}
-				}
-			}
-		case "Exists":
-			// The label must exist
-			_, exists := namespaceLabels[req.Key]
-			if !exists {
-				return false
-			}
-		case "DoesNotExist":
-			// The label must not exist
-			_, exists := namespaceLabels[req.Key]
-			if exists {
-				return false
-			}
-		}
+	return matchesLabelExpressions(namespaceLabels, selector.MatchExpressions)
+}
+
+// matchesNamespaceNames checks if namespace name matches any of the specified names
+func matchesNamespaceNames(namespaceName string, matchNames []string) bool {
+	if len(matchNames) == 0 {
+		return true
 	}
 
-	return true
+	for _, name := range matchNames {
+		if namespaceName == name {
+			return true
+		}
+	}
+	return false
 }
 
 // getAgentImage returns the image name to use for the agent
