@@ -2,9 +2,9 @@ package controller
 
 import (
 	"context"
-	"os"
 	"time"
 
+	"github.com/whatap/whatap-operator/internal/config"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -281,48 +281,25 @@ func failurePtr(p admissionregistrationv1.FailurePolicyType) *admissionregistrat
 
 var sideEffectNone = admissionregistrationv1.SideEffectClassNone
 
-// populateCredentialsFromEnv populates the CR.Spec fields from environment variables if they are empty
+// populateCredentialsFromEnv populates the CR.Spec fields from environment variables unconditionally
 func (r *WhatapAgentReconciler) populateCredentialsFromEnv(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) (bool, error) {
 	logger := log.FromContext(ctx)
 	updated := false
 
-	// Populate License if empty
-	if whatapAgent.Spec.License == "" {
-		license := os.Getenv("WHATAP_LICENSE")
-		if license != "" {
-			whatapAgent.Spec.License = license
-			logger.Info("Populated License from environment variable", "license", license)
-			updated = true
-		}
+	// Environment variables are now used directly without updating CR
+	license := config.GetWhatapLicense()
+	if license != "" {
+		logger.Info("Using License from environment variable", "license", license)
 	}
 
-	// Populate Host if empty
-	if whatapAgent.Spec.Host == "" {
-		host := os.Getenv("WHATAP_HOST")
-		if host != "" {
-			whatapAgent.Spec.Host = host
-			logger.Info("Populated Host from environment variable", "host", host)
-			updated = true
-		}
+	host := config.GetWhatapHost()
+	if host != "" {
+		logger.Info("Using Host from environment variable", "host", host)
 	}
 
-	// Populate Port if empty
-	if whatapAgent.Spec.Port == "" {
-		port := os.Getenv("WHATAP_PORT")
-		if port != "" {
-			whatapAgent.Spec.Port = port
-			logger.Info("Populated Port from environment variable", "port", port)
-			updated = true
-		}
-	}
-
-	// Update the CR if any fields were populated
-	if updated {
-		if err := r.Update(ctx, whatapAgent); err != nil {
-			logger.Error(err, "Failed to update WhatapAgent CR with populated credentials")
-			return false, err
-		}
-		logger.Info("Successfully updated WhatapAgent CR with credentials from environment variables")
+	port := config.GetWhatapPort()
+	if port != "" {
+		logger.Info("Using Port from environment variable", "port", port)
 	}
 
 	return updated, nil

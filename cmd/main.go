@@ -44,6 +44,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/whatap/whatap-operator/internal/config"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	"github.com/whatap/whatap-operator/internal/controller"
 	webhookmonitoringv2alpha1 "github.com/whatap/whatap-operator/internal/webhook/v2alpha1"
@@ -124,7 +125,7 @@ func main() {
 	var tlsOpts []func(*tls.Config)
 
 	//env에서 기본 네임스페이스 읽기
-	defaultNS := os.Getenv("WHATAP_DEFAULT_NAMESPACE")
+	defaultNS := config.GetWhatapDefaultNamespace()
 	if defaultNS == "" {
 		// (안전장치) ServiceAccount 토큰에 붙은 파일 경로로도 읽을 수 있음
 		if b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
@@ -280,7 +281,7 @@ func main() {
 		os.Exit(1)
 	}
 	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+	if config.GetEnableWebhooks() != "false" {
 		if err = webhookmonitoringv2alpha1.SetupWhatapAgentWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "WhatapAgent")
 			os.Exit(1)

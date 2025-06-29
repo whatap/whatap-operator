@@ -2,16 +2,19 @@ package v2alpha1
 
 import (
 	"fmt"
+
 	"github.com/go-logr/logr"
+	"github.com/whatap/whatap-operator/internal/config"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	corev1 "k8s.io/api/core/v1"
 )
 
 // Helper functions to get environment variables for Whatap credentials
-// These functions use values from the CR spec, which are guaranteed to be populated
+// These functions read values directly from environment variables
 
 func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
-	return corev1.EnvVar{Name: "WHATAP_LICENSE", Value: cr.Spec.License}
+	license := config.GetWhatapLicense()
+	return corev1.EnvVar{Name: "WHATAP_LICENSE", Value: license}
 }
 
 // createAgentInitContainers creates the appropriate init containers based on language
@@ -310,9 +313,9 @@ func injectBasicKubernetesEnvVars(container corev1.Container) []corev1.EnvVar {
 
 // getPythonEnvConfig extracts Python environment configuration from additional args
 func getPythonEnvConfig(containerName string, additionalArgs map[string]string) (string, string, string) {
-	appName := containerName // default to container name
+	appName := containerName   // default to container name
 	appProcessName := "python" // default value
-	okind := "" // optional
+	okind := ""                // optional
 
 	if additionalArgs != nil {
 		if val, exists := additionalArgs["app_name"]; exists {
@@ -352,11 +355,13 @@ func wrapPythonCommand(container *corev1.Container, logger logr.Logger) {
 }
 
 func getWhatapHostEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
-	return corev1.EnvVar{Name: "WHATAP_HOST", Value: cr.Spec.Host}
+	host := config.GetWhatapHost()
+	return corev1.EnvVar{Name: "WHATAP_HOST", Value: host}
 }
 
 func getWhatapPortEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
-	return corev1.EnvVar{Name: "WHATAP_PORT", Value: cr.Spec.Port}
+	port := config.GetWhatapPort()
+	return corev1.EnvVar{Name: "WHATAP_PORT", Value: port}
 }
 
 // Deployment 처리
@@ -412,7 +417,6 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 		})
 	}
 }
-
 
 // PYTHONPATH 안전하게 주입 (OpenTelemetry 방식)
 func injectPythonPath(envVars []corev1.EnvVar, bootstrapPath string, logger logr.Logger) []corev1.EnvVar {

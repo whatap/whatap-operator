@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	"github.com/whatap/whatap-operator/internal/config"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 )
 
@@ -78,7 +78,7 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		whatapWebhookLogger.V(1).Info("WhatapAgent CR not found, skipping APM injection", "pod", pod.GetNamespace()+"/"+pod.GetName(), "error", err.Error())
 		return nil
 	}
-	defaultNS := os.Getenv("WHATAP_DEFAULT_NAMESPACE")
+	defaultNS := config.GetWhatapDefaultNamespace()
 	if defaultNS == "" {
 		defaultNS = "whatap-monitoring"
 	}
@@ -194,7 +194,7 @@ func (d *WhatapAgentCredentialDefaulter) Default(ctx context.Context, obj runtim
 	whatapWebhookLogger.Info("Defaulting WhatapAgent credentials", "name", whatapagent.GetName())
 
 	// Get the default namespace for whatap-monitoring
-	defaultNS := os.Getenv("WHATAP_DEFAULT_NAMESPACE")
+	defaultNS := config.GetWhatapDefaultNamespace()
 	if defaultNS == "" {
 		defaultNS = "whatap-monitoring"
 	}
@@ -205,31 +205,20 @@ func (d *WhatapAgentCredentialDefaulter) Default(ctx context.Context, obj runtim
 		namespace = defaultNS
 	}
 
-	// Populate License if empty
-	if whatapagent.Spec.License == "" {
-		license := os.Getenv("WHATAP_LICENSE")
-		if license != "" {
-			whatapagent.Spec.License = license
-			whatapWebhookLogger.Info("Populated License from environment variable", "namespace", namespace)
-		}
+	// Environment variables are now used directly without updating CR
+	license := config.GetWhatapLicense()
+	if license != "" {
+		whatapWebhookLogger.Info("Using License from environment variable", "namespace", namespace)
 	}
 
-	// Populate Host if empty
-	if whatapagent.Spec.Host == "" {
-		host := os.Getenv("WHATAP_HOST")
-		if host != "" {
-			whatapagent.Spec.Host = host
-			whatapWebhookLogger.Info("Populated Host from environment variable", "namespace", namespace)
-		}
+	host := config.GetWhatapHost()
+	if host != "" {
+		whatapWebhookLogger.Info("Using Host from environment variable", "namespace", namespace)
 	}
 
-	// Populate Port if empty
-	if whatapagent.Spec.Port == "" {
-		port := os.Getenv("WHATAP_PORT")
-		if port != "" {
-			whatapagent.Spec.Port = port
-			whatapWebhookLogger.Info("Populated Port from environment variable", "namespace", namespace)
-		}
+	port := config.GetWhatapPort()
+	if port != "" {
+		whatapWebhookLogger.Info("Using Port from environment variable", "namespace", namespace)
 	}
 
 	return nil
