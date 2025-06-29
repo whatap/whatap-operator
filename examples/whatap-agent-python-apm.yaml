@@ -1,0 +1,27 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  # Secret에서 자동으로 가져옴 (권장 방식)
+  features:
+    apm:
+      instrumentation:
+        enabled: true
+        targets:
+          - name: "python-fastapi"
+            enabled: true
+            language: "python"
+            whatapApmVersions:
+              python: "1.8.5"
+            podSelector:
+              matchLabels:
+                app: "python-app"
+            namespaceSelector:
+              matchNames:
+                - "default"
+            # Python 전용 설정값들
+            additionalArgs:
+              app_name: "my-python-fastapi-app"        # 식별을 위한 이름
+              app_process_name: "uvicorn"               # 실제 프로세스 이름 (uvicorn, gunicorn, python 등)
+              OKIND: "forecast"                         # 분류를 위한 이름 (옵션)
