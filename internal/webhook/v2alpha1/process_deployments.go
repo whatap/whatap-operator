@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/whatap/whatap-operator/internal/config"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
+	"github.com/whatap/whatap-operator/internal/config"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -17,20 +17,33 @@ func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 	return corev1.EnvVar{Name: "WHATAP_LICENSE", Value: license}
 }
 
-// createAgentInitContainers creates the appropriate init containers based on language
-func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, lang, version string, logger logr.Logger) []corev1.Container {
+func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, lang, version string, logger logr.Logger) []corev1.Container {
 	baseVolumeMount := corev1.VolumeMount{
 		Name:      "whatap-agent-volume",
 		MountPath: "/whatap-agent",
 	}
 
 	if lang == "python" {
-		logger.Info("Using Python APM bootstrap init container", "version", version)
+		logger.Info("Using Python APM bootstrap init container with new structure", "version", version)
+
+		// Get Python app configuration
+		appName, appProcessName := getPythonAppConfig(target.AdditionalArgs)
+
+		// Prepare environment variables for Python InitContainer
+		envVars := []corev1.EnvVar{
+			getWhatapLicenseEnvVar(cr),
+			getWhatapHostEnvVar(cr),
+			getWhatapPortEnvVar(cr),
+			{Name: "APP_NAME", Value: appName},
+			{Name: "APP_PROCESS_NAME", Value: appProcessName},
+		}
+
 		return []corev1.Container{
 			{
 				Name:         "whatap-python-bootstrap-init",
 				Image:        getAgentImage(target, lang, version),
 				Command:      []string{"/init.sh"},
+				Env:          envVars,
 				VolumeMounts: []corev1.VolumeMount{baseVolumeMount},
 			},
 		}
@@ -46,7 +59,6 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, lang, versi
 	}
 }
 
-// createConfigInitContainer creates configuration init container based on mode and language
 func createConfigInitContainer(target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, lang string, logger logr.Logger) (*corev1.Container, *corev1.Volume) {
 	baseEnvVars := []corev1.EnvVar{
 		getWhatapLicenseEnvVar(cr),
@@ -62,7 +74,9 @@ func createConfigInitContainer(target monitoringv2alpha1.TargetSpec, cr monitori
 	case "java":
 		return createJavaConfigContainer(target, baseEnvVars, logger), nil
 	case "python":
-		return createPythonConfigContainer(target, baseEnvVars, logger), nil
+		// Python uses new structure with config generated in InitContainer
+		logger.Info("Python uses new structure with config generated in InitContainer, skipping config init container", "language", lang)
+		return nil, nil
 	default:
 		logger.Info("No configuration mode specified, skipping config init container", "language", lang)
 		return nil, nil
@@ -258,8 +272,8 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 		{Name: "app_name", Value: appName},
 		{Name: "app_process_name", Value: appProcessName},
 
-		// Python 에이전트 경로 설정
-		{Name: "WHATAP_HOME", Value: "/whatap-agent"},
+		// Python 에이전트 경로 설정 (새로운 구조)
+		{Name: "WHATAP_HOME", Value: "/whatap-agent/whatap_home"},
 
 		// Whatap 설정
 		{Name: "whatap.micro.enabled", Value: "true"},
@@ -275,8 +289,8 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 		envVars = append(envVars, corev1.EnvVar{Name: "OKIND", Value: okind})
 	}
 
-	// PYTHONPATH 안전하게 주입 (OpenTelemetry 방식)
-	envVars = injectPythonPath(envVars, "/whatap-agent/bootstrap", logger)
+	// PYTHONPATH 안전하게 주입 (새로운 구조)
+	envVars = injectPythonPath(envVars, "/whatap-agent/python-apm/whatap/bootstrap", logger)
 
 	return append(container.Env, envVars...)
 }
@@ -379,7 +393,7 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	}
 
 	// 1️⃣ InitContainer - 에이전트 복사
-	initContainers := createAgentInitContainers(target, lang, version, logger)
+	initContainers := createAgentInitContainers(target, cr, lang, version, logger)
 
 	// 2️⃣ Configuration init container 추가
 	configContainer, configVolume := createConfigInitContainer(target, cr, lang, logger)
@@ -404,9 +418,10 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	for i, container := range podSpec.Containers {
 		podSpec.Containers[i].Env = injectLanguageSpecificEnvVars(container, target, cr, lang, version, logger)
 
-		// Python 전용: 사용자 애플리케이션 명령어를 whatap-start-agent로 래핑
+		// Python 전용: 새로운 구조에서는 sitecustomize.py를 통한 자동 활성화 사용
+		// wrapPythonCommand는 더 이상 필요하지 않음 (OpenTelemetry 방식)
 		if lang == "python" {
-			wrapPythonCommand(&podSpec.Containers[i], logger)
+			logger.Info("Using sitecustomize.py for automatic Python APM activation, no command wrapping needed")
 		}
 
 		// 공통 볼륨 마운트
