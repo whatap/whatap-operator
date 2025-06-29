@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/whatap/whatap-operator/internal/config"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
+	"github.com/whatap/whatap-operator/internal/config"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,6 +39,7 @@ type WhatapAgentReconciler struct {
 }
 
 func (r *WhatapAgentReconciler) ensureWebhookTLSSecret(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
+	logger := log.FromContext(ctx)
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      webhookSecretName,
@@ -47,6 +48,13 @@ func (r *WhatapAgentReconciler) ensureWebhookTLSSecret(ctx context.Context, what
 	}
 
 	// Set WhatapAgent instance as the owner and controller
+	logger.Info("Setting controller reference for resource", 
+		"resourceType", "Secret", 
+		"resourceName", secret.Name, 
+		"resourceNamespace", secret.Namespace,
+		"ownerType", "WhatapAgent",
+		"ownerName", whatapAgent.Name,
+		"ownerNamespace", whatapAgent.Namespace)
 	if err := controllerutil.SetControllerReference(whatapAgent, secret, r.Scheme); err != nil {
 		return err
 	}
@@ -173,6 +181,7 @@ func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
 }
 
 func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
+	logger := log.FromContext(ctx)
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      webhookServiceName,
@@ -185,6 +194,13 @@ func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context, whatap
 	}
 
 	// Set WhatapAgent instance as the owner and controller
+	logger.Info("Setting controller reference for resource", 
+		"resourceType", "Service", 
+		"resourceName", svc.Name, 
+		"resourceNamespace", svc.Namespace,
+		"ownerType", "WhatapAgent",
+		"ownerName", whatapAgent.Name,
+		"ownerNamespace", whatapAgent.Namespace)
 	if err := controllerutil.SetControllerReference(whatapAgent, svc, r.Scheme); err != nil {
 		return err
 	}
@@ -206,6 +222,7 @@ func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context, whatap
 	return err
 }
 func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
+	logger := log.FromContext(ctx)
 	mwc := &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: webhookConfigurationName,
@@ -213,6 +230,13 @@ func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.C
 	}
 
 	// Set WhatapAgent instance as the owner and controller
+	logger.Info("Setting controller reference for resource", 
+		"resourceType", "MutatingWebhookConfiguration", 
+		"resourceName", mwc.Name, 
+		"resourceNamespace", mwc.Namespace,
+		"ownerType", "WhatapAgent",
+		"ownerName", whatapAgent.Name,
+		"ownerNamespace", whatapAgent.Namespace)
 	if err := controllerutil.SetControllerReference(whatapAgent, mwc, r.Scheme); err != nil {
 		return err
 	}
@@ -281,10 +305,9 @@ func failurePtr(p admissionregistrationv1.FailurePolicyType) *admissionregistrat
 
 var sideEffectNone = admissionregistrationv1.SideEffectClassNone
 
-// populateCredentialsFromEnv populates the CR.Spec fields from environment variables unconditionally
-func (r *WhatapAgentReconciler) populateCredentialsFromEnv(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) (bool, error) {
+// populateCredentialsFromEnv logs environment variables usage
+func (r *WhatapAgentReconciler) populateCredentialsFromEnv(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
 	logger := log.FromContext(ctx)
-	updated := false
 
 	// Environment variables are now used directly without updating CR
 	license := config.GetWhatapLicense()
@@ -302,7 +325,7 @@ func (r *WhatapAgentReconciler) populateCredentialsFromEnv(ctx context.Context, 
 		logger.Info("Using Port from environment variable", "port", port)
 	}
 
-	return updated, nil
+	return nil
 }
 
 // Reconcile
@@ -341,16 +364,6 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	logger.Info("Reconciling WhatapAgent", "Name", whatapAgent.Name)
-
-	// Populate credentials from environment variables if they are empty
-	if updated, err := r.populateCredentialsFromEnv(ctx, whatapAgent); err != nil {
-		logger.Error(err, "Failed to populate credentials from environment variables")
-		return ctrl.Result{}, err
-	} else if updated {
-		// If credentials were updated, requeue to process with the updated CR
-		logger.Info("Credentials were populated from environment variables, requeuing")
-		return ctrl.Result{Requeue: true}, nil
-	}
 
 	// --- 1. create webhook service
 	if err := r.ensureWebhookService(ctx, whatapAgent); err != nil {

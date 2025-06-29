@@ -260,7 +260,6 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 
 		// Python 에이전트 경로 설정
 		{Name: "WHATAP_HOME", Value: "/whatap-agent"},
-		{Name: "PATH", Value: "/whatap-agent/bin:$PATH"},
 
 		// Whatap 설정
 		{Name: "whatap.micro.enabled", Value: "true"},
