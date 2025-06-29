@@ -5,7 +5,6 @@ import (
 	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	corev1 "k8s.io/api/core/v1"
-	"strings"
 )
 
 // Helper functions to get environment variables for Whatap credentials
@@ -280,8 +279,7 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 				{Name: "app_name", Value: appName},
 				{Name: "app_process_name", Value: appProcessName},
 
-				// Python 에이전트 경로 설정 (가상환경 자동 호환)
-				{Name: "PYTHONPATH", Value: "/whatap-agent/bootstrap:$PYTHONPATH"},
+				// Python 에이전트 경로 설정
 				{Name: "WHATAP_HOME", Value: "/whatap-agent"},
 				{Name: "PATH", Value: "/whatap-agent/bin:$PATH"},
 
@@ -299,15 +297,29 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 				envVars = append(envVars, corev1.EnvVar{Name: "OKIND", Value: okind})
 			}
 
+			// 🔥 PYTHONPATH 안전하게 주입 (OpenTelemetry 방식)
+			envVars = injectPythonPath(envVars, "/whatap-agent/bootstrap", logger)
+
 			podSpec.Containers[i].Env = append(container.Env, envVars...)
 
 			// 🔥 핵심: 사용자 애플리케이션 명령어를 whatap-start-agent로 래핑
 			if len(podSpec.Containers[i].Command) > 0 || len(podSpec.Containers[i].Args) > 0 {
-				originalCommand := buildOriginalCommand(podSpec.Containers[i].Command, podSpec.Containers[i].Args)
-				logger.Info("Wrapping Python application command with whatap-start-agent", "originalCommand", originalCommand)
+				originalCommand := podSpec.Containers[i].Command
+				originalArgs := podSpec.Containers[i].Args
+
+				// whatap-start-agent 뒤에 원본 명령어와 인자들을 직접 전달
+				newArgs := []string{}
+				if len(originalCommand) > 0 {
+					newArgs = append(newArgs, originalCommand...)
+				}
+				if len(originalArgs) > 0 {
+					newArgs = append(newArgs, originalArgs...)
+				}
+
+				logger.Info("Wrapping Python application command with whatap-start-agent", "originalCommand", originalCommand, "originalArgs", originalArgs)
 
 				podSpec.Containers[i].Command = []string{"/whatap-agent/bin/whatap-start-agent"}
-				podSpec.Containers[i].Args = []string{"sh", "-c", originalCommand}
+				podSpec.Containers[i].Args = newArgs
 			}
 		case "nodejs":
 			// 🔹 Node.js 전용 환경변수 추가 (CR 기반)
@@ -340,28 +352,35 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	}
 }
 
-// buildOriginalCommand reconstructs the original command from Command and Args
-func buildOriginalCommand(command []string, args []string) string {
-	var fullCommand []string
 
-	if len(command) > 0 {
-		fullCommand = append(fullCommand, command...)
-	}
-	if len(args) > 0 {
-		fullCommand = append(fullCommand, args...)
-	}
-
-	// 명령어를 안전하게 결합 (공백이 포함된 인자들을 위해 쿼팅)
-	var quotedCommand []string
-	for _, cmd := range fullCommand {
-		if strings.Contains(cmd, " ") {
-			quotedCommand = append(quotedCommand, fmt.Sprintf(`"%s"`, cmd))
-		} else {
-			quotedCommand = append(quotedCommand, cmd)
+// PYTHONPATH 안전하게 주입 (OpenTelemetry 방식)
+func injectPythonPath(envVars []corev1.EnvVar, bootstrapPath string, logger logr.Logger) []corev1.EnvVar {
+	found := false
+	for i, env := range envVars {
+		if env.Name == "PYTHONPATH" {
+			if env.ValueFrom != nil {
+				logger.Info("PYTHONPATH is set via ConfigMap/Secret. Skipping injection.")
+				found = true
+				break
+			} else {
+				// 기존 PYTHONPATH 앞에 bootstrap 경로 추가
+				if env.Value == "" {
+					envVars[i].Value = bootstrapPath
+				} else {
+					envVars[i].Value = bootstrapPath + ":" + env.Value
+				}
+				found = true
+				break
+			}
 		}
 	}
-
-	return strings.Join(quotedCommand, " ")
+	if !found {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "PYTHONPATH",
+			Value: bootstrapPath,
+		})
+	}
+	return envVars
 }
 
 // JAVA_TOOL_OPTIONS 안전하게 주입
