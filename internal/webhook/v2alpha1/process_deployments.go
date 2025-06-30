@@ -40,11 +40,12 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 
 		return []corev1.Container{
 			{
-				Name:         "whatap-python-bootstrap-init",
-				Image:        getAgentImage(target, lang, version),
-				Command:      []string{"/init.sh"},
-				Env:          envVars,
-				VolumeMounts: []corev1.VolumeMount{baseVolumeMount},
+				Name:            "whatap-python-bootstrap-init",
+				Image:           getAgentImage(target, lang, version),
+				ImagePullPolicy: corev1.PullAlways,
+				Command:         []string{"/init.sh"},
+				Env:             envVars,
+				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 			},
 		}
 	}
@@ -52,9 +53,10 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 	// 기존 Java 및 기타 언어용 InitContainer
 	return []corev1.Container{
 		{
-			Name:         "whatap-agent-init",
-			Image:        getAgentImage(target, lang, version),
-			VolumeMounts: []corev1.VolumeMount{baseVolumeMount},
+			Name:            "whatap-agent-init",
+			Image:           getAgentImage(target, lang, version),
+			ImagePullPolicy: corev1.PullAlways,
+			VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 		},
 	}
 }
@@ -90,11 +92,12 @@ func createConfigMapBasedContainer(target monitoringv2alpha1.TargetSpec, baseEnv
 	command := buildConfigCommand("cp /config-volume/whatap.conf /whatap-agent/ && ", target.AdditionalArgs)
 
 	container := &corev1.Container{
-		Name:    "whatap-config-init",
-		Image:   "alpine:3.18",
-		Command: []string{"sh", "-c"},
-		Args:    []string{command},
-		Env:     baseEnvVars,
+		Name:            "whatap-config-init",
+		Image:           "alpine:3.18",
+		ImagePullPolicy: corev1.PullAlways,
+		Command:         []string{"sh", "-c"},
+		Args:            []string{command},
+		Env:             baseEnvVars,
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
 			{Name: "config-volume", MountPath: "/config-volume"},
@@ -122,11 +125,12 @@ func createJavaConfigContainer(target monitoringv2alpha1.TargetSpec, baseEnvVars
 	command := buildConfigCommand("", target.AdditionalArgs)
 
 	return &corev1.Container{
-		Name:    "whatap-config-init",
-		Image:   "alpine:3.18",
-		Command: []string{"sh", "-c"},
-		Args:    []string{command},
-		Env:     baseEnvVars,
+		Name:            "whatap-config-init",
+		Image:           "alpine:3.18",
+		ImagePullPolicy: corev1.PullAlways,
+		Command:         []string{"sh", "-c"},
+		Args:            []string{command},
+		Env:             baseEnvVars,
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
 		},
@@ -146,11 +150,12 @@ func createPythonConfigContainer(target monitoringv2alpha1.TargetSpec, baseEnvVa
 	)
 
 	return &corev1.Container{
-		Name:    "whatap-python-config-init",
-		Image:   "alpine:3.18",
-		Command: []string{"sh", "-c"},
-		Args:    []string{command},
-		Env:     envVars,
+		Name:            "whatap-python-config-init",
+		Image:           "alpine:3.18",
+		ImagePullPolicy: corev1.PullAlways,
+		Command:         []string{"sh", "-c"},
+		Args:            []string{command},
+		Env:             envVars,
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
 		},
