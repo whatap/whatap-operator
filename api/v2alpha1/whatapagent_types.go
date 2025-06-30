@@ -184,6 +184,9 @@ type MasterAgentComponentSpec struct {
 	// PodAnnotations to be added to the MasterAgent pod template
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+	// MasterAgentContainer defines configuration specific to the whatap-master-agent container
+	// +optional
+	MasterAgentContainer *ContainerSpec `json:"masterAgentContainer,omitempty"`
 }
 type NodeAgentComponentSpec struct {
 	// +kubebuilder:default=false
@@ -215,6 +218,10 @@ type NodeAgentComponentSpec struct {
 
 // ContainerSpec defines configuration for a specific container
 type ContainerSpec struct {
+	// Image defines the container image to use
+	// If not provided, the default image will be used
+	// +optional
+	Image string `json:"image,omitempty"`
 	// Resources defines the resource requirements for the container
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`

@@ -149,6 +149,42 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 		}
 	}
 
+	// Get master agent container image
+	masterImage := image
+	if masterSpec.MasterAgentContainer != nil && masterSpec.MasterAgentContainer.Image != "" {
+		masterImage = masterSpec.MasterAgentContainer.Image
+	}
+
+	// Get master agent container resources
+	masterResources := *res
+	if masterSpec.MasterAgentContainer != nil && masterSpec.MasterAgentContainer.Resources.Limits != nil {
+		masterResources = masterSpec.MasterAgentContainer.Resources
+	}
+
+	// Get master agent container environment variables
+	masterEnvs := []corev1.EnvVar{
+		getWhatapLicenseEnvVar(cr),
+		getWhatapHostEnvVar(cr),
+		getWhatapPortEnvVar(cr),
+		{
+			Name: "WHATAP_MEM_LIMIT",
+			ValueFrom: &corev1.EnvVarSource{
+				ResourceFieldRef: &corev1.ResourceFieldSelector{
+					ContainerName: "whatap-master-agent",
+					Resource:      "limits.memory",
+				},
+			},
+		},
+	}
+
+	// Add container-specific environment variables if provided
+	if masterSpec.MasterAgentContainer != nil && len(masterSpec.MasterAgentContainer.Envs) > 0 {
+		masterEnvs = append(masterEnvs, masterSpec.MasterAgentContainer.Envs...)
+	} else if len(masterSpec.Envs) > 0 {
+		// For backward compatibility, use the masterSpec.Envs if MasterAgentContainer.Envs is not provided
+		masterEnvs = append(masterEnvs, masterSpec.Envs...)
+	}
+
 	return appsv1.DeploymentSpec{
 		Replicas: int32Ptr(1),
 		Selector: &metav1.LabelSelector{
@@ -166,23 +202,10 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 				Containers: []corev1.Container{
 					{
 						Name:    "whatap-master-agent",
-						Image:   image,
+						Image:   masterImage,
 						Command: []string{"/bin/entrypoint.sh"},
 						Ports:   []corev1.ContainerPort{{ContainerPort: 6600}},
-						Env: []corev1.EnvVar{
-							getWhatapLicenseEnvVar(cr),
-							getWhatapHostEnvVar(cr),
-							getWhatapPortEnvVar(cr),
-							{
-								Name: "WHATAP_MEM_LIMIT",
-								ValueFrom: &corev1.EnvVarSource{
-									ResourceFieldRef: &corev1.ResourceFieldSelector{
-										ContainerName: "whatap-master-agent",
-										Resource:      "limits.memory",
-									},
-								},
-							},
-						},
+						Env:     masterEnvs,
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "start-script-volume",
@@ -195,7 +218,7 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 								MountPath: "/whatap_conf",
 							},
 						},
-						Resources: *res,
+						Resources: masterResources,
 					},
 				},
 				Volumes: []corev1.Volume{
@@ -334,6 +357,12 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		helperResources = nodeSpec.NodeHelperContainer.Resources
 	}
 
+	// Get node helper container image
+	helperImage := image
+	if nodeSpec.NodeHelperContainer != nil && nodeSpec.NodeHelperContainer.Image != "" {
+		helperImage = nodeSpec.NodeHelperContainer.Image
+	}
+
 	// Get node helper container environment variables
 	helperEnvs := []corev1.EnvVar{
 		{
@@ -345,6 +374,12 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 	}
 	if nodeSpec.NodeHelperContainer != nil && len(nodeSpec.NodeHelperContainer.Envs) > 0 {
 		helperEnvs = append(helperEnvs, nodeSpec.NodeHelperContainer.Envs...)
+	}
+
+	// Get node agent container image
+	agentImage := image
+	if nodeSpec.NodeAgentContainer != nil && nodeSpec.NodeAgentContainer.Image != "" {
+		agentImage = nodeSpec.NodeAgentContainer.Image
 	}
 
 	// Get node agent container resources
@@ -405,7 +440,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 				Containers: []corev1.Container{
 					{
 						Name:      "whatap-node-helper",
-						Image:     image,
+						Image:     helperImage,
 						Command:   []string{"/data/agent/node/cadvisor_helper", "-port", "6801"},
 						Ports:     []corev1.ContainerPort{{Name: "helperport", ContainerPort: 6801}},
 						Env:       helperEnvs,
@@ -419,7 +454,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 					},
 					{
 						Name:      "whatap-node-agent",
-						Image:     image,
+						Image:     agentImage,
 						Command:   []string{"/bin/entrypoint.sh"},
 						Ports:     []corev1.ContainerPort{{Name: "nodeport", ContainerPort: 6600}},
 						Env:       agentEnvs,

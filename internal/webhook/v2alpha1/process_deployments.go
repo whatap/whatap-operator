@@ -43,7 +43,6 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 				Name:            "whatap-python-bootstrap-init",
 				Image:           getAgentImage(target, lang, version),
 				ImagePullPolicy: corev1.PullAlways,
-				Command:         []string{"/init.sh"},
 				Env:             envVars,
 				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 			},
