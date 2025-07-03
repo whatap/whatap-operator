@@ -214,6 +214,11 @@ type NodeAgentComponentSpec struct {
 	// NodeHelperContainer defines configuration specific to the whatap-node-helper container
 	// +optional
 	NodeHelperContainer *ContainerSpec `json:"nodeHelperContainer,omitempty"`
+	// Runtime specifies the container runtime (containerd, docker, crio)
+	// +kubebuilder:default="containerd"
+	// +kubebuilder:validation:Enum=containerd;docker;crio
+	// +optional
+	Runtime string `json:"runtime,omitempty"`
 }
 
 // ContainerSpec defines configuration for a specific container

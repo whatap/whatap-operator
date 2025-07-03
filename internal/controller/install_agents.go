@@ -426,6 +426,52 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		agentEnvs = append(agentEnvs, nodeSpec.Envs...)
 	}
 
+	// Get runtime configuration (default to containerd)
+	runtime := "containerd"
+	if nodeSpec.Runtime != "" {
+		runtime = nodeSpec.Runtime
+	}
+
+	// Define runtime socket configurations
+	var runtimeVolumeMount corev1.VolumeMount
+	var runtimeVolume corev1.Volume
+
+	switch runtime {
+	case "docker":
+		runtimeVolumeMount = corev1.VolumeMount{
+			Name:      "dockerdomainsocket",
+			MountPath: "/var/run/docker.sock",
+		}
+		runtimeVolume = corev1.Volume{
+			Name: "dockerdomainsocket",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/docker.sock"},
+			},
+		}
+	case "crio":
+		runtimeVolumeMount = corev1.VolumeMount{
+			Name:      "criodomainsocket",
+			MountPath: "/var/run/crio/crio.sock",
+		}
+		runtimeVolume = corev1.Volume{
+			Name: "criodomainsocket",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/crio/crio.sock"},
+			},
+		}
+	default: // containerd
+		runtimeVolumeMount = corev1.VolumeMount{
+			Name:      "containerddomainsocket",
+			MountPath: "/run/containerd/containerd.sock",
+		}
+		runtimeVolume = corev1.Volume{
+			Name: "containerddomainsocket",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{Path: "/run/containerd/containerd.sock"},
+			},
+		}
+	}
+
 	return appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{"name": "whatap-node-agent"},
@@ -449,7 +495,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true},
 							{Name: "hostsys", MountPath: "/sys", ReadOnly: true},
 							{Name: "hostdiskdevice", MountPath: "/dev/disk", ReadOnly: true},
-							{Name: "containerddomainsocket", MountPath: "/run/containerd/containerd.sock"},
+							runtimeVolumeMount,
 						},
 					},
 					{
@@ -486,7 +532,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						DefaultMode:          int32Ptr(0700),
 					}}},
 					{Name: "whatap-config-volume", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
-					{Name: "containerddomainsocket", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/containerd/containerd.sock"}}},
+					runtimeVolume,
 				},
 			},
 		},
