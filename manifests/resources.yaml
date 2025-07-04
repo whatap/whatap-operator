@@ -1,0 +1,328 @@
+
+
+# Whatap Operator All-in-One YAML
+# This file contains all the necessary resources to deploy the Whatap Operator
+# except for the CRD, which should be applied separately.
+
+# (uncomment if you can't use kubectl to create the namespace)
+# Namespace
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: whatap-monitoring
+
+# Operator ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: whatap-operator
+  namespace: whatap-monitoring
+
+---
+# Operator ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: whatap-operator
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  labels:
+    app.kubernetes.io/name: whatap-operator
+rules:
+  - apiGroups: ["monitoring.whatap.com"]
+    resources: ["whatapagents", "whatapagents/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "update", "patch","delete", "create"]
+
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]
+
+---
+# Operator ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: whatap-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: whatap-operator
+subjects:
+  - kind: ServiceAccount
+    name: whatap-operator
+    namespace: whatap-monitoring
+
+---
+# Operator Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whatap-operator
+  namespace: whatap-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "whatap-operator"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: "whatap-operator"
+    spec:
+      serviceAccountName: whatap-operator
+      containers:
+        - name: operator
+          image: ${WHATAP_OPERATOR_IMAGE:-public.ecr.aws/whatap/whatap-operator:latest}
+          imagePullPolicy: Always
+          command:
+            - /manager
+          ports:
+            - containerPort: 9443
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          env:
+            - name: WHATAP_DEFAULT_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: WHATAP_LICENSE
+              valueFrom:
+                secretKeyRef:
+                  name: whatap-credentials
+                  key: WHATAP_LICENSE
+            - name: WHATAP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: whatap-credentials
+                  key: WHATAP_HOST
+            - name: WHATAP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: whatap-credentials
+                  key: WHATAP_PORT
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/webhook/certs
+              readOnly: false
+      volumes:
+        - name: webhook-certs
+          emptyDir: {}
+
+---
+# Agent ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: whatap
+  namespace: whatap-monitoring
+
+---
+# Agent ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  name: whatap
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get","list","watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["*"]
+  - nonResourceURLs: [ "/metrics" ]
+    verbs: [ "*" ]
+
+---
+# Agent ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: whatap
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: whatap
+subjects:
+  - kind: ServiceAccount
+    name: whatap
+    namespace: whatap-monitoring
+
+---
+# Master Agent ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: master-start-script
+  namespace: whatap-monitoring
+  labels:
+    app.kubernetes.io/name: whatap-operator
+data:
+  entrypoint.sh: |
+    #!/usr/bin/env bash
+
+    mkdir -p /whatap_conf/confbase
+    if [ ! -f /whatap_conf/confbase/whatap_server.conf ]; then
+    cat >/whatap_conf/confbase/whatap_server.conf <<EOL
+    license=$WHATAP_LICENSE
+    whatap.server.host=$WHATAP_HOST
+    whatap.server.port=$WHATAP_PORT
+    EOL
+    fi
+
+    if [ ! -f /whatap_conf/whatap.master.conf ]; then
+    cat >/whatap_conf/whatap.master.conf <<EOL
+    master_agent_port=6600
+    license=$WHATAP_LICENSE
+    whatap.server.host=$WHATAP_HOST
+    whatap.server.port=$WHATAP_PORT
+    confbase_backup_enabled=true
+    EOL
+    fi
+
+    heapsize=$(echo "0.45 $WHATAP_MEM_LIMIT" | awk '{print int($1 * $2 / 1048576)}')
+    JAVA_OPTS="-Xms${heapsize}m -Xmx${heapsize}m"
+    JAVA_OPTS="$JAVA_OPTS -XX:+UseG1GC -XX:+UseStringDeduplication -XX:+ExitOnOutOfMemoryError -XshowSettings:vm"
+    JAVA_OPTS="$JAVA_OPTS -Dwhatap.home=/whatap_conf"
+
+    java $JAVA_OPTS -cp /data/agent/confbase/whatap.agent.confbase-1.0.0.jar:/data/agent/master/whatap.kube.master-1.0.1.jar whatap.agent.App
+
+---
+# Master Agent Service
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: whatap-monitoring
+  labels:
+    run: whatap-master-agent
+  name: whatap-master-agent
+spec:
+  clusterIP: None
+  ports:
+    - port: 6600
+      protocol: TCP
+      name: tcp-whatap-master-agent
+    - port: 6800
+      protocol: TCP
+      name: tcp-whatap-confbase
+  selector:
+    name: whatap-master-agent
+
+---
+# Node Agent ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-start-script
+  namespace: whatap-monitoring
+  labels:
+    app.kubernetes.io/name: whatap-operator
+data:
+  entrypoint.sh: |
+    #!/usr/bin/env bash
+
+    cat >/whatap_conf/whatap.node.conf <<EOL
+    license=$WHATAP_LICENSE
+    whatap.server.host=$WHATAP_HOST
+    whatap.server.port=$WHATAP_PORT
+    imageignore=k8s.gcr.io/pause:3.1,docker.io/openshift/origin-pod:v3.11.0
+    commandignore=/pause,/usr/bin/pod
+    whatap.name=$NODE_NAME
+    helper_embedded=false
+    EOL
+
+    heapsize=$(echo "0.45 $WHATAP_MEM_LIMIT" | awk '{print int($1 * $2 / 1048576)}')
+    JAVA_OPTS="-Xms${heapsize}m -Xmx${heapsize}m"
+    JAVA_OPTS="$JAVA_OPTS -XX:+UseG1GC -XX:+UseStringDeduplication -XX:+ExitOnOutOfMemoryError -XshowSettings:vm"
+    JAVA_OPTS="$JAVA_OPTS -Dwhatap.home=/whatap_conf"
+
+    java $JAVA_OPTS -jar /data/agent/node/whatap.kube.node-*.jar
+
+---
+# GPU ConfigMap
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "dcgm-exporter-csv"
+  namespace: whatap-monitoring
+data:
+  whatap-gpu.csv: |-
+    # Static configuration information
+    DCGM_FI_DRIVER_VERSION, label, Driver Version.                           # code 1
+    DCGM_FI_NVML_VERSION,   label, NVML Version.                               # code 2
+    DCGM_FI_DEV_NAME,       label, Device Name.                               # code 50
+    DCGM_FI_DEV_SERIAL,     label, Device Serial Number.                      # code 53
+    DCGM_FI_DEV_UUID,       label, Device UUID.                               # code 54
+    DCGM_FI_DEV_COMPUTE_MODE,      label, Compute mode of the device.          # code 65
+    DCGM_FI_DEV_PERSISTENCE_MODE,  label, Persistence mode status.           # code 66
+    DCGM_FI_DEV_VIRTUAL_MODE,      label, Virtual mode status               # code 500
+    DCGM_FI_DEV_MIG_MODE,          label, MIG mode status.                     # code 67
+    DCGM_FI_DEV_MIG_MAX_SLICES,    label, Maximum MIG slices available.          # code 69
+    DCGM_FI_DEV_MIG_GI_INFO,       label, MIG Graphics Instance information.   # code 76
+    DCGM_FI_DEV_MIG_CI_INFO,       label, MIG Compute Instance information.    # code 77
+
+    # Clocks
+    DCGM_FI_DEV_SM_CLOCK,  gauge, SM clock frequency (in MHz).                   # code 100
+    DCGM_FI_DEV_MEM_CLOCK, gauge, Memory clock frequency (in MHz).                 # code 101
+    #DCGM_FI_DEV_APP_SM_CLOCK, gauge, Application SM clock frequency (in MHz).        # code 110
+    #DCGM_FI_DEV_APP_MEM_CLOCK, gauge, Application Memory clock frequency (in MHz).     # code 111
+    #DCGM_FI_DEV_VIDEO_CLOCK, gauge, Video clock frequency (in MHz).                  # code 102
+
+    # Power
+    #DCGM_FI_DEV_ENFORCED_POWER_LIMIT, gauge, Enforced power limit (in W).            # code 164
+    DCGM_FI_DEV_POWER_USAGE,              gauge, Power usage (in W).                # code 155
+
+    # Performance state & Fan
+    DCGM_FI_DEV_PSTATE,      gauge, GPU power state.                              # code 190
+    #DCGM_FI_DEV_FAN_SPEED,   gauge, GPU fan speed (in RPM).                       # code 191
+
+    # Temperature
+    DCGM_FI_DEV_GPU_TEMP,    gauge, GPU temperature (in C).                       # code 150
+
+    # Utilization
+    DCGM_FI_DEV_GPU_UTIL,      gauge, GPU utilization (in %).                     # code 203
+    #DCGM_FI_DEV_MEM_COPY_UTIL, gauge, Memory copy engine utilization (in %).      # code 204
+    #DCGM_FI_DEV_ENC_UTIL,      gauge, Encoder utilization (in %).                 # code 206
+    #DCGM_FI_DEV_DEC_UTIL,      gauge, Decoder utilization (in %).                 # code 207
+
+    # PCIe / NVLink Traffic
+    DCGM_FI_PROF_PCIE_TX_BYTES, counter, Total PCIe transmit bytes.                   # code 1009
+    DCGM_FI_PROF_PCIE_RX_BYTES, counter, Total PCIe receive bytes.                    # code 1010
+    #DCGM_FI_PROF_NVLINK_TX_BYTES, counter, Total NVLink transmitted bytes.            # code 1011
+    #DCGM_FI_PROF_NVLINK_RX_BYTES, counter, Total NVLink received bytes.               # code 1012
+
+    # Framebuffer (FB) Memory
+    DCGM_FI_DEV_FB_TOTAL,        gauge, Total framebuffer memory (in MiB).          # code 250
+    DCGM_FI_DEV_FB_FREE,         gauge, Free framebuffer memory (in MiB).           # code 251
+    DCGM_FI_DEV_FB_USED,         gauge, Used framebuffer memory (in MiB).           # code 252
+    DCGM_FI_DEV_FB_RESERVED,     gauge, Reserved framebuffer memory (in MiB).       # code 253
+    DCGM_FI_DEV_FB_USED_PERCENT, gauge, Percentage of framebuffer memory used (in %). # code 254
+
+    # ECC (Error Correcting Code)
+    DCGM_FI_DEV_ECC_SBE_AGG_TOTAL, counter, Aggregate single-bit persistent ECC errors. # code 312
+    DCGM_FI_DEV_ECC_DBE_AGG_TOTAL, counter, Aggregate double-bit persistent ECC errors.   # code 313
+
+    # DCP (Dynamic Compute Partitioning) / Performance Metrics
+    DCGM_FI_PROF_GR_ENGINE_ACTIVE,   gauge, Ratio of time the graphics engine is active.  # code 1001
+    DCGM_FI_PROF_SM_ACTIVE,          gauge, Ratio of cycles with at least one warp active.  # code 1002
+    DCGM_FI_PROF_SM_OCCUPANCY,       gauge, SM occupancy ratio (resident warps per SM).    # code 1003
+    DCGM_FI_PROF_PIPE_TENSOR_ACTIVE, gauge, Ratio of cycles the tensor (HMMA) pipe is active.   # code 1004
+    DCGM_FI_PROF_DRAM_ACTIVE,        gauge, Ratio of cycles the memory interface is active.   # code 1005
+    #DCGM_FI_PROF_PIPE_FP64_ACTIVE,   gauge, Ratio of cycles the FP64 pipes are active.        # code 1006
+    #DCGM_FI_PROF_PIPE_FP32_ACTIVE,   gauge, Ratio of cycles the FP32 pipes are active.        # code 1007
+    #DCGM_FI_PROF_PIPE_FP16_ACTIVE,   gauge, Ratio of cycles the FP16 pipes are active.        # code 1008
+
+    # P-State (GPU Power State)
+    DCGM_FI_DEV_PSTATE,          gauge, GPU power state.

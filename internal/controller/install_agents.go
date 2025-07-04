@@ -64,16 +64,24 @@ func logResult(logger logr.Logger, what, target string, op controllerutil.Operat
 // ---------- 주요 리소스 배포 함수 ----------
 
 func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
-	imgName := cr.Spec.Features.K8sAgent.AgentImageName
-	if imgName == "" {
-		imgName = "public.ecr.aws/whatap/kube_agent"
-	}
+	var img string
 
-	ver := cr.Spec.Features.K8sAgent.AgentImageVersion
-	if ver == "" {
-		ver = "latest"
+	// Check if a full custom image name is provided
+	if cr.Spec.Features.K8sAgent.CustomAgentImageFullName != "" {
+		img = cr.Spec.Features.K8sAgent.CustomAgentImageFullName
+	} else {
+		// Use the separate name and version fields
+		imgName := cr.Spec.Features.K8sAgent.AgentImageName
+		if imgName == "" {
+			imgName = "public.ecr.aws/whatap/kube_agent"
+		}
+
+		ver := cr.Spec.Features.K8sAgent.AgentImageVersion
+		if ver == "" {
+			ver = "latest"
+		}
+		img = fmt.Sprintf("%s:%s", imgName, ver)
 	}
-	img := fmt.Sprintf("%s:%s", imgName, ver)
 
 	resources := cr.Spec.Features.K8sAgent.MasterAgent.Resources.DeepCopy()
 	setDefaultResource(resources,
@@ -244,16 +252,24 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 }
 
 func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
-	imgName := cr.Spec.Features.K8sAgent.AgentImageName
-	if imgName == "" {
-		imgName = "public.ecr.aws/whatap/kube_agent"
-	}
+	var img string
 
-	ver := cr.Spec.Features.K8sAgent.AgentImageVersion
-	if ver == "" {
-		ver = "latest"
+	// Check if a full custom image name is provided
+	if cr.Spec.Features.K8sAgent.CustomAgentImageFullName != "" {
+		img = cr.Spec.Features.K8sAgent.CustomAgentImageFullName
+	} else {
+		// Use the separate name and version fields
+		imgName := cr.Spec.Features.K8sAgent.AgentImageName
+		if imgName == "" {
+			imgName = "public.ecr.aws/whatap/kube_agent"
+		}
+
+		ver := cr.Spec.Features.K8sAgent.AgentImageVersion
+		if ver == "" {
+			ver = "latest"
+		}
+		img = fmt.Sprintf("%s:%s", imgName, ver)
 	}
-	img := fmt.Sprintf("%s:%s", imgName, ver)
 
 	resources := cr.Spec.Features.K8sAgent.NodeAgent.Resources.DeepCopy()
 	setDefaultResource(resources,
@@ -300,7 +316,7 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 		ds.Spec = getNodeAgentDaemonSetSpec(img, resources, cr)
 		podSpec := &ds.Spec.Template.Spec
 		if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
-			addDcgmExporterToNodeAgent(podSpec)
+			addDcgmExporterToNodeAgent(podSpec, cr)
 		}
 		return nil
 	})
@@ -560,10 +576,16 @@ func createOrUpdateGpuConfigMap(ctx context.Context, r *WhatapAgentReconciler, l
 
 // ---------- GPU Exporter 추가 함수 ----------
 
-func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec) {
+func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.WhatapAgent) {
+	// Check if a custom image is specified
+	dcgmImage := "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04"
+	if cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName != "" {
+		dcgmImage = cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName
+	}
+
 	dcgmContainer := corev1.Container{
 		Name:  "dcgm-exporter",
-		Image: "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04",
+		Image: dcgmImage,
 		Env: []corev1.EnvVar{
 			{Name: "DCGM_EXPORTER_LISTEN", Value: ":9400"},
 			{Name: "DCGM_EXPORTER_KUBERNETES", Value: "true"},
@@ -1135,9 +1157,16 @@ func getWhatapPortEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 }
 
 // getOpenAgentImage returns the image string for the OpenAgent
-// If custom image name or version is provided in the CR, it will use those values
+// If a full custom image name is provided in the CR, it will use that
+// Otherwise, if custom image name or version is provided, it will use those values
 // Otherwise, it falls back to the default values
 func getOpenAgentImage(spec monitoringv2alpha1.OpenAgentSpec) string {
+	// Check if a full custom image name is provided
+	if spec.CustomImageFullName != "" {
+		return spec.CustomImageFullName
+	}
+
+	// Otherwise, use the separate name and version fields
 	imageName := "public.ecr.aws/whatap/open_agent"
 	imageVersion := "latest"
 

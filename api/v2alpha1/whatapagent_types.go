@@ -57,6 +57,10 @@ type OpenAgentSpec struct {
 	// ImageVersion defines the version of the OpenAgent image to use
 	// +optional
 	ImageVersion string `json:"imageVersion,omitempty"`
+	// CustomImageFullName allows specifying a full custom image name (including repository and tag)
+	// If provided, this takes precedence over ImageName and ImageVersion
+	// +optional
+	CustomImageFullName string `json:"customImageFullName,omitempty"`
 	// Labels to be added to the OpenAgent deployment
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
@@ -154,14 +158,20 @@ type K8sAgentSpec struct {
 	Namespace string `json:"namespace,omitempty"`
 	// AgentImageName defines the name of the agent image to use
 	// +optional
-	AgentImageName      string                   `json:"agentImageName,omitempty"`
-	AgentImageVersion   string                   `json:"agentImageVersion,omitempty"`
-	MasterAgent         MasterAgentComponentSpec `json:"masterAgent"`
-	NodeAgent           NodeAgentComponentSpec   `json:"nodeAgent"`
-	GpuMonitoring       AgentComponentSpec       `json:"gpuMonitoring"`
-	ApiserverMonitoring AgentComponentSpec       `json:"apiserverMonitoring,omitempty"`
-	EtcdMonitoring      AgentComponentSpec       `json:"etcdMonitoring,omitempty"`
-	SchedulerMonitoring AgentComponentSpec       `json:"schedulerMonitoring,omitempty"`
+	AgentImageName string `json:"agentImageName,omitempty"`
+	// AgentImageVersion defines the version of the agent image to use
+	// +optional
+	AgentImageVersion string `json:"agentImageVersion,omitempty"`
+	// CustomAgentImageFullName allows specifying a full custom image name (including repository and tag)
+	// If provided, this takes precedence over AgentImageName and AgentImageVersion
+	// +optional
+	CustomAgentImageFullName string                   `json:"customAgentImageFullName,omitempty"`
+	MasterAgent              MasterAgentComponentSpec `json:"masterAgent"`
+	NodeAgent                NodeAgentComponentSpec   `json:"nodeAgent"`
+	GpuMonitoring            AgentComponentSpec       `json:"gpuMonitoring"`
+	ApiserverMonitoring      AgentComponentSpec       `json:"apiserverMonitoring,omitempty"`
+	EtcdMonitoring           AgentComponentSpec       `json:"etcdMonitoring,omitempty"`
+	SchedulerMonitoring      AgentComponentSpec       `json:"schedulerMonitoring,omitempty"`
 }
 
 type MasterAgentComponentSpec struct {
@@ -224,6 +234,7 @@ type NodeAgentComponentSpec struct {
 // ContainerSpec defines configuration for a specific container
 type ContainerSpec struct {
 	// Image defines the container image to use
+	// This can be a full image name (including repository and tag)
 	// If not provided, the default image will be used
 	// +optional
 	Image string `json:"image,omitempty"`
@@ -238,6 +249,10 @@ type ContainerSpec struct {
 type AgentComponentSpec struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled"`
+	// CustomImageFullName allows specifying a full custom image name (including repository and tag)
+	// If not provided, the default image will be used
+	// +optional
+	CustomImageFullName string `json:"customImageFullName,omitempty"`
 }
 
 // ApmSpec defines APM-specific settings
