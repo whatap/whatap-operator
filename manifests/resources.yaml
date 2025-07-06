@@ -6,10 +6,11 @@
 
 # (uncomment if you can't use kubectl to create the namespace)
 # Namespace
-# apiVersion: v1
-# kind: Namespace
-# metadata:
-#   name: whatap-monitoring
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: whatap-monitoring
+---
 
 # Operator ServiceAccount
 apiVersion: v1
@@ -26,6 +27,8 @@ metadata:
   name: whatap-operator
   annotations:
     rbac.authorization.kubernetes.io/autoupdate: "true"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"ClusterRole","metadata":{"annotations":{"rbac.authorization.kubernetes.io/autoupdate":"true"},"labels":{"app.kubernetes.io/name":"whatap-operator"},"name":"whatap-operator"},"rules":[{"apiGroups":["monitoring.whatap.com"],"resources":["whatapagents","whatapagents/status"],"verbs":["get","list","watch","create","update","patch","delete"]},{"apiGroups":["*"],"resources":["*"],"verbs":["get","list","watch","update","patch","delete","create"]},{"nonResourceURLs":["*"],"verbs":["*"]}]}
   labels:
     app.kubernetes.io/name: whatap-operator
 rules:
