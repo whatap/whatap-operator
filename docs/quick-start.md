@@ -41,27 +41,20 @@ stringData:
 kubectl apply -f whatap-credentials-secret.yaml
 ```
 
-3. 배포 패키지에서 제공하는 CRD(Custom Resource Definition)와 리소스 파일을 적용합니다:
+3. 배포 패키지에서 제공하는 압축 파일을 압축 해제합니다:
 
 ```bash
-kubectl apply -f manifests/crd.yaml
-kubectl apply -f manifests/resources.yaml
+tar -xzf manifests.tar.gz
 ```
 
-#### 폐쇄망 환경을 위한 설치
-
-폐쇄망 환경에서 내부 컨테이너 레지스트리를 사용해야 하는 경우:
-
-1. 배포 패키지에서 제공하는 YAML 파일을 사용합니다.
-
-2. resources.yaml 파일을 편집하여 내부 레지스트리를 사용하도록 합니다:
+4. resources.yaml 파일을 편집하여 내부 레지스트리를 사용하도록 합니다:
 
 ```bash
 # 기본 이미지를 내부 레지스트리 이미지로 교체
 sed -i 's|${WHATAP_OPERATOR_IMAGE:-public.ecr.aws/whatap/whatap-operator:latest}|your-registry.example.com/whatap-operator:latest|g' manifests/resources.yaml
 ```
 
-3. 파일을 적용합니다:
+5. 파일을 적용합니다:
 
 ```bash
 kubectl apply -f manifests/crd.yaml
@@ -83,10 +76,8 @@ Whatap Operator 파드가 실행 중인 것을 확인할 수 있습니다.
 
 ### 기본 쿠버네티스 모니터링
 
-1. 기본 구성 파일을 생성합니다(예: `whatap-config.yaml`):
-
-
 ### 쿠버네티스 에이전트와 APM 설치
+
 ```yaml
 apiVersion: monitoring.whatap.com/v2alpha1
 kind: WhatapAgent
@@ -104,9 +95,11 @@ spec:
     apm:
       instrumentation:
         targets:
-          - name: hello-world
+          - name: java
             enabled: true
             language: "java"
+            whatapApmVersions:
+              java: latest
             # 폐쇄망 환경에서 내부 레지스트리의 이미지를 사용하려면 customImageName 필드를 사용합니다
             customImageName: "your-registry.example.com/whatap-apm-init-java:latest" #e.g)"your-registry.example.com/whatap-apm-init-java:latest"
             namespaceSelector:
@@ -114,7 +107,7 @@ spec:
                 - default
             podSelector:
               matchLabels:
-                app: "hello-world"
+                app: "java-app"
             config:
               mode: default
 ```
@@ -189,3 +182,20 @@ APM 자동 계측(Automatic Instrumentation)은 애플리케이션 코드를 수
 2. **대상 선택**: `namespaceSelector`와 `podSelector`를 사용하여 모니터링할 애플리케이션을 정확히 지정할 수 있습니다. 이를 통해 특정 네임스페이스나 라벨을 가진 Pod에만 선택적으로 에이전트를 주입할 수 있습니다.
 
 3. **설정 관리**: `config.mode`를 통해 기본 설정(`default`) 또는 커스텀 설정(`custom`)을 사용할 수 있습니다. 커스텀 설정을 사용할 경우 ConfigMap을 통해 상세한 에이전트 설정을 제공할 수 있습니다.
+
+### 중요 사항: 기존 애플리케이션에 대한 재시작 필요
+
+**APM 자동 설치가 반영되려면 기존에 배포된 애플리케이션의 경우 rollout restart가 필요합니다:**
+
+```bash
+# 기존 애플리케이션 재시작 (예: Deployment)
+kubectl rollout restart deployment/your-app-name -n your-namespace
+
+# 또는 DaemonSet의 경우
+kubectl rollout restart daemonset/your-app-name -n your-namespace
+
+# 또는 StatefulSet의 경우
+kubectl rollout restart statefulset/your-app-name -n your-namespace
+```
+
+**새로 배포하는 애플리케이션의 경우에는 따로 추가 설정이 필요하지 않습니다.** Whatap Operator가 자동으로 APM 에이전트를 주입합니다.

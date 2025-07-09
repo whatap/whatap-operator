@@ -833,40 +833,72 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			gpuTargetMap["selector"] = selector
 
 			// Set endpoint configuration for DCGM exporter with customizable options
-			endpoints := make([]interface{}, 1)
-			endpointMap := make(map[string]interface{})
-			endpointMap["port"] = "9400"
-			endpointMap["path"] = "/metrics"
+			// Create two endpoints: one for regular metrics and one for process metrics
+			endpoints := make([]interface{}, 2)
+
+			// First endpoint: regular metrics
+			endpointMap1 := make(map[string]interface{})
+			endpointMap1["port"] = "9400"
+			endpointMap1["path"] = "/metric"
 
 			// Allow customization of scraping interval
 			interval := "30s" // Default interval
-			endpointMap["interval"] = interval
+			endpointMap1["interval"] = interval
 
-			endpointMap["scheme"] = "http"
+			endpointMap1["scheme"] = "http"
 
 			// Add addNodeLabel at endpoint level
-			endpointMap["addNodeLabel"] = true
+			endpointMap1["addNodeLabel"] = true
 
 			// Add metricRelabelConfigs at endpoint level for GPU monitoring
-			metricRelabelConfigs := make([]interface{}, 2)
+			metricRelabelConfigs1 := make([]interface{}, 2)
 
 			// First relabel config: add wtp_src label
 			relabelConfig1 := make(map[string]interface{})
 			relabelConfig1["target_label"] = "wtp_src"
 			relabelConfig1["replacement"] = "true"
 			relabelConfig1["action"] = "replace"
-			metricRelabelConfigs[0] = relabelConfig1
+			metricRelabelConfigs1[0] = relabelConfig1
 
 			// Second relabel config: keep only DCGM metrics
 			relabelConfig2 := make(map[string]interface{})
 			relabelConfig2["source_labels"] = []string{"__name__"}
 			relabelConfig2["regex"] = "DCGM.*"
 			relabelConfig2["action"] = "keep"
-			metricRelabelConfigs[1] = relabelConfig2
+			metricRelabelConfigs1[1] = relabelConfig2
 
-			endpointMap["metricRelabelConfigs"] = metricRelabelConfigs
+			endpointMap1["metricRelabelConfigs"] = metricRelabelConfigs1
 
-			endpoints[0] = endpointMap
+			endpoints[0] = endpointMap1
+
+			// Second endpoint: process metrics
+			endpointMap2 := make(map[string]interface{})
+			endpointMap2["port"] = "9400"
+			endpointMap2["path"] = "/metric/process"
+			endpointMap2["interval"] = interval
+			endpointMap2["scheme"] = "http"
+			endpointMap2["addNodeLabel"] = true
+
+			// Add the same metricRelabelConfigs for process metrics
+			metricRelabelConfigs2 := make([]interface{}, 2)
+
+			// First relabel config: add wtp_src label
+			relabelConfig3 := make(map[string]interface{})
+			relabelConfig3["target_label"] = "wtp_src"
+			relabelConfig3["replacement"] = "true"
+			relabelConfig3["action"] = "replace"
+			metricRelabelConfigs2[0] = relabelConfig3
+
+			// Second relabel config: keep only DCGM metrics
+			relabelConfig4 := make(map[string]interface{})
+			relabelConfig4["source_labels"] = []string{"__name__"}
+			relabelConfig4["regex"] = "DCGM.*"
+			relabelConfig4["action"] = "keep"
+			metricRelabelConfigs2[1] = relabelConfig4
+
+			endpointMap2["metricRelabelConfigs"] = metricRelabelConfigs2
+
+			endpoints[1] = endpointMap2
 			gpuTargetMap["endpoints"] = endpoints
 
 			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, gpuTargetMap)
