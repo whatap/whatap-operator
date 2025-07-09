@@ -839,7 +839,7 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			// First endpoint: regular metrics
 			endpointMap1 := make(map[string]interface{})
 			endpointMap1["port"] = "9400"
-			endpointMap1["path"] = "/metric"
+			endpointMap1["path"] = "/metrics"
 
 			// Allow customization of scraping interval
 			interval := "30s" // Default interval
@@ -874,7 +874,7 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			// Second endpoint: process metrics
 			endpointMap2 := make(map[string]interface{})
 			endpointMap2["port"] = "9400"
-			endpointMap2["path"] = "/metric/process"
+			endpointMap2["path"] = "/metrics/process"
 			endpointMap2["interval"] = interval
 			endpointMap2["scheme"] = "http"
 			endpointMap2["addNodeLabel"] = true
