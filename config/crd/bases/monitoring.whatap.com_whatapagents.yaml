@@ -1612,10 +1612,49 @@ spec:
                                     description: TLSConfig defines the TLS configuration
                                       for the endpoint
                                     properties:
+                                      caSecret:
+                                        description: CA certificate configuration
+                                        properties:
+                                          key:
+                                            description: Key within the secret
+                                            type: string
+                                          name:
+                                            description: Name of the secret
+                                            type: string
+                                        required:
+                                        - key
+                                        - name
+                                        type: object
+                                      certSecret:
+                                        description: Client certificate configuration
+                                        properties:
+                                          key:
+                                            description: Key within the secret
+                                            type: string
+                                          name:
+                                            description: Name of the secret
+                                            type: string
+                                        required:
+                                        - key
+                                        - name
+                                        type: object
                                       insecureSkipVerify:
                                         description: InsecureSkipVerify disables target
                                           certificate validation
                                         type: boolean
+                                      keySecret:
+                                        description: Client private key configuration
+                                        properties:
+                                          key:
+                                            description: Key within the secret
+                                            type: string
+                                          name:
+                                            description: Name of the secret
+                                            type: string
+                                        required:
+                                        - key
+                                        - name
+                                        type: object
                                     type: object
                                 type: object
                               type: array

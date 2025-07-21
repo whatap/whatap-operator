@@ -737,6 +737,26 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 				if endpoint.TLSConfig != nil {
 					tlsConfig := make(map[string]interface{})
 					tlsConfig["insecureSkipVerify"] = endpoint.TLSConfig.InsecureSkipVerify
+
+					// Add TLS file paths
+					if endpoint.TLSConfig.CASecret != nil {
+						tlsConfig["caFile"] = fmt.Sprintf("/etc/ssl/certs/%s/%s",
+							endpoint.TLSConfig.CASecret.Name,
+							endpoint.TLSConfig.CASecret.Key)
+					}
+
+					if endpoint.TLSConfig.CertSecret != nil {
+						tlsConfig["certFile"] = fmt.Sprintf("/etc/ssl/certs/%s/%s",
+							endpoint.TLSConfig.CertSecret.Name,
+							endpoint.TLSConfig.CertSecret.Key)
+					}
+
+					if endpoint.TLSConfig.KeySecret != nil {
+						tlsConfig["keyFile"] = fmt.Sprintf("/etc/ssl/certs/%s/%s",
+							endpoint.TLSConfig.KeySecret.Name,
+							endpoint.TLSConfig.KeySecret.Key)
+					}
+
 					endpointMap["tlsConfig"] = tlsConfig
 				}
 
@@ -914,6 +934,65 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 	return string(yamlBytes)
 }
 
+// collectTLSSecrets collects all TLS Secrets from the targets
+func collectTLSSecrets(targets []monitoringv2alpha1.OpenAgentTargetSpec) map[string][]string {
+	secrets := make(map[string][]string)
+
+	for _, target := range targets {
+		for _, endpoint := range target.Endpoints {
+			if endpoint.TLSConfig != nil {
+				// CA Secret
+				if endpoint.TLSConfig.CASecret != nil {
+					secretName := endpoint.TLSConfig.CASecret.Name
+					key := endpoint.TLSConfig.CASecret.Key
+					if _, exists := secrets[secretName]; !exists {
+						secrets[secretName] = []string{}
+					}
+					if !contains(secrets[secretName], key) {
+						secrets[secretName] = append(secrets[secretName], key)
+					}
+				}
+
+				// Cert Secret
+				if endpoint.TLSConfig.CertSecret != nil {
+					secretName := endpoint.TLSConfig.CertSecret.Name
+					key := endpoint.TLSConfig.CertSecret.Key
+					if _, exists := secrets[secretName]; !exists {
+						secrets[secretName] = []string{}
+					}
+					if !contains(secrets[secretName], key) {
+						secrets[secretName] = append(secrets[secretName], key)
+					}
+				}
+
+				// Key Secret
+				if endpoint.TLSConfig.KeySecret != nil {
+					secretName := endpoint.TLSConfig.KeySecret.Name
+					key := endpoint.TLSConfig.KeySecret.Key
+					if _, exists := secrets[secretName]; !exists {
+						secrets[secretName] = []string{}
+					}
+					if !contains(secrets[secretName], key) {
+						secrets[secretName] = append(secrets[secretName], key)
+					}
+				}
+			}
+		}
+	}
+
+	return secrets
+}
+
+// contains checks if a string slice contains a specific string
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
 func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	// Create ServiceAccount
 	sa := &corev1.ServiceAccount{
@@ -941,7 +1020,7 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 		cr1.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"*"},
-				Resources: []string{"pods", "services", "endpoints", "namespaces", "configmaps"},
+				Resources: []string{"pods", "services", "endpoints", "namespaces", "configmaps", "secrets"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
@@ -1063,6 +1142,71 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 				}
 			}
 
+			// Prepare volumes and volume mounts
+			volumes := []corev1.Volume{
+				{
+					Name: "logs-volume",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "config-volume",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "whatap-open-agent-config",
+							},
+						},
+					},
+				},
+			}
+
+			volumeMounts := []corev1.VolumeMount{
+				{
+					Name:      "logs-volume",
+					MountPath: "/app/logs",
+				},
+				{
+					Name:      "config-volume",
+					MountPath: "/app/scrape_config.yaml",
+					SubPath:   "scrape_config.yaml",
+				},
+			}
+
+			// Add TLS Secret volumes and volume mounts
+			tlsSecrets := collectTLSSecrets(cr.Spec.Features.OpenAgent.Targets)
+			for secretName, secretKeys := range tlsSecrets {
+				volumeName := fmt.Sprintf("tls-secret-%s", secretName)
+
+				// Add Secret volume
+				volumes = append(volumes, corev1.Volume{
+					Name: volumeName,
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: secretName,
+							Items: func() []corev1.KeyToPath {
+								var items []corev1.KeyToPath
+								for _, key := range secretKeys {
+									items = append(items, corev1.KeyToPath{
+										Key:  key,
+										Path: key,
+									})
+								}
+								return items
+							}(),
+						},
+					},
+				})
+
+				// Add volume mount
+				volumeMounts = append(volumeMounts, corev1.VolumeMount{
+					Name:      volumeName,
+					MountPath: fmt.Sprintf("/etc/ssl/certs/%s", secretName),
+					ReadOnly:  true,
+				})
+			}
+
 			deploy.Spec = appsv1.DeploymentSpec{
 				Replicas: int32Ptr(1),
 				Selector: &metav1.LabelSelector{
@@ -1089,22 +1233,10 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 									getWhatapHostEnvVar(cr),
 									getWhatapPortEnvVar(cr),
 								}, openAgentSpec.Envs...),
-								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      "logs-volume",
-										MountPath: "/app/logs",
-									},
-								},
+								VolumeMounts: volumeMounts,
 							},
 						},
-						Volumes: []corev1.Volume{
-							{
-								Name: "logs-volume",
-								VolumeSource: corev1.VolumeSource{
-									EmptyDir: &corev1.EmptyDirVolumeSource{},
-								},
-							},
-						},
+						Volumes: volumes,
 					},
 				},
 			}

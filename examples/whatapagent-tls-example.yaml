@@ -1,0 +1,33 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  features:
+    openAgent:
+      enabled: true
+      targets:
+        - targetName: "etcd"
+          type: "ServiceMonitor"
+          enabled: true
+          namespaceSelector:
+            matchNames:
+              - "kube-system"
+          selector:
+            matchLabels:
+              component: "etcd"
+          endpoints:
+            - port: "2379"
+              path: "/metrics"
+              scheme: "https"
+              tlsConfig:
+                insecureSkipVerify: false
+                caSecret:
+                  name: "etcd-tls-secret"
+                  key: "ca.pem"
+                certSecret:
+                  name: "etcd-tls-secret"
+                  key: "cert.pem"
+                keySecret:
+                  name: "etcd-tls-secret"
+                  key: "key.pem"

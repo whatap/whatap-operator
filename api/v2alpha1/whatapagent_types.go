@@ -128,11 +128,31 @@ type OpenAgentEndpoint struct {
 	AddNodeLabel bool `json:"addNodeLabel,omitempty"`
 }
 
+// SecretKeySelector defines a reference to a secret key
+type SecretKeySelector struct {
+	// Name of the secret
+	Name string `json:"name"`
+	// Key within the secret
+	Key string `json:"key"`
+}
+
 // TLSConfig defines the TLS configuration for an endpoint
 type TLSConfig struct {
 	// InsecureSkipVerify disables target certificate validation
 	// +optional
 	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+
+	// CA certificate configuration
+	// +optional
+	CASecret *SecretKeySelector `json:"caSecret,omitempty"`
+
+	// Client certificate configuration
+	// +optional
+	CertSecret *SecretKeySelector `json:"certSecret,omitempty"`
+
+	// Client private key configuration
+	// +optional
+	KeySecret *SecretKeySelector `json:"keySecret,omitempty"`
 }
 
 // MetricRelabelConfig defines a metric relabeling configuration
