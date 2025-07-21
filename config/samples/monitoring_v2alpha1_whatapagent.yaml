@@ -34,8 +34,6 @@ spec:
                 namespace: "backend"
     openAgent:
       enabled: true
-      globalInterval: "60s"
-      globalPath: "/metrics"
       targets:
         - targetName: "kube-apiserver"
           type: "ServiceMonitor"
