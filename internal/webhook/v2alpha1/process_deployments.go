@@ -12,6 +12,10 @@ import (
 // Helper functions to get environment variables for Whatap credentials
 // These functions read values directly from environment variables
 
+// Helper functions for pointer types
+func boolPtr(b bool) *bool    { return &b }
+func int64Ptr(i int64) *int64 { return &i }
+
 func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 	license := config.GetWhatapLicense()
 	return corev1.EnvVar{Name: "WHATAP_LICENSE", Value: license}
@@ -21,6 +25,12 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 	baseVolumeMount := corev1.VolumeMount{
 		Name:      "whatap-agent-volume",
 		MountPath: "/whatap-agent",
+	}
+
+	// SecurityContext for init containers (needs root access)
+	securityContext := &corev1.SecurityContext{
+		RunAsNonRoot: boolPtr(false),
+		RunAsUser:    int64Ptr(0),
 	}
 
 	if lang == "python" {
@@ -45,6 +55,7 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 				ImagePullPolicy: corev1.PullAlways,
 				Env:             envVars,
 				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
+				SecurityContext: securityContext,
 			},
 		}
 	}
@@ -56,6 +67,7 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 			Image:           getAgentImage(target, lang, version),
 			ImagePullPolicy: corev1.PullAlways,
 			VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
+			SecurityContext: securityContext,
 		},
 	}
 }
@@ -101,6 +113,10 @@ func createConfigMapBasedContainer(target monitoringv2alpha1.TargetSpec, baseEnv
 			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
 			{Name: "config-volume", MountPath: "/config-volume"},
 		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsNonRoot: boolPtr(false),
+			RunAsUser:    int64Ptr(0),
+		},
 	}
 
 	volume := &corev1.Volume{
@@ -132,6 +148,10 @@ func createJavaConfigContainer(target monitoringv2alpha1.TargetSpec, baseEnvVars
 		Env:             baseEnvVars,
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsNonRoot: boolPtr(false),
+			RunAsUser:    int64Ptr(0),
 		},
 	}
 }
