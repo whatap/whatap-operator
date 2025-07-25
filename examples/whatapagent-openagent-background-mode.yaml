@@ -1,0 +1,56 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatapagent-openagent-background-example
+  namespace: default
+spec:
+  # Whatap credentials
+  license: "your-whatap-license-key"
+  host: "your-whatap-host"
+  port: "your-whatap-port"
+  
+  features:
+    # OpenAgent configuration with background mode enabled
+    openAgent:
+      enabled: true
+      # Disable foreground mode to run the agent in background/daemon mode
+      # This is useful in Kubernetes environments where you don't want the agent
+      # to run in foreground mode
+      disableForeground: true
+      
+      # Optional: Custom image configuration
+      imageName: "whatap/openagent"
+      imageVersion: "latest"
+      
+      # Optional: Environment variables
+      envs:
+        - name: "CUSTOM_ENV"
+          value: "custom-value"
+      
+      # Optional: Pod labels and annotations
+      podLabels:
+        app.kubernetes.io/component: "monitoring"
+      podAnnotations:
+        description: "Whatap OpenAgent running in background mode"
+      
+      # Optional: Tolerations for node scheduling
+      tolerations:
+        - key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+          effect: "NoSchedule"
+      
+      # Example targets configuration
+      targets:
+        - targetName: "prometheus-metrics"
+          type: "ServiceMonitor"
+          enabled: true
+          namespaceSelector:
+            matchNames:
+              - "monitoring"
+          selector:
+            matchLabels:
+              app: "prometheus"
+          endpoints:
+            - port: "metrics"
+              path: "/metrics"
+              interval: "30s"

@@ -79,6 +79,11 @@ type OpenAgentSpec struct {
 	// Environment variables to be added to the OpenAgent container
 	// +optional
 	Envs []corev1.EnvVar `json:"envs,omitempty"`
+	// DisableForeground disables foreground mode for the OpenAgent
+	// When set to true, the agent will run in background mode
+	// +kubebuilder:default=false
+	// +optional
+	DisableForeground bool `json:"disableForeground,omitempty"`
 }
 
 // OpenAgentTargetSpec defines a target for the OpenAgent to scrape metrics from

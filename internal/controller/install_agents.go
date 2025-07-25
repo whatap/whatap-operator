@@ -1228,6 +1228,8 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 								Name:            "whatap-open-agent",
 								Image:           getOpenAgentImage(openAgentSpec),
 								ImagePullPolicy: corev1.PullAlways,
+								Command:         getOpenAgentCommand(openAgentSpec),
+								Args:            getOpenAgentArgs(openAgentSpec),
 								Env: append([]corev1.EnvVar{
 									getWhatapLicenseEnvVar(cr),
 									getWhatapHostEnvVar(cr),
@@ -1318,6 +1320,23 @@ func getWhatapPortEnvVar(cr *monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 			},
 		},
 	}
+}
+
+// getOpenAgentCommand returns the command for the OpenAgent container
+// Returns nil to use the default command from the image
+func getOpenAgentCommand(spec monitoringv2alpha1.OpenAgentSpec) []string {
+	// Use default command from image
+	return nil
+}
+
+// getOpenAgentArgs returns the args for the OpenAgent container
+// If DisableForeground is true, adds the daemon flag to run in background mode
+func getOpenAgentArgs(spec monitoringv2alpha1.OpenAgentSpec) []string {
+	if spec.DisableForeground {
+		return []string{"-d"}
+	}
+	// Use default args from image (foreground mode)
+	return nil
 }
 
 // getOpenAgentImage returns the image string for the OpenAgent
