@@ -14,6 +14,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -325,6 +326,14 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 		return err
 	}
 	logResult(logger, "Whatap", "Node Agent DaemonSet", op)
+
+	// Create dcgm-exporter service if GPU monitoring is enabled and service is configured
+	if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
+		if err := ensureDcgmExporterService(ctx, r, logger, cr); err != nil {
+			logger.Error(err, "Failed to create/update dcgm-exporter service")
+			return err
+		}
+	}
 	return nil
 }
 
@@ -578,7 +587,7 @@ func createOrUpdateGpuConfigMap(ctx context.Context, r *WhatapAgentReconciler, l
 
 func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.WhatapAgent) {
 	// Check if a custom image is specified
-	dcgmImage := "nvcr.io/nvidia/k8s/dcgm-exporter:4.2.3-4.1.3-ubuntu22.04"
+	dcgmImage := "whatap/dcgm-exporter:4.2.3-4.2.0-ubuntu22.04"
 	if cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName != "" {
 		dcgmImage = cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName
 	}
@@ -621,6 +630,85 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 			},
 		},
 	)
+}
+
+// ensureDcgmExporterService creates or updates the service for dcgm-exporter
+func ensureDcgmExporterService(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
+	// Check if service is enabled
+	if cr.Spec.Features.K8sAgent.GpuMonitoring.Service == nil || !cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Enabled {
+		return nil
+	}
+
+	// Determine the namespace for the service
+	serviceNamespace := r.DefaultNamespace
+	if cr.Spec.Features.K8sAgent.Namespace != "" {
+		serviceNamespace = cr.Spec.Features.K8sAgent.Namespace
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dcgm-exporter-service",
+			Namespace: serviceNamespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       "dcgm-exporter",
+				"app.kubernetes.io/managed-by": "whatap-operator",
+			},
+		},
+	}
+
+	// Set WhatapAgent instance as the owner and controller
+	logger.Info("Setting controller reference for resource",
+		"resourceType", "Service",
+		"resourceName", svc.Name,
+		"resourceNamespace", svc.Namespace,
+		"ownerType", "WhatapAgent",
+		"ownerName", cr.Name,
+		"ownerNamespace", cr.Namespace)
+	if err := controllerutil.SetControllerReference(cr, svc, r.Scheme); err != nil {
+		return err
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
+		// Set default values
+		serviceType := corev1.ServiceTypeClusterIP
+		port := int32(9400)
+
+		// Use configured values if provided
+		if cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Type != "" {
+			serviceType = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Type
+		}
+		if cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Port != 0 {
+			port = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Port
+		}
+
+		svc.Spec = corev1.ServiceSpec{
+			Selector: map[string]string{
+				"name": "whatap-node-agent",
+			},
+			Type: serviceType,
+			Ports: []corev1.ServicePort{{
+				Name:       "metrics",
+				Port:       port,
+				TargetPort: intstr.FromInt32(9400),
+				Protocol:   corev1.ProtocolTCP,
+			}},
+		}
+
+		// Set NodePort if specified and service type is NodePort
+		if serviceType == corev1.ServiceTypeNodePort && cr.Spec.Features.K8sAgent.GpuMonitoring.Service.NodePort != 0 {
+			svc.Spec.Ports[0].NodePort = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.NodePort
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error(err, "Failed to create/update dcgm-exporter service")
+		return err
+	}
+
+	logger.Info("Successfully created/updated dcgm-exporter service")
+	return nil
 }
 
 // 나머지 설치 함수(스펙이 없음)

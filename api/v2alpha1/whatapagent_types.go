@@ -193,7 +193,7 @@ type K8sAgentSpec struct {
 	CustomAgentImageFullName string                   `json:"customAgentImageFullName,omitempty"`
 	MasterAgent              MasterAgentComponentSpec `json:"masterAgent"`
 	NodeAgent                NodeAgentComponentSpec   `json:"nodeAgent"`
-	GpuMonitoring            AgentComponentSpec       `json:"gpuMonitoring"`
+	GpuMonitoring            GpuMonitoringSpec        `json:"gpuMonitoring"`
 	ApiserverMonitoring      AgentComponentSpec       `json:"apiserverMonitoring,omitempty"`
 	EtcdMonitoring           AgentComponentSpec       `json:"etcdMonitoring,omitempty"`
 	SchedulerMonitoring      AgentComponentSpec       `json:"schedulerMonitoring,omitempty"`
@@ -278,6 +278,39 @@ type AgentComponentSpec struct {
 	// If not provided, the default image will be used
 	// +optional
 	CustomImageFullName string `json:"customImageFullName,omitempty"`
+}
+
+// GpuMonitoringSpec defines GPU monitoring specific settings
+type GpuMonitoringSpec struct {
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled"`
+	// CustomImageFullName allows specifying a full custom image name (including repository and tag)
+	// If not provided, the default image will be used
+	// +optional
+	CustomImageFullName string `json:"customImageFullName,omitempty"`
+	// Service defines service configuration for dcgm-exporter
+	// +optional
+	Service *GpuMonitoringServiceSpec `json:"service,omitempty"`
+}
+
+// GpuMonitoringServiceSpec defines service configuration for GPU monitoring
+type GpuMonitoringServiceSpec struct {
+	// Enabled controls whether to create a service for dcgm-exporter
+	// +kubebuilder:default=false
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+	// Type specifies the service type (ClusterIP, NodePort, LoadBalancer)
+	// +kubebuilder:default="ClusterIP"
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer
+	// +optional
+	Type corev1.ServiceType `json:"type,omitempty"`
+	// NodePort specifies the node port when service type is NodePort
+	// +optional
+	NodePort int32 `json:"nodePort,omitempty"`
+	// Port specifies the service port
+	// +kubebuilder:default=9400
+	// +optional
+	Port int32 `json:"port,omitempty"`
 }
 
 // ApmSpec defines APM-specific settings
