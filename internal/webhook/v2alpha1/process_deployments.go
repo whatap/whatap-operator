@@ -60,7 +60,43 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 		}
 	}
 
-	// 기존 Java 및 기타 언어용 InitContainer
+	if lang == "java" {
+		logger.Info("Using Java APM init container with config generation", "version", version)
+
+		// Java 설정을 위한 환경변수 준비
+		envVars := []corev1.EnvVar{
+			getWhatapLicenseEnvVar(cr),
+			getWhatapHostEnvVar(cr),
+			getWhatapPortEnvVar(cr),
+		}
+
+		// Additional args를 환경변수로 전달
+		if target.AdditionalArgs != nil {
+			additionalArgsStr := ""
+			for key, value := range target.AdditionalArgs {
+				additionalArgsStr += fmt.Sprintf("%s=%s\n", key, value)
+			}
+			if additionalArgsStr != "" {
+				envVars = append(envVars, corev1.EnvVar{
+					Name:  "ADDITIONAL_ARGS",
+					Value: additionalArgsStr,
+				})
+			}
+		}
+
+		return []corev1.Container{
+			{
+				Name:            "whatap-java-agent-init",
+				Image:           getAgentImage(target, lang, version),
+				ImagePullPolicy: corev1.PullAlways,
+				Env:             envVars,
+				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
+				SecurityContext: securityContext,
+			},
+		}
+	}
+
+	// 기존 기타 언어용 InitContainer
 	return []corev1.Container{
 		{
 			Name:            "whatap-agent-init",
@@ -85,7 +121,9 @@ func createConfigInitContainer(target monitoringv2alpha1.TargetSpec, cr monitori
 
 	switch lang {
 	case "java":
-		return createJavaConfigContainer(target, baseEnvVars, logger), nil
+		// Java now uses agent image for config generation, skipping separate config init container
+		logger.Info("Java uses agent image for config generation, skipping separate config init container", "language", lang)
+		return nil, nil
 	case "python":
 		// Python uses new structure with config generated in InitContainer
 		logger.Info("Python uses new structure with config generated in InitContainer, skipping config init container", "language", lang)
