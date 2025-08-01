@@ -848,6 +848,11 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 					endpointMap["tlsConfig"] = tlsConfig
 				}
 
+				// Add params if present
+				if len(endpoint.Params) > 0 {
+					endpointMap["params"] = endpoint.Params
+				}
+
 				// Add addNodeLabel if present
 				if endpoint.AddNodeLabel {
 					endpointMap["addNodeLabel"] = endpoint.AddNodeLabel

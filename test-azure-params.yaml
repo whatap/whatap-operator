@@ -1,0 +1,34 @@
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap-agent-azure-test
+  namespace: default
+spec:
+  features:
+    openAgent:
+      enabled: true
+      targets:
+      - targetName: "azure-sql-metrics"
+        type: "StaticEndpoints"
+        enabled: true
+        endpoints:
+        - address: "localhost:8080"
+          path: "/probe/metrics/resource"
+          scheme: "http"
+          interval: "30s"
+          params:
+            subscription:
+            - "50d91b57-a280-45b5-8d7c-be8005662738"
+            target:
+            - "/subscriptions/50d91b57-a280-45b5-8d7c-be8005662738/resourceGroups/WhaTap-Data-KR-MID/providers/Microsoft.Sql/managedInstances/openmetrics-instance-01"
+            metric:
+            - "avg_cpu_percent"
+            - "virtual_core_count"
+            interval:
+            - "PT1M"
+            aggregation:
+            - "average"
+            name:
+            - "azure_sql_cpu"
+            metricNamespace:
+            - "microsoft.sql/managedinstances"

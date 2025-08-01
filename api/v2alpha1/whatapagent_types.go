@@ -127,6 +127,9 @@ type OpenAgentEndpoint struct {
 	// MetricRelabelConfigs defines the metric relabeling configurations for this endpoint
 	// +optional
 	MetricRelabelConfigs []MetricRelabelConfig `json:"metricRelabelConfigs,omitempty"`
+	// Params defines HTTP URL parameters for the endpoint (similar to Prometheus params)
+	// +optional
+	Params map[string][]string `json:"params,omitempty"`
 
 	// +kubebuilder:default=false
 	// +optional
