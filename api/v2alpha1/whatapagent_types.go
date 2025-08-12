@@ -150,17 +150,33 @@ type TLSConfig struct {
 	// +optional
 	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
 
-	// CA certificate configuration
+	// CA certificate configuration via Kubernetes Secret
 	// +optional
 	CASecret *SecretKeySelector `json:"caSecret,omitempty"`
 
-	// Client certificate configuration
+	// Client certificate configuration via Kubernetes Secret
 	// +optional
 	CertSecret *SecretKeySelector `json:"certSecret,omitempty"`
 
-	// Client private key configuration
+	// Client private key configuration via Kubernetes Secret
 	// +optional
 	KeySecret *SecretKeySelector `json:"keySecret,omitempty"`
+
+	// CA certificate file path (alternative to CASecret)
+	// +optional
+	CAFile string `json:"caFile,omitempty"`
+
+	// Client certificate file path (alternative to CertSecret)
+	// +optional
+	CertFile string `json:"certFile,omitempty"`
+
+	// Client private key file path (alternative to KeySecret)
+	// +optional
+	KeyFile string `json:"keyFile,omitempty"`
+
+	// ServerName extension to indicate the name of the server
+	// +optional
+	ServerName string `json:"serverName,omitempty"`
 }
 
 // MetricRelabelConfig defines a metric relabeling configuration

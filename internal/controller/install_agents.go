@@ -3,8 +3,9 @@ package controller
 import (
 	"context"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"time"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
@@ -587,7 +588,7 @@ func createOrUpdateGpuConfigMap(ctx context.Context, r *WhatapAgentReconciler, l
 
 func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.WhatapAgent) {
 	// Check if a custom image is specified
-	dcgmImage := "whatap/dcgm-exporter:4.2.3-4.2.0-ubuntu22.04"
+	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.3.1-4.4.0-ubuntu22.04"
 	if cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName != "" {
 		dcgmImage = cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName
 	}
@@ -826,23 +827,36 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 					tlsConfig := make(map[string]interface{})
 					tlsConfig["insecureSkipVerify"] = endpoint.TLSConfig.InsecureSkipVerify
 
-					// Add TLS file paths
-					if endpoint.TLSConfig.CASecret != nil {
+					// Add CA configuration (prefer file path over secret)
+					if endpoint.TLSConfig.CAFile != "" {
+						tlsConfig["caFile"] = endpoint.TLSConfig.CAFile
+					} else if endpoint.TLSConfig.CASecret != nil {
 						tlsConfig["caFile"] = fmt.Sprintf("/etc/ssl/certs/%s/%s",
 							endpoint.TLSConfig.CASecret.Name,
 							endpoint.TLSConfig.CASecret.Key)
 					}
 
-					if endpoint.TLSConfig.CertSecret != nil {
+					// Add client certificate configuration (prefer file path over secret)
+					if endpoint.TLSConfig.CertFile != "" {
+						tlsConfig["certFile"] = endpoint.TLSConfig.CertFile
+					} else if endpoint.TLSConfig.CertSecret != nil {
 						tlsConfig["certFile"] = fmt.Sprintf("/etc/ssl/certs/%s/%s",
 							endpoint.TLSConfig.CertSecret.Name,
 							endpoint.TLSConfig.CertSecret.Key)
 					}
 
-					if endpoint.TLSConfig.KeySecret != nil {
+					// Add client key configuration (prefer file path over secret)
+					if endpoint.TLSConfig.KeyFile != "" {
+						tlsConfig["keyFile"] = endpoint.TLSConfig.KeyFile
+					} else if endpoint.TLSConfig.KeySecret != nil {
 						tlsConfig["keyFile"] = fmt.Sprintf("/etc/ssl/certs/%s/%s",
 							endpoint.TLSConfig.KeySecret.Name,
 							endpoint.TLSConfig.KeySecret.Key)
+					}
+
+					// Add server name if specified
+					if endpoint.TLSConfig.ServerName != "" {
+						tlsConfig["serverName"] = endpoint.TLSConfig.ServerName
 					}
 
 					endpointMap["tlsConfig"] = tlsConfig
