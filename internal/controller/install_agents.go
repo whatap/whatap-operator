@@ -185,6 +185,10 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 				},
 			},
 		},
+		{
+			Name:  "collect_custom_resources",
+			Value: "true",
+		},
 	}
 
 	// Add container-specific environment variables if provided
