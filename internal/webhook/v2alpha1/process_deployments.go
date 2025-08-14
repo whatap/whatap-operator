@@ -115,7 +115,7 @@ func createConfigInitContainer(target monitoringv2alpha1.TargetSpec, cr monitori
 		getWhatapPortEnvVar(cr),
 	}
 
-	if target.Config.Mode == "configMapRef" && target.Config.ConfigMapRef != nil {
+	if target.Config.Mode == "custom" && target.Config.ConfigMapRef != nil {
 		return createConfigMapBasedContainer(target, baseEnvVars, logger)
 	}
 
@@ -264,19 +264,25 @@ func getPythonAppConfig(additionalArgs map[string]string) (string, string) {
 
 // injectLanguageSpecificEnvVars injects environment variables based on language
 func injectLanguageSpecificEnvVars(container corev1.Container, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, lang, version string, logger logr.Logger) []corev1.EnvVar {
+	var envs []corev1.EnvVar
 	switch lang {
 	case "java":
-		return injectJavaEnvVars(container, cr, logger)
+		envs = injectJavaEnvVars(container, cr, logger)
 	case "python":
-		return injectPythonEnvVars(container, target, cr, version, logger)
+		envs = injectPythonEnvVars(container, target, cr, version, logger)
 	case "nodejs":
-		return injectNodejsEnvVars(container, cr)
+		envs = injectNodejsEnvVars(container, cr)
 	case "php", "dotnet", "golang":
-		return injectBasicKubernetesEnvVars(container)
+		envs = injectBasicKubernetesEnvVars(container)
 	default:
 		logger.Info("Unsupported language. Skipping env injection.", "language", lang)
-		return container.Env
+		envs = container.Env
 	}
+	// Merge user-specified target envs without overriding existing ones
+	if len(target.Envs) > 0 {
+		envs = mergeEnvVars(envs, target.Envs)
+	}
+	return envs
 }
 
 // injectJavaEnvVars handles Java-specific environment variable injection
@@ -682,4 +688,25 @@ func appendIfNotExists(volumes []corev1.Volume, newVol corev1.Volume) []corev1.V
 		}
 	}
 	return append(volumes, newVol)
+}
+
+// mergeEnvVars appends extras into base without overriding existing names
+func mergeEnvVars(base []corev1.EnvVar, extras []corev1.EnvVar) []corev1.EnvVar {
+	existing := make(map[string]struct{}, len(base))
+	for _, e := range base {
+		if e.Name != "" {
+			existing[e.Name] = struct{}{}
+		}
+	}
+	for _, e := range extras {
+		if e.Name == "" {
+			continue
+		}
+		if _, ok := existing[e.Name]; ok {
+			continue
+		}
+		base = append(base, e)
+		existing[e.Name] = struct{}{}
+	}
+	return base
 }

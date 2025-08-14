@@ -637,6 +637,13 @@ func (in *TargetSpec) DeepCopyInto(out *TargetSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.Envs != nil {
+		in, out := &in.Envs, &out.Envs
+		*out = make([]v1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	in.NamespaceSelector.DeepCopyInto(&out.NamespaceSelector)
 	in.PodSelector.DeepCopyInto(&out.PodSelector)
 	in.Config.DeepCopyInto(&out.Config)

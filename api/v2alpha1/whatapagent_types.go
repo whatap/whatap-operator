@@ -356,7 +356,11 @@ type TargetSpec struct {
 	CustomImageName string `json:"customImageName,omitempty"`
 	// AdditionalArgs allows specifying additional arguments for the agent
 	// +optional
-	AdditionalArgs    map[string]string `json:"additionalArgs,omitempty"`
+	AdditionalArgs map[string]string `json:"additionalArgs,omitempty"`
+	// Envs allows injecting extra environment variables into application containers
+	// These will be added in addition to existing envs in the user's Deployment; existing entries take precedence
+	// +optional
+	Envs              []corev1.EnvVar   `json:"envs,omitempty"`
 	NamespaceSelector NamespaceSelector `json:"namespaceSelector,omitempty"`
 	PodSelector       PodSelector       `json:"podSelector,omitempty"`
 	Config            ConfigSpec        `json:"config,omitempty"`
@@ -411,7 +415,6 @@ type ConfigSpec struct {
 	ConfigMapRef *ConfigMapRef `json:"configMapRef,omitempty"` // custom 모드일 때만 사용
 }
 
-// ConfigMapRef identifies a ConfigMap resource
 type ConfigMapRef struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
