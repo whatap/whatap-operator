@@ -37,7 +37,7 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 		logger.Info("Using Python APM bootstrap init container with new structure", "version", version)
 
 		// Get Python app configuration
-		appName, appProcessName := getPythonAppConfig(target.AdditionalArgs)
+		appName, appProcessName, OKIND := getPythonAppConfig(target.Envs)
 
 		// Prepare environment variables for Python InitContainer
 		envVars := []corev1.EnvVar{
@@ -46,11 +46,12 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 			getWhatapPortEnvVar(cr),
 			{Name: "APP_NAME", Value: appName},
 			{Name: "APP_PROCESS_NAME", Value: appProcessName},
+			{Name: "OKIND", Value: OKIND},
 		}
 
 		return []corev1.Container{
 			{
-				Name:            "whatap-python-bootstrap-init",
+				Name:            "whatap-agent-init",
 				Image:           getAgentImage(target, lang, version),
 				ImagePullPolicy: corev1.PullAlways,
 				Env:             envVars,
@@ -70,23 +71,9 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 			getWhatapPortEnvVar(cr),
 		}
 
-		// Additional args를 환경변수로 전달
-		if target.AdditionalArgs != nil {
-			additionalArgsStr := ""
-			for key, value := range target.AdditionalArgs {
-				additionalArgsStr += fmt.Sprintf("%s=%s\n", key, value)
-			}
-			if additionalArgsStr != "" {
-				envVars = append(envVars, corev1.EnvVar{
-					Name:  "ADDITIONAL_ARGS",
-					Value: additionalArgsStr,
-				})
-			}
-		}
-
 		return []corev1.Container{
 			{
-				Name:            "whatap-java-agent-init",
+				Name:            "whatap-agent-init",
 				Image:           getAgentImage(target, lang, version),
 				ImagePullPolicy: corev1.PullAlways,
 				Env:             envVars,
@@ -108,161 +95,25 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 	}
 }
 
-func createConfigInitContainer(target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, lang string, logger logr.Logger) (*corev1.Container, *corev1.Volume) {
-	baseEnvVars := []corev1.EnvVar{
-		getWhatapLicenseEnvVar(cr),
-		getWhatapHostEnvVar(cr),
-		getWhatapPortEnvVar(cr),
-	}
-
-	if target.Config.Mode == "custom" && target.Config.ConfigMapRef != nil {
-		return createConfigMapBasedContainer(target, baseEnvVars, logger)
-	}
-
-	switch lang {
-	case "java":
-		// Java now uses agent image for config generation, skipping separate config init container
-		logger.Info("Java uses agent image for config generation, skipping separate config init container", "language", lang)
-		return nil, nil
-	case "python":
-		// Python uses new structure with config generated in InitContainer
-		logger.Info("Python uses new structure with config generated in InitContainer, skipping config init container", "language", lang)
-		return nil, nil
-	default:
-		logger.Info("No configuration mode specified, skipping config init container", "language", lang)
-		return nil, nil
-	}
-}
-
-// createConfigMapBasedContainer creates config container for ConfigMap mode
-func createConfigMapBasedContainer(target monitoringv2alpha1.TargetSpec, baseEnvVars []corev1.EnvVar, logger logr.Logger) (*corev1.Container, *corev1.Volume) {
-	logger.Info("Using ConfigMap-based configuration", "configMapName", target.Config.ConfigMapRef.Name, "namespace", target.Config.ConfigMapRef.Namespace)
-
-	command := buildConfigCommand("cp /config-volume/whatap.conf /whatap-agent/ && ", target.AdditionalArgs)
-
-	container := &corev1.Container{
-		Name:            "whatap-config-init",
-		Image:           "alpine:3.18",
-		ImagePullPolicy: corev1.PullAlways,
-		Command:         []string{"sh", "-c"},
-		Args:            []string{command},
-		Env:             baseEnvVars,
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
-			{Name: "config-volume", MountPath: "/config-volume"},
-		},
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: boolPtr(false),
-			RunAsUser:    int64Ptr(0),
-		},
-	}
-
-	volume := &corev1.Volume{
-		Name: "config-volume",
-		VolumeSource: corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: target.Config.ConfigMapRef.Name,
-				},
-			},
-		},
-	}
-
-	return container, volume
-}
-
-// createJavaConfigContainer creates config container for Java
-func createJavaConfigContainer(target monitoringv2alpha1.TargetSpec, baseEnvVars []corev1.EnvVar, logger logr.Logger) *corev1.Container {
-	logger.Info("Using default Java configuration (no ConfigMap)", "language", "java")
-
-	command := buildConfigCommand("", target.AdditionalArgs)
-
-	return &corev1.Container{
-		Name:            "whatap-config-init",
-		Image:           "alpine:3.18",
-		ImagePullPolicy: corev1.PullAlways,
-		Command:         []string{"sh", "-c"},
-		Args:            []string{command},
-		Env:             baseEnvVars,
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
-		},
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot: boolPtr(false),
-			RunAsUser:    int64Ptr(0),
-		},
-	}
-}
-
-// createPythonConfigContainer creates config container for Python
-func createPythonConfigContainer(target monitoringv2alpha1.TargetSpec, baseEnvVars []corev1.EnvVar, logger logr.Logger) *corev1.Container {
-	logger.Info("Using Python configuration with whatap.conf", "language", "python")
-
-	appName, appProcessName := getPythonAppConfig(target.AdditionalArgs)
-	command := buildPythonConfigCommand(target.AdditionalArgs)
-
-	envVars := append(baseEnvVars,
-		corev1.EnvVar{Name: "APP_NAME", Value: appName},
-		corev1.EnvVar{Name: "APP_PROCESS_NAME", Value: appProcessName},
-	)
-
-	return &corev1.Container{
-		Name:            "whatap-python-config-init",
-		Image:           "alpine:3.18",
-		ImagePullPolicy: corev1.PullAlways,
-		Command:         []string{"sh", "-c"},
-		Args:            []string{command},
-		Env:             envVars,
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: "whatap-agent-volume", MountPath: "/whatap-agent"},
-		},
-	}
-}
-
-// buildConfigCommand builds the configuration command with additional args
-func buildConfigCommand(prefix string, additionalArgs map[string]string) string {
-	command := prefix + `echo "license=${WHATAP_LICENSE}" > /whatap-agent/whatap.conf && echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf && echo "whatap.micro.enabled=true" >> /whatap-agent/whatap.conf`
-
-	for key, value := range additionalArgs {
-		command += fmt.Sprintf(` && echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
-	}
-
-	return command
-}
-
-// buildPythonConfigCommand builds Python-specific configuration command
-func buildPythonConfigCommand(additionalArgs map[string]string) string {
-	command := `echo "license=${WHATAP_LICENSE}" > /whatap-agent/whatap.conf && echo "whatap.server.host=${WHATAP_HOST}" >> /whatap-agent/whatap.conf && echo "whatap.server.port=${WHATAP_PORT}" >> /whatap-agent/whatap.conf`
-	command += ` && echo "app_name=${APP_NAME}" >> /whatap-agent/whatap.conf`
-	command += ` && echo "app_process_name=${APP_PROCESS_NAME}" >> /whatap-agent/whatap.conf`
-
-	for key, value := range additionalArgs {
-		if key != "app_name" && key != "app_process_name" && key != "OKIND" {
-			command += fmt.Sprintf(` && echo "%s=%s" >> /whatap-agent/whatap.conf`, key, value)
-		}
-	}
-
-	return command
-}
-
-// getPythonAppConfig extracts Python app configuration from additional args
-func getPythonAppConfig(additionalArgs map[string]string) (string, string) {
+func getPythonAppConfig(envs []corev1.EnvVar) (string, string, string) {
 	appName := "python-app"
 	appProcessName := "python"
-
-	if additionalArgs != nil {
-		if val, exists := additionalArgs["app_name"]; exists {
-			appName = val
+	OKIND := ""
+	for _, env := range envs {
+		if env.Name == "app_name" && env.Value != "" {
+			appName = env.Value
 		}
-		if val, exists := additionalArgs["app_process_name"]; exists {
-			appProcessName = val
+		if env.Name == "app_process_name" && env.Value != "" {
+			appProcessName = env.Value
+		}
+		if env.Name == "OKIND" && env.Value != "" {
+			OKIND = env.Value
 		}
 	}
 
-	return appName, appProcessName
+	return appName, appProcessName, OKIND
 }
 
-// injectLanguageSpecificEnvVars injects environment variables based on language
 func injectLanguageSpecificEnvVars(container corev1.Container, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, lang, version string, logger logr.Logger) []corev1.EnvVar {
 	var envs []corev1.EnvVar
 	switch lang {
@@ -313,7 +164,6 @@ func injectJavaEnvVars(container corev1.Container, cr monitoringv2alpha1.WhatapA
 	return append(envVars, javaEnvVars...)
 }
 
-// injectPythonEnvVars handles Python-specific environment variable injection
 func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, version string, logger logr.Logger) []corev1.EnvVar {
 	logger.Info("Configuring Python APM agent injection with whatap.conf", "version", version)
 
@@ -463,12 +313,27 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	// 1️⃣ InitContainer - 에이전트 복사
 	initContainers := createAgentInitContainers(target, cr, lang, version, logger)
 
-	// 2️⃣ Configuration init container 추가
-	configContainer, configVolume := createConfigInitContainer(target, cr, lang, logger)
-	if configContainer != nil {
-		initContainers = append(initContainers, *configContainer)
-		if configVolume != nil {
-			podSpec.Volumes = appendIfNotExists(podSpec.Volumes, *configVolume)
+	//Merge ConfigMap copy into agent init container (avoid separate alpine init)
+	if target.Config.Mode == "custom" && target.Config.ConfigMapRef != nil {
+		// Add ConfigMap volume to PodSpec
+		podSpec.Volumes = appendIfNotExists(podSpec.Volumes, corev1.Volume{
+			Name: "config-volume",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: target.Config.ConfigMapRef.Name,
+					},
+				},
+			},
+		})
+		// Ensure the first init container copies the config then runs its default init script
+		if len(initContainers) > 0 {
+			initContainers[0].VolumeMounts = append(initContainers[0].VolumeMounts, corev1.VolumeMount{
+				Name:      "config-volume",
+				MountPath: "/config-volume",
+			})
+			initContainers[0].Command = []string{"sh", "-c"}
+			initContainers[0].Args = []string{"cp /config-volume/whatap.conf /whatap-agent/ && chmod 644 /whatap-agent/whatap.conf && if [ -x /init.sh ]; then /init.sh; fi"}
 		}
 	}
 

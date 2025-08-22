@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/whatap/whatap-operator/internal/config"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
+	"github.com/whatap/whatap-operator/internal/config"
 )
 
 // nolint:unused
@@ -352,9 +352,6 @@ func validateApmTargets(whatapagent *monitoringv2alpha1.WhatapAgent) error {
 			}
 			if target.Config.ConfigMapRef.Name == "" {
 				return fmt.Errorf("target[%d]: configMapRef.name is required when config mode is 'custom'", i)
-			}
-			if target.Config.ConfigMapRef.Namespace == "" {
-				return fmt.Errorf("target[%d]: configMapRef.namespace is required when config mode is 'custom'", i)
 			}
 		}
 	}

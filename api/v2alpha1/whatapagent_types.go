@@ -416,8 +416,7 @@ type ConfigSpec struct {
 }
 
 type ConfigMapRef struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
+	Name string `json:"name"`
 }
 
 // WhatapAgentStatus defines the observed state of WhatapAgent

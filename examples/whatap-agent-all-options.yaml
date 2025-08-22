@@ -63,7 +63,6 @@ spec:
               # 커스텀 설정을 사용하는 경우 (mode: "custom"일 때)
               # configMapRef:
               #   name: "apm-custom-config"    # 커스텀 설정이 포함된 ConfigMap 이름
-              #   namespace: "default"         # ConfigMap이 위치한 네임스페이스
 
     ### Kubernetes 모니터링 설정 - 클러스터, 노드, 컨테이너 모니터링
     k8sAgent:
