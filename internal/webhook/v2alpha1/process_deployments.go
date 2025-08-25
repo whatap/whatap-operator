@@ -167,7 +167,12 @@ func injectJavaEnvVars(container corev1.Container, cr monitoringv2alpha1.WhatapA
 func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, version string, logger logr.Logger) []corev1.EnvVar {
 	logger.Info("Configuring Python APM agent injection with whatap.conf", "version", version)
 
-	appName, appProcessName, okind := getPythonEnvConfig(container.Name, target.AdditionalArgs)
+	// Read from target.Envs (align with Java approach)
+	appName, appProcessName, okind := getPythonAppConfig(target.Envs)
+	// Preserve previous default behavior: if appName is still default, use container name
+	if appName == "" || appName == "python-app" {
+		appName = container.Name
+	}
 
 	// Python 전용 환경변수 추가 (CR 기반)
 	licenseEnv := getWhatapLicenseEnvVar(cr)
@@ -191,7 +196,7 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 		{Name: "app_process_name", Value: appProcessName},
 
 		// Python 에이전트 경로 설정 (새로운 구조)
-		{Name: "WHATAP_HOME", Value: "/whatap-agent/whatap_home"},
+		{Name: "WHATAP_HOME", Value: "/whatap-agent"},
 
 		// Whatap 설정
 		{Name: "whatap.micro.enabled", Value: "true"},
@@ -208,7 +213,7 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 	}
 
 	// PYTHONPATH 안전하게 주입 (새로운 구조)
-	envVars = injectPythonPath(envVars, "/whatap-agent/python-apm/whatap/bootstrap", logger)
+	envVars = injectPythonPath(envVars, "/whatap-agent/whatap/bootstrap", logger)
 
 	return append(container.Env, envVars...)
 }
@@ -240,27 +245,6 @@ func injectBasicKubernetesEnvVars(container corev1.Container) []corev1.EnvVar {
 	}
 
 	return append(container.Env, basicEnvVars...)
-}
-
-// getPythonEnvConfig extracts Python environment configuration from additional args
-func getPythonEnvConfig(containerName string, additionalArgs map[string]string) (string, string, string) {
-	appName := containerName   // default to container name
-	appProcessName := "python" // default value
-	okind := ""                // optional
-
-	if additionalArgs != nil {
-		if val, exists := additionalArgs["app_name"]; exists {
-			appName = val
-		}
-		if val, exists := additionalArgs["app_process_name"]; exists {
-			appProcessName = val
-		}
-		if val, exists := additionalArgs["OKIND"]; exists {
-			okind = val
-		}
-	}
-
-	return appName, appProcessName, okind
 }
 
 // wrapPythonCommand wraps Python application command with whatap-start-agent

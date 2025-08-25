@@ -2,7 +2,7 @@ apiVersion: monitoring.whatap.com/v2alpha1
 kind: WhatapAgent
 metadata:
   name: whatap-sample
-spec:
+-spec:
   license: "your-license-key"
   host: "whatap-server"
   port: "6600"
@@ -58,6 +58,6 @@ spec:
               target_label: "http_verb"
               replacement: "${1}"
               action: "replace"
-            - target_label: "metric_src"
-              replacement: "whatap-open-agent"
+            - target_label: "wtp_src"
+              replacement: "true"
               action: "replace"
