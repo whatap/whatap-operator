@@ -141,6 +141,28 @@ func injectJavaEnvVars(container corev1.Container, cr monitoringv2alpha1.WhatapA
 	agentOption := "-javaagent:/whatap-agent/whatap.agent.java.jar"
 	envVars := injectJavaToolOptions(container.Env, agentOption, logger)
 
+	// WHATAP_JAVA_AGENT_PATH 기본값 설정: 사용자가 지정하지 않은 경우에만 추가
+	// 우선순위: 컨테이너에 이미 존재하면 그대로 유지
+	hasJavaAgentPath := false
+	for _, e := range container.Env {
+		if e.Name == "WHATAP_JAVA_AGENT_PATH" {
+			hasJavaAgentPath = true
+			break
+		}
+	}
+	if !hasJavaAgentPath {
+		// envVars에 동일 키가 있다면 추가하지 않음(안전장치)
+		for _, e := range envVars {
+			if e.Name == "WHATAP_JAVA_AGENT_PATH" {
+				hasJavaAgentPath = true
+				break
+			}
+		}
+		if !hasJavaAgentPath {
+			envVars = append(envVars, corev1.EnvVar{Name: "WHATAP_JAVA_AGENT_PATH", Value: "/whatap-agent/whatap.agent.java.jar"})
+		}
+	}
+
 	// Java 전용 환경변수 추가 (CR 기반)
 	licenseEnv := getWhatapLicenseEnvVar(cr)
 	licenseEnv.Name = "license" // Java agent expects "license" env var name
@@ -197,7 +219,6 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 
 		// Python 에이전트 경로 설정 (새로운 구조)
 		{Name: "WHATAP_HOME", Value: "/whatap-agent"},
-
 		// Whatap 설정
 		{Name: "whatap.micro.enabled", Value: "true"},
 
@@ -214,6 +235,28 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 
 	// PYTHONPATH 안전하게 주입 (새로운 구조)
 	envVars = injectPythonPath(envVars, "/whatap-agent/whatap/bootstrap", logger)
+
+	// WHATAP_PYTHON_AGENT_PATH 기본값 설정: 사용자가 지정하지 않은 경우에만 추가
+	// 우선순위: 컨테이너에 이미 존재하면 그대로 유지
+	hasPythonAgentPath := false
+	for _, e := range container.Env {
+		if e.Name == "WHATAP_PYTHON_AGENT_PATH" {
+			hasPythonAgentPath = true
+			break
+		}
+	}
+	if !hasPythonAgentPath {
+		// envVars에 동일 키가 있다면 추가하지 않음(이 경우도 드뭅니다만 안전장치)
+		for _, e := range envVars {
+			if e.Name == "WHATAP_PYTHON_AGENT_PATH" {
+				hasPythonAgentPath = true
+				break
+			}
+		}
+		if !hasPythonAgentPath {
+			envVars = append(envVars, corev1.EnvVar{Name: "WHATAP_PYTHON_AGENT_PATH", Value: "/whatap-agent/whatap_python"})
+		}
+	}
 
 	return append(container.Env, envVars...)
 }
