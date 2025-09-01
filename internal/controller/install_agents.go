@@ -699,6 +699,11 @@ func ensureDcgmExporterService(ctx context.Context, r *WhatapAgentReconciler, lo
 			}},
 		}
 
+		// If NodePort, enforce externalTrafficPolicy: Local
+		if serviceType == corev1.ServiceTypeNodePort {
+			svc.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+		}
+
 		// Set NodePort if specified and service type is NodePort
 		if serviceType == corev1.ServiceTypeNodePort && cr.Spec.Features.K8sAgent.GpuMonitoring.Service.NodePort != 0 {
 			svc.Spec.Ports[0].NodePort = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.NodePort
