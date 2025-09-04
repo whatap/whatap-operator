@@ -328,14 +328,12 @@ func getWhatapPortEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
 func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec, namespace string, logger logr.Logger) {
 	lang := target.Language
 	version := target.WhatapApmVersions[lang]
+	if version == "" {
+		version = "latest"
+		logger.Info("No explicit version specified; defaulting to 'latest'", "language", lang, "target", target.Name)
+	}
 
 	logger.Info("Starting APM agent injection", "language", lang, "version", version, "target", target.Name)
-
-	// Check if version is available for the language
-	if version == "" {
-		logger.Error(fmt.Errorf("no version specified for language %s", lang), "Missing version for language", "language", lang, "target", target.Name, "availableVersions", target.WhatapApmVersions)
-		return
-	}
 
 	// 1️⃣ InitContainer - 에이전트 복사
 	initContainers := createAgentInitContainers(target, cr, lang, version, logger)

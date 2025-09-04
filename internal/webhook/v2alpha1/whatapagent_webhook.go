@@ -163,9 +163,14 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		}
 		pod.Annotations["whatap-apm-injected"] = "true"
 		pod.Annotations["whatap-apm-language"] = target.Language
-		pod.Annotations["whatap-apm-version"] = target.WhatapApmVersions[target.Language]
+		// Resolve version with default fallback
+		resolvedVersion := target.WhatapApmVersions[target.Language]
+		if resolvedVersion == "" {
+			resolvedVersion = "latest"
+		}
+		pod.Annotations["whatap-apm-version"] = resolvedVersion
 
-		whatapWebhookLogger.Info("Successfully injected Whatap APM into Pod", "pod", podIdentifier, "target", target.Name, "language", target.Language, "version", target.WhatapApmVersions[target.Language])
+		whatapWebhookLogger.Info("Successfully injected Whatap APM into Pod", "pod", podIdentifier, "target", target.Name, "language", target.Language, "version", resolvedVersion)
 		injected = true
 		break
 	}
@@ -336,14 +341,8 @@ func validateApmTargets(whatapagent *monitoringv2alpha1.WhatapAgent) error {
 			return fmt.Errorf("target[%d]: language is required", i)
 		}
 
-		// Check if WhatapApmVersions has an entry for the specified language
-		if target.WhatapApmVersions == nil {
-			return fmt.Errorf("target[%d]: whatapApmVersions is required", i)
-		}
-		version, exists := target.WhatapApmVersions[target.Language]
-		if !exists || version == "" {
-			return fmt.Errorf("target[%d]: whatapApmVersions must include an entry for language '%s'", i, target.Language)
-		}
+		// Allow missing whatapApmVersions; version will default to 'latest' at injection time
+		// Previously this was required; it is now optional.
 
 		// Check config mode
 		if target.Config.Mode == "custom" {

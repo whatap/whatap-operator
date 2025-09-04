@@ -346,10 +346,11 @@ type InstrumentationSpec struct {
 }
 
 type TargetSpec struct {
-	Name              string            `json:"name"`
-	Enabled           bool              `json:"enabled"`  // +kubebuilder:default=true
-	Language          string            `json:"language"` // +kubebuilder:validation:Enum=java;python;php;dotnet;nodejs;golang
-	WhatapApmVersions map[string]string `json:"whatapApmVersions"`
+	Name     string `json:"name"`
+	Enabled  bool   `json:"enabled"`  // +kubebuilder:default=true
+	Language string `json:"language"` // +kubebuilder:validation:Enum=java;python;php;dotnet;nodejs;golang
+	// +optional
+	WhatapApmVersions map[string]string `json:"whatapApmVersions,omitempty"`
 	// CustomImageName allows specifying a full custom image name for the agent
 	// If not provided, the default image name format will be used
 	// +optional
