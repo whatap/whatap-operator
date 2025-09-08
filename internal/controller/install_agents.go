@@ -171,6 +171,12 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 		masterResources = masterSpec.MasterAgentContainer.Resources
 	}
 
+	// Determine imagePullSecrets (component override > global)
+	imagePullSecrets := masterSpec.ImagePullSecrets
+	if len(imagePullSecrets) == 0 {
+		imagePullSecrets = cr.Spec.Features.K8sAgent.ImagePullSecrets
+	}
+
 	// Get master agent container environment variables
 	masterEnvs := []corev1.EnvVar{
 		getWhatapLicenseEnvVar(cr),
@@ -213,6 +219,11 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 				ServiceAccountName: "whatap",
 				// Apply tolerations from CR if specified
 				Tolerations: masterSpec.Tolerations,
+				// Apply affinity/nodeSelector/priority from CR if specified
+				Affinity:          masterSpec.Affinity,
+				NodeSelector:      masterSpec.NodeSelector,
+				PriorityClassName: masterSpec.PriorityClassName,
+				ImagePullSecrets:  imagePullSecrets,
 				Containers: []corev1.Container{
 					{
 						Name:    "whatap-master-agent",
@@ -456,6 +467,12 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		agentEnvs = append(agentEnvs, nodeSpec.Envs...)
 	}
 
+	// Determine imagePullSecrets (component override > global) for node agent
+	nodeImagePullSecrets := nodeSpec.ImagePullSecrets
+	if len(nodeImagePullSecrets) == 0 {
+		nodeImagePullSecrets = cr.Spec.Features.K8sAgent.ImagePullSecrets
+	}
+
 	// Get runtime configuration (default to containerd)
 	runtime := "containerd"
 	if nodeSpec.Runtime != "" {
@@ -513,6 +530,10 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 			},
 			Spec: corev1.PodSpec{
 				ServiceAccountName: "whatap",
+				// Apply affinity/nodeSelector/priority from CR if specified
+				Affinity:          nodeSpec.Affinity,
+				NodeSelector:      nodeSpec.NodeSelector,
+				PriorityClassName: nodeSpec.PriorityClassName,
 				Containers: []corev1.Container{
 					{
 						Name:      "whatap-node-helper",
@@ -552,7 +573,8 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						},
 					},
 				},
-				Tolerations: tolerations,
+				Tolerations:      tolerations,
+				ImagePullSecrets: nodeImagePullSecrets,
 				Volumes: []corev1.Volume{
 					{Name: "rootfs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/"}}},
 					{Name: "hostsys", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys"}}},

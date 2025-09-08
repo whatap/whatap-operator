@@ -209,13 +209,16 @@ type K8sAgentSpec struct {
 	// CustomAgentImageFullName allows specifying a full custom image name (including repository and tag)
 	// If provided, this takes precedence over AgentImageName and AgentImageVersion
 	// +optional
-	CustomAgentImageFullName string                   `json:"customAgentImageFullName,omitempty"`
-	MasterAgent              MasterAgentComponentSpec `json:"masterAgent"`
-	NodeAgent                NodeAgentComponentSpec   `json:"nodeAgent"`
-	GpuMonitoring            GpuMonitoringSpec        `json:"gpuMonitoring"`
-	ApiserverMonitoring      AgentComponentSpec       `json:"apiserverMonitoring,omitempty"`
-	EtcdMonitoring           AgentComponentSpec       `json:"etcdMonitoring,omitempty"`
-	SchedulerMonitoring      AgentComponentSpec       `json:"schedulerMonitoring,omitempty"`
+	CustomAgentImageFullName string `json:"customAgentImageFullName,omitempty"`
+	// ImagePullSecrets defines global image pull secrets for K8s agent pods (can be overridden per component)
+	// +optional
+	ImagePullSecrets    []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	MasterAgent         MasterAgentComponentSpec      `json:"masterAgent"`
+	NodeAgent           NodeAgentComponentSpec        `json:"nodeAgent"`
+	GpuMonitoring       GpuMonitoringSpec             `json:"gpuMonitoring"`
+	ApiserverMonitoring AgentComponentSpec            `json:"apiserverMonitoring,omitempty"`
+	EtcdMonitoring      AgentComponentSpec            `json:"etcdMonitoring,omitempty"`
+	SchedulerMonitoring AgentComponentSpec            `json:"schedulerMonitoring,omitempty"`
 }
 
 type MasterAgentComponentSpec struct {
@@ -226,6 +229,18 @@ type MasterAgentComponentSpec struct {
 	// Tolerations to be added to the MasterAgent pod
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// Affinity settings for the MasterAgent pod
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+	// Node selector for scheduling MasterAgent pod
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// ImagePullSecrets to use for MasterAgent pod (overrides global if set)
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	// PriorityClassName for the MasterAgent pod
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
 	// Labels to be added to the MasterAgent deployment
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
@@ -250,6 +265,18 @@ type NodeAgentComponentSpec struct {
 	// Tolerations to be added to the NodeAgent pod
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// Affinity settings for the NodeAgent pod
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+	// Node selector for scheduling NodeAgent pod
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// ImagePullSecrets to use for NodeAgent pod (overrides global if set)
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	// PriorityClassName for the NodeAgent pod
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
 	// Labels to be added to the NodeAgent daemonset
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
