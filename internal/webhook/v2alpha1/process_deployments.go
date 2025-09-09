@@ -46,9 +46,10 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 		}
 	}
 	if runAsNonRootOverride == nil && runAsUserOverride == nil {
-		// No overrides provided: default to non-root for better security/OpenShift compatibility
+		// No overrides provided: default to non-root with UID 1001 for better security/OpenShift compatibility
 		securityContext = &corev1.SecurityContext{
 			RunAsNonRoot: boolPtr(true),
+			RunAsUser:    int64Ptr(1001),
 		}
 	} else {
 		// Use only provided fields. If RunAsNonRoot=true without RunAsUser, leave RunAsUser nil for OpenShift compatibility
