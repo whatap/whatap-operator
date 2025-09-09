@@ -27,10 +27,38 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 		MountPath: "/whatap-agent",
 	}
 
-	// SecurityContext for init containers (needs root access)
-	securityContext := &corev1.SecurityContext{
-		RunAsNonRoot: boolPtr(false),
-		RunAsUser:    int64Ptr(0),
+	// SecurityContext for init containers
+	// Default is root (backward-compatible). If CR specifies overrides, apply them.
+	var securityContext *corev1.SecurityContext
+	// Resolve overrides: Target > Instrumentation > default
+	var (
+		runAsNonRootOverride *bool
+		runAsUserOverride    *int64
+	)
+	if target.InitContainerSecurity != nil {
+		runAsNonRootOverride = target.InitContainerSecurity.RunAsNonRoot
+		runAsUserOverride = target.InitContainerSecurity.RunAsUser
+	}
+	if runAsNonRootOverride == nil && runAsUserOverride == nil {
+		if cr.Spec.Features.Apm.Instrumentation.InitContainerSecurity != nil {
+			runAsNonRootOverride = cr.Spec.Features.Apm.Instrumentation.InitContainerSecurity.RunAsNonRoot
+			runAsUserOverride = cr.Spec.Features.Apm.Instrumentation.InitContainerSecurity.RunAsUser
+		}
+	}
+	if runAsNonRootOverride == nil && runAsUserOverride == nil {
+		// No overrides provided: default to non-root for better security/OpenShift compatibility
+		securityContext = &corev1.SecurityContext{
+			RunAsNonRoot: boolPtr(true),
+		}
+	} else {
+		// Use only provided fields. If RunAsNonRoot=true without RunAsUser, leave RunAsUser nil for OpenShift compatibility
+		securityContext = &corev1.SecurityContext{}
+		if runAsNonRootOverride != nil {
+			securityContext.RunAsNonRoot = runAsNonRootOverride
+		}
+		if runAsUserOverride != nil {
+			securityContext.RunAsUser = runAsUserOverride
+		}
 	}
 
 	if lang == "python" {

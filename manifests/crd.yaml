@@ -50,6 +50,15 @@ spec:
                             enabled:
                               default: true
                               type: boolean
+                            initContainerSecurity:
+                              description: Controls security context of injected initContainers
+                              properties:
+                                runAsNonRoot:
+                                  type: boolean
+                                runAsUser:
+                                  format: int64
+                                  type: integer
+                              type: object
                             targets:
                               items:
                                 properties:
@@ -78,6 +87,15 @@ spec:
                                           - default
                                           - custom
                                         type: string
+                                    type: object
+                                  initContainerSecurity:
+                                    description: Controls security context of the injected initContainer for this target (overrides instrumentation-level settings)
+                                    properties:
+                                      runAsNonRoot:
+                                        type: boolean
+                                      runAsUser:
+                                        format: int64
+                                        type: integer
                                     type: object
                                   customImageName:
                                     description: |-

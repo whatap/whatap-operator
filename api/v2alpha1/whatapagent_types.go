@@ -364,10 +364,25 @@ type ApmSpec struct {
 	Instrumentation InstrumentationSpec `json:"instrumentation,omitempty"`
 }
 
+// InitContainerSecuritySpec allows configuring the injected initContainer security context
+// Only the specified fields will be applied; leaving them nil preserves defaults
+// for backward compatibility.
+type InitContainerSecuritySpec struct {
+	// RunAsNonRoot indicates that the container must run as a non-root user
+	// +optional
+	RunAsNonRoot *bool `json:"runAsNonRoot,omitempty"`
+	// RunAsUser specifies the UID to run the container process with
+	// +optional
+	RunAsUser *int64 `json:"runAsUser,omitempty"`
+}
+
 // InstrumentationSpec holds instrumentation targets
 type InstrumentationSpec struct {
 	// +kubebuilder:default=true
 	Enabled bool `json:"enabled,omitempty"`
+	// Controls security context of injected initContainers. If unset, defaults apply.
+	// +optional
+	InitContainerSecurity *InitContainerSecuritySpec `json:"initContainerSecurity,omitempty"`
 	// +optional
 	Targets []TargetSpec `json:"targets,omitempty"`
 }
@@ -392,6 +407,9 @@ type TargetSpec struct {
 	NamespaceSelector NamespaceSelector `json:"namespaceSelector,omitempty"`
 	PodSelector       PodSelector       `json:"podSelector,omitempty"`
 	Config            ConfigSpec        `json:"config,omitempty"`
+	// Controls security context of the injected initContainer for this target (overrides instrumentation-level settings)
+	// +optional
+	InitContainerSecurity *InitContainerSecuritySpec `json:"initContainerSecurity,omitempty"`
 }
 
 // NamespaceSelector matches specific namespaces
