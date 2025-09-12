@@ -364,7 +364,7 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 
 	logger.Info("Starting APM agent injection", "language", lang, "version", version, "target", target.Name)
 
-	// 0️⃣ Ensure imagePullSecrets for pulling APM initContainer image (merge target-provided, then global CR-provided secrets)
+	// 0️⃣ Ensure imagePullSecrets for pulling APM initContainer image (append only target-provided secrets; do not merge global)
 	{
 		// Build a set of existing secret names to avoid duplicates
 		existing := map[string]struct{}{}
@@ -372,7 +372,7 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 			existing[s.Name] = struct{}{}
 		}
 		added := 0
-		// Merge target-level secrets first (per-target control)
+		// Append target-level secrets only (per new policy)
 		if len(target.ImagePullSecrets) > 0 {
 			for _, s := range target.ImagePullSecrets {
 				if _, ok := existing[s.Name]; !ok {
@@ -382,18 +382,8 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 				}
 			}
 		}
-		// Then merge global CR-provided secrets
-		if len(cr.Spec.Features.K8sAgent.ImagePullSecrets) > 0 {
-			for _, s := range cr.Spec.Features.K8sAgent.ImagePullSecrets {
-				if _, ok := existing[s.Name]; !ok {
-					podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{Name: s.Name})
-					existing[s.Name] = struct{}{}
-					added++
-				}
-			}
-		}
 		if added > 0 {
-			logger.Info("Merged imagePullSecrets into PodSpec for APM initContainer image pulls", "addedSecrets", added)
+			logger.Info("Appended target-level imagePullSecrets for APM initContainer image pulls", "addedSecrets", added)
 		}
 	}
 
