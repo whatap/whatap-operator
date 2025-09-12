@@ -410,6 +410,9 @@ type TargetSpec struct {
 	// Controls security context of the injected initContainer for this target (overrides instrumentation-level settings)
 	// +optional
 	InitContainerSecurity *InitContainerSecuritySpec `json:"initContainerSecurity,omitempty"`
+	// ImagePullSecrets defines image pull secrets to use for pulling the target's APM initContainer image (overrides/extends global)
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // NamespaceSelector matches specific namespaces

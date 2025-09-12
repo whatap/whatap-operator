@@ -364,6 +364,39 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 
 	logger.Info("Starting APM agent injection", "language", lang, "version", version, "target", target.Name)
 
+	// 0️⃣ Ensure imagePullSecrets for pulling APM initContainer image (merge target-provided, then global CR-provided secrets)
+	{
+		// Build a set of existing secret names to avoid duplicates
+		existing := map[string]struct{}{}
+		for _, s := range podSpec.ImagePullSecrets {
+			existing[s.Name] = struct{}{}
+		}
+		added := 0
+		// Merge target-level secrets first (per-target control)
+		if len(target.ImagePullSecrets) > 0 {
+			for _, s := range target.ImagePullSecrets {
+				if _, ok := existing[s.Name]; !ok {
+					podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{Name: s.Name})
+					existing[s.Name] = struct{}{}
+					added++
+				}
+			}
+		}
+		// Then merge global CR-provided secrets
+		if len(cr.Spec.Features.K8sAgent.ImagePullSecrets) > 0 {
+			for _, s := range cr.Spec.Features.K8sAgent.ImagePullSecrets {
+				if _, ok := existing[s.Name]; !ok {
+					podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, corev1.LocalObjectReference{Name: s.Name})
+					existing[s.Name] = struct{}{}
+					added++
+				}
+			}
+		}
+		if added > 0 {
+			logger.Info("Merged imagePullSecrets into PodSpec for APM initContainer image pulls", "addedSecrets", added)
+		}
+	}
+
 	// 1️⃣ InitContainer - 에이전트 복사
 	initContainers := createAgentInitContainers(target, cr, lang, version, logger)
 
