@@ -519,6 +519,8 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		}
 	}
 
+	hostToContainer := corev1.MountPropagationHostToContainer
+
 	return appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{"name": "whatap-node-agent"},
@@ -543,7 +545,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						Env:       helperEnvs,
 						Resources: helperResources,
 						VolumeMounts: []corev1.VolumeMount{
-							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true},
+							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true, MountPropagation: &hostToContainer},
 							{Name: "hostsys", MountPath: "/sys", ReadOnly: true},
 							{Name: "hostdiskdevice", MountPath: "/dev/disk", ReadOnly: true},
 							runtimeVolumeMount,
@@ -557,7 +559,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						Env:       agentEnvs,
 						Resources: agentResources,
 						VolumeMounts: []corev1.VolumeMount{
-							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true},
+							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true, MountPropagation: &hostToContainer},
 							{Name: "start-script-volume", MountPath: "/bin/entrypoint.sh", SubPath: "entrypoint.sh", ReadOnly: true},
 							{Name: "whatap-config-volume", MountPath: "/whatap_conf"},
 						},
@@ -569,7 +571,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						Image:   image,
 						Command: []string{"/data/agent/tools/whatap_debugger", "run"},
 						VolumeMounts: []corev1.VolumeMount{
-							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true},
+							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true, MountPropagation: &hostToContainer},
 						},
 					},
 				},
