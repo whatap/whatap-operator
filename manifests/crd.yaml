@@ -234,10 +234,14 @@ spec:
                           required:
                             - enabled
                           type: object
+                        customImageFullName:
+                          description: |-
+                            CustomImageFullName allows specifying a full custom image name (including repository and tag)
+                            If provided, this takes precedence over AgentImageName and AgentImageVersion
+                          type: string
                         customAgentImageFullName:
                           description: |-
-                            CustomAgentImageFullName allows specifying a full custom image name (including repository and tag)
-                            If provided, this takes precedence over AgentImageName and AgentImageVersion
+                            (DEPRECATED) CustomAgentImageFullName is kept for backward compatibility. Prefer customImageFullName. If both are set, customImageFullName takes precedence.
                           type: string
                         etcdMonitoring:
                           properties:
@@ -1587,6 +1591,42 @@ spec:
                           additionalProperties:
                             type: string
                           description: PodLabels to be added to the OpenAgent pod template
+                          type: object
+                        imagePullSecrets:
+                          description: ImagePullSecrets to use for the OpenAgent pod
+                          items:
+                            description: |
+                              LocalObjectReference contains enough information to let you locate the
+                              referenced object inside the same namespace.
+                            properties:
+                              name:
+                                default: ""
+                                description: |
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          type: array
+                        priorityClassName:
+                          description: PriorityClassName for the OpenAgent pod
+                          type: string
+                        nodeSelector:
+                          additionalProperties:
+                            type: string
+                          description: Node selector for scheduling the OpenAgent pod
+                          type: object
+                        affinity:
+                          description: Affinity settings for the OpenAgent pod
+                          type: object
+                        nodeName:
+                          description: NodeName pins the OpenAgent pod to a specific node (use with caution)
+                          type: string
+                        podSecurityContext:
+                          description: PodSecurityContext allows overriding the default Pod-level security context
                           type: object
                         targets:
                           description: Targets defines the list of targets to scrape

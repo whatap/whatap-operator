@@ -328,6 +328,11 @@ func (in *MasterAgentComponentSpec) DeepCopyInto(out *MasterAgentComponentSpec) 
 			(*out)[key] = val
 		}
 	}
+	if in.PodSecurityContext != nil {
+		in, out := &in.PodSecurityContext, &out.PodSecurityContext
+		*out = new(v1.PodSecurityContext)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.MasterAgentContainer != nil {
 		in, out := &in.MasterAgentContainer, &out.MasterAgentContainer
 		*out = new(ContainerSpec)
@@ -462,6 +467,11 @@ func (in *NodeAgentComponentSpec) DeepCopyInto(out *NodeAgentComponentSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.PodSecurityContext != nil {
+		in, out := &in.PodSecurityContext, &out.PodSecurityContext
+		*out = new(v1.PodSecurityContext)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.NodeAgentContainer != nil {
 		in, out := &in.NodeAgentContainer, &out.NodeAgentContainer
 		*out = new(ContainerSpec)
@@ -565,12 +575,34 @@ func (in *OpenAgentSpec) DeepCopyInto(out *OpenAgentSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.ImagePullSecrets != nil {
+		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
+		*out = make([]v1.LocalObjectReference, len(*in))
+		copy(*out, *in)
+	}
+	if in.NodeSelector != nil {
+		in, out := &in.NodeSelector, &out.NodeSelector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
+	if in.Affinity != nil {
+		in, out := &in.Affinity, &out.Affinity
+		*out = new(v1.Affinity)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Tolerations != nil {
 		in, out := &in.Tolerations, &out.Tolerations
 		*out = make([]v1.Toleration, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
+	}
+	if in.PodSecurityContext != nil {
+		in, out := &in.PodSecurityContext, &out.PodSecurityContext
+		*out = new(v1.PodSecurityContext)
+		(*in).DeepCopyInto(*out)
 	}
 	if in.Envs != nil {
 		in, out := &in.Envs, &out.Envs

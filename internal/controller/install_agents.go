@@ -68,8 +68,10 @@ func logResult(logger logr.Logger, what, target string, op controllerutil.Operat
 func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	var img string
 
-	// Check if a full custom image name is provided
-	if cr.Spec.Features.K8sAgent.CustomAgentImageFullName != "" {
+	// Resolve image: prefer new CustomImageFullName, then fallback to deprecated CustomAgentImageFullName, then name+version
+	if cr.Spec.Features.K8sAgent.CustomImageFullName != "" {
+		img = cr.Spec.Features.K8sAgent.CustomImageFullName
+	} else if cr.Spec.Features.K8sAgent.CustomAgentImageFullName != "" {
 		img = cr.Spec.Features.K8sAgent.CustomAgentImageFullName
 	} else {
 		// Use the separate name and version fields
@@ -224,6 +226,16 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 				NodeSelector:      masterSpec.NodeSelector,
 				PriorityClassName: masterSpec.PriorityClassName,
 				ImagePullSecrets:  imagePullSecrets,
+				SecurityContext: func() *corev1.PodSecurityContext {
+					if masterSpec.PodSecurityContext != nil {
+						return masterSpec.PodSecurityContext
+					}
+					return &corev1.PodSecurityContext{
+						RunAsNonRoot:   boolPtr(true),
+						RunAsUser:      int64Ptr(1001),
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					}
+				}(),
 				Containers: []corev1.Container{
 					{
 						Name:    "whatap-master-agent",
@@ -252,7 +264,7 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{Name: "master-start-script"},
-								DefaultMode:          int32Ptr(0700),
+								DefaultMode:          int32Ptr(0555),
 							},
 						},
 					},
@@ -271,8 +283,10 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	var img string
 
-	// Check if a full custom image name is provided
-	if cr.Spec.Features.K8sAgent.CustomAgentImageFullName != "" {
+	// Resolve image: prefer new CustomImageFullName, then fallback to deprecated CustomAgentImageFullName, then name+version
+	if cr.Spec.Features.K8sAgent.CustomImageFullName != "" {
+		img = cr.Spec.Features.K8sAgent.CustomImageFullName
+	} else if cr.Spec.Features.K8sAgent.CustomAgentImageFullName != "" {
 		img = cr.Spec.Features.K8sAgent.CustomAgentImageFullName
 	} else {
 		// Use the separate name and version fields
@@ -536,6 +550,16 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 				Affinity:          nodeSpec.Affinity,
 				NodeSelector:      nodeSpec.NodeSelector,
 				PriorityClassName: nodeSpec.PriorityClassName,
+				SecurityContext: func() *corev1.PodSecurityContext {
+					if nodeSpec.PodSecurityContext != nil {
+						return nodeSpec.PodSecurityContext
+					}
+					return &corev1.PodSecurityContext{
+						RunAsNonRoot:   boolPtr(true),
+						RunAsUser:      int64Ptr(1001),
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					}
+				}(),
 				Containers: []corev1.Container{
 					{
 						Name:      "whatap-node-helper",
@@ -565,16 +589,6 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						},
 					},
 				},
-				InitContainers: []corev1.Container{
-					{
-						Name:    "whatap-node-debug",
-						Image:   image,
-						Command: []string{"/data/agent/tools/whatap_debugger", "run"},
-						VolumeMounts: []corev1.VolumeMount{
-							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true, MountPropagation: &hostToContainer},
-						},
-					},
-				},
 				Tolerations:      tolerations,
 				ImagePullSecrets: nodeImagePullSecrets,
 				Volumes: []corev1.Volume{
@@ -583,7 +597,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 					{Name: "hostdiskdevice", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/dev/disk"}}},
 					{Name: "start-script-volume", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{Name: "node-start-script"},
-						DefaultMode:          int32Ptr(0700),
+						DefaultMode:          int32Ptr(0555),
 					}}},
 					{Name: "whatap-config-volume", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 					runtimeVolume,
@@ -1363,6 +1377,24 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 						ServiceAccountName: "whatap-open-agent-sa",
 						// Apply tolerations from CR if specified
 						Tolerations: openAgentSpec.Tolerations,
+						// Scheduling and image settings from CR if specified
+						Affinity:          openAgentSpec.Affinity,
+						NodeSelector:      openAgentSpec.NodeSelector,
+						PriorityClassName: openAgentSpec.PriorityClassName,
+						ImagePullSecrets:  openAgentSpec.ImagePullSecrets,
+						// Optional direct node pinning (use with caution)
+						NodeName: openAgentSpec.NodeName,
+						// Pod security context (fallback to safe defaults if not set)
+						SecurityContext: func() *corev1.PodSecurityContext {
+							if openAgentSpec.PodSecurityContext != nil {
+								return openAgentSpec.PodSecurityContext
+							}
+							return &corev1.PodSecurityContext{
+								RunAsNonRoot:   boolPtr(true),
+								RunAsUser:      int64Ptr(1001),
+								SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+							}
+						}(),
 						Containers: []corev1.Container{
 							{
 								Name:            "whatap-open-agent",

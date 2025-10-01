@@ -73,9 +73,27 @@ type OpenAgentSpec struct {
 	// PodAnnotations to be added to the OpenAgent pod template
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+	// ImagePullSecrets to use for the OpenAgent pod
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	// PriorityClassName for the OpenAgent pod
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
+	// Node selector for scheduling the OpenAgent pod
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Affinity settings for the OpenAgent pod
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 	// Tolerations to be added to the OpenAgent pod
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// NodeName pins the OpenAgent pod to a specific node (use with caution)
+	// +optional
+	NodeName string `json:"nodeName,omitempty"`
+	// PodSecurityContext allows overriding the default Pod-level security context
+	// +optional
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	// Environment variables to be added to the OpenAgent container
 	// +optional
 	Envs []corev1.EnvVar `json:"envs,omitempty"`
@@ -206,8 +224,11 @@ type K8sAgentSpec struct {
 	// AgentImageVersion defines the version of the agent image to use
 	// +optional
 	AgentImageVersion string `json:"agentImageVersion,omitempty"`
-	// CustomAgentImageFullName allows specifying a full custom image name (including repository and tag)
+	// CustomImageFullName allows specifying a full custom image name (including repository and tag)
 	// If provided, this takes precedence over AgentImageName and AgentImageVersion
+	// +optional
+	CustomImageFullName string `json:"customImageFullName,omitempty"`
+	// CustomAgentImageFullName is DEPRECATED. Kept for backward compatibility; will be overridden by CustomImageFullName if both are set.
 	// +optional
 	CustomAgentImageFullName string `json:"customAgentImageFullName,omitempty"`
 	// ImagePullSecrets defines global image pull secrets for K8s agent pods (can be overridden per component)
@@ -253,6 +274,10 @@ type MasterAgentComponentSpec struct {
 	// PodAnnotations to be added to the MasterAgent pod template
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+	// PodSecurityContext allows overriding the default Pod-level security context
+	// If not set, the operator will apply a safe default (RunAsNonRoot= true, RunAsUser=1001, SeccompProfile=RuntimeDefault)
+	// +optional
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	// MasterAgentContainer defines configuration specific to the whatap-master-agent container
 	// +optional
 	MasterAgentContainer *ContainerSpec `json:"masterAgentContainer,omitempty"`
@@ -289,6 +314,10 @@ type NodeAgentComponentSpec struct {
 	// PodAnnotations to be added to the NodeAgent pod template
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+	// PodSecurityContext allows overriding the default Pod-level security context
+	// If not set, the operator will apply a safe default (RunAsNonRoot= true, RunAsUser=1001, SeccompProfile=RuntimeDefault)
+	// +optional
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	// NodeAgentContainer defines configuration specific to the whatap-node-agent container
 	// +optional
 	NodeAgentContainer *ContainerSpec `json:"nodeAgentContainer,omitempty"`
