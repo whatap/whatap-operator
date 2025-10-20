@@ -493,44 +493,45 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		runtime = nodeSpec.Runtime
 	}
 
-	// Define runtime socket configurations
+	// Define runtime socket configurations with optional hostPath override
 	var runtimeVolumeMount corev1.VolumeMount
 	var runtimeVolume corev1.Volume
 
+	var volName string
+	var mountPath string
+	var hostPath string
+
 	switch runtime {
 	case "docker":
-		runtimeVolumeMount = corev1.VolumeMount{
-			Name:      "dockerdomainsocket",
-			MountPath: "/var/run/docker.sock",
-		}
-		runtimeVolume = corev1.Volume{
-			Name: "dockerdomainsocket",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/docker.sock"},
-			},
-		}
+		volName = "dockerdomainsocket"
+		mountPath = "/var/run/docker.sock"
+		hostPath = "/var/run/docker.sock"
 	case "crio":
-		runtimeVolumeMount = corev1.VolumeMount{
-			Name:      "criodomainsocket",
-			MountPath: "/var/run/crio/crio.sock",
-		}
-		runtimeVolume = corev1.Volume{
-			Name: "criodomainsocket",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/crio/crio.sock"},
-			},
-		}
+		volName = "criodomainsocket"
+		mountPath = "/var/run/crio/crio.sock"
+		hostPath = "/var/run/crio/crio.sock"
 	default: // containerd
-		runtimeVolumeMount = corev1.VolumeMount{
-			Name:      "containerddomainsocket",
-			MountPath: "/run/containerd/containerd.sock",
-		}
-		runtimeVolume = corev1.Volume{
-			Name: "containerddomainsocket",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{Path: "/run/containerd/containerd.sock"},
-			},
-		}
+		volName = "containerddomainsocket"
+		mountPath = "/run/containerd/containerd.sock"
+		hostPath = "/run/containerd/containerd.sock"
+	}
+
+	// If user provided an override for host socket path, apply it here (container mountPath remains the default)
+	if nodeSpec.RuntimeSocketPath != "" {
+		hostPath = nodeSpec.RuntimeSocketPath
+	}
+
+	runtimeVolumeMount = corev1.VolumeMount{
+		Name:      volName,
+		MountPath: mountPath,
+	}
+
+	typeSocket := corev1.HostPathSocket
+	runtimeVolume = corev1.Volume{
+		Name: volName,
+		VolumeSource: corev1.VolumeSource{
+			HostPath: &corev1.HostPathVolumeSource{Path: hostPath, Type: &typeSocket},
+		},
 	}
 
 	hostToContainer := corev1.MountPropagationHostToContainer

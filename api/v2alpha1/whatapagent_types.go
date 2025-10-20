@@ -329,6 +329,11 @@ type NodeAgentComponentSpec struct {
 	// +kubebuilder:validation:Enum=containerd;docker;crio
 	// +optional
 	Runtime string `json:"runtime,omitempty"`
+	// RuntimeSocketPath allows overriding the hostPath to the container runtime domain socket
+	// This is used for the selected Runtime only
+	// e.g. for containerd: /var/run/containerd/containerd.sock
+	// +optional
+	RuntimeSocketPath string `json:"runtimeSocketPath,omitempty"`
 }
 
 // ContainerSpec defines configuration for a specific container
