@@ -3923,6 +3923,12 @@ spec:
                             - docker
                             - crio
                             type: string
+                          runtimeSocketPath:
+                            description: |-
+                              RuntimeSocketPath allows overriding the hostPath to the container runtime domain socket
+                              This is used for the selected Runtime only
+                              e.g. for containerd: /var/run/containerd/containerd.sock
+                            type: string
                           tolerations:
                             description: Tolerations to be added to the NodeAgent
                               pod
