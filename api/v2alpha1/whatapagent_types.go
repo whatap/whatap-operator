@@ -427,7 +427,11 @@ type TargetSpec struct {
 	Language string `json:"language"` // +kubebuilder:validation:Enum=java;python;php;dotnet;nodejs;golang
 	// +optional
 	WhatapApmVersions map[string]string `json:"whatapApmVersions,omitempty"`
-	// CustomImageName allows specifying a full custom image name for the agent
+	// CustomImageFullName allows specifying a full custom image name (including repository and tag) for the APM init image
+	// If provided, this takes precedence over CustomImageName and the default image format
+	// +optional
+	CustomImageFullName string `json:"customImageFullName,omitempty"`
+	// CustomImageName allows specifying a full custom image name for the agent (DEPRECATED - use customImageFullName)
 	// If not provided, the default image name format will be used
 	// +optional
 	CustomImageName string `json:"customImageName,omitempty"`

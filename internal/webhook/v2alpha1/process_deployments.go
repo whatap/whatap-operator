@@ -617,9 +617,15 @@ func matchesNamespaceNames(namespaceName string, matchNames []string) bool {
 // If a custom image name is provided, it will be used
 // Otherwise, the default image name format will be used
 func getAgentImage(target monitoringv2alpha1.TargetSpec, lang, version string) string {
+	// Prefer new CustomImageFullName if provided
+	if target.CustomImageFullName != "" {
+		return target.CustomImageFullName
+	}
+	// Fallback to deprecated CustomImageName for backward compatibility
 	if target.CustomImageName != "" {
 		return target.CustomImageName
 	}
+	// Default image format
 	return fmt.Sprintf("public.ecr.aws/whatap/apm-init-%s:%s", lang, version)
 }
 
