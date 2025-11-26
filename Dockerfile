@@ -27,10 +27,10 @@ ARG BUILD_TIME=unknown
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -ldflags "-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
     -o manager cmd/main.go
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+# Use alpine to support curl
+FROM alpine:latest
 WORKDIR /
+RUN apk add --no-cache curl ca-certificates
 COPY --from=builder /workspace/manager .
 USER 65532:65532
 

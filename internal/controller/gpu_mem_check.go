@@ -10,15 +10,16 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // GpuMemChecker monitors dcgm-exporter memory usage and restarts the pod if it exceeds the threshold
 type GpuMemChecker struct {
-	Client   client.Client
-	Interval time.Duration
-	Log      logr.Logger
+	ClientSet kubernetes.Interface
+	Interval  time.Duration
+	Log       logr.Logger
 }
 
 type ContainerStatsResponse struct {
@@ -49,22 +50,27 @@ func (r *GpuMemChecker) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
+			r.Log.Info("Ticker fired, initiating check")
 			r.checkGpuPods(ctx)
 		}
 	}
 }
 
 func (r *GpuMemChecker) checkGpuPods(ctx context.Context) {
-	podList := &corev1.PodList{}
+	r.Log.Info("Listing GPU pods")
+
 	// Find pods with label whatap-gpu: true
-	opts := []client.ListOption{
-		client.MatchingLabels{"whatap-gpu": "true"},
+	listOpts := metav1.ListOptions{
+		LabelSelector: "whatap-gpu=true",
 	}
 
-	if err := r.Client.List(ctx, podList, opts...); err != nil {
+	podList, err := r.ClientSet.CoreV1().Pods("").List(ctx, listOpts)
+	if err != nil {
 		r.Log.Error(err, "Failed to list GPU pods")
 		return
 	}
+
+	r.Log.Info("Listed GPU pods", "count", len(podList.Items))
 
 	for _, pod := range podList.Items {
 		r.checkPod(ctx, &pod)
@@ -72,8 +78,10 @@ func (r *GpuMemChecker) checkGpuPods(ctx context.Context) {
 }
 
 func (r *GpuMemChecker) checkPod(ctx context.Context, pod *corev1.Pod) {
+	r.Log.Info("Checking pod details", "pod", pod.Name, "phase", pod.Status.Phase)
 	// Skip if pod is not running
 	if pod.Status.Phase != corev1.PodRunning {
+		r.Log.Info("Pod not running, skipping", "pod", pod.Name)
 		return
 	}
 
@@ -87,6 +95,7 @@ func (r *GpuMemChecker) checkPod(ctx context.Context, pod *corev1.Pod) {
 	}
 
 	if containerID == "" {
+		r.Log.Info("dcgm-exporter container not found", "pod", pod.Name)
 		// dcgm-exporter might not be ready or present?
 		return
 	}
@@ -95,13 +104,16 @@ func (r *GpuMemChecker) checkPod(ctx context.Context, pod *corev1.Pod) {
 	if idx := strings.Index(containerID, "://"); idx != -1 {
 		containerID = containerID[idx+3:]
 	}
+	r.Log.Info("Found container ID", "pod", pod.Name, "containerID", containerID)
 
 	// Check memory usage
+	r.Log.Info("Requesting memory stats", "pod", pod.Name, "ip", pod.Status.PodIP)
 	workingSet, limit, err := r.getMemoryStats(ctx, pod.Status.PodIP, containerID)
 	if err != nil {
-		r.Log.V(1).Info("Failed to get memory stats", "pod", pod.Name, "error", err)
+		r.Log.Info("Failed to get memory stats", "pod", pod.Name, "error", err)
 		return
 	}
+	r.Log.Info("Memory stats retrieved", "pod", pod.Name, "workingSet", workingSet, "limit", limit)
 
 	if limit == 0 {
 		return
@@ -118,7 +130,7 @@ func (r *GpuMemChecker) checkPod(ctx context.Context, pod *corev1.Pod) {
 			"limit", limit,
 			"ratio", ratio)
 
-		if err := r.Client.Delete(ctx, pod); err != nil {
+		if err := r.ClientSet.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{}); err != nil {
 			r.Log.Error(err, "Failed to delete pod", "pod", pod.Name)
 		}
 	}

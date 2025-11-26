@@ -37,6 +37,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -312,9 +313,16 @@ func main() {
 
 	if enableGpuMemCheck {
 		setupLog.Info("enabling GPU memory check")
+		// Create kubernetes clientset
+		clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+		if err != nil {
+			setupLog.Error(err, "unable to create kubernetes clientset")
+			os.Exit(1)
+		}
+
 		if err := mgr.Add(&controller.GpuMemChecker{
-			Client:   mgr.GetClient(),
-			Interval: 60 * time.Second,
+			ClientSet: clientset,
+			Interval:  30 * time.Second,
 		}); err != nil {
 			setupLog.Error(err, "unable to add GPU memory checker")
 			os.Exit(1)
