@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -35,6 +36,11 @@ type MemoryStats struct {
 type MemoryStatsDetails struct {
 	InactiveFile uint64 `json:"inactive_file"`
 	Rss          uint64 `json:"rss"`
+}
+
+type ContainerMeta struct {
+	Id          string `json:"Id"`
+	MemoryLimit string `json:"MemoryLimit"`
 }
 
 // Start implements manager.Runnable
@@ -108,11 +114,18 @@ func (r *GpuMemChecker) checkPod(ctx context.Context, pod *corev1.Pod) {
 
 	// Check memory usage
 	r.Log.Info("Requesting memory stats", "pod", pod.Name, "ip", pod.Status.PodIP)
-	workingSet, limit, err := r.getMemoryStats(ctx, pod.Status.PodIP, containerID)
+	workingSet, _, err := r.getMemoryStats(ctx, pod.Status.PodIP, containerID)
 	if err != nil {
 		r.Log.Info("Failed to get memory stats", "pod", pod.Name, "error", err)
 		return
 	}
+
+	limit, err := r.getContainerLimit(ctx, pod.Status.PodIP, containerID)
+	if err != nil {
+		r.Log.Info("Failed to get container limit", "pod", pod.Name, "error", err)
+		return
+	}
+
 	r.Log.Info("Memory stats retrieved", "pod", pod.Name, "workingSet", workingSet, "limit", limit)
 
 	if limit == 0 {
@@ -172,4 +185,46 @@ func (r *GpuMemChecker) getMemoryStats(ctx context.Context, podIP, containerID s
 	}
 
 	return workingSet, stats.MemoryStats.Limit, nil
+}
+
+func (r *GpuMemChecker) getContainerLimit(ctx context.Context, podIP, containerID string) (uint64, error) {
+	url := fmt.Sprintf("http://%s:6801/container", podIP)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var containers []ContainerMeta
+	if err := json.NewDecoder(resp.Body).Decode(&containers); err != nil {
+		return 0, err
+	}
+
+	for _, c := range containers {
+		if c.Id == containerID {
+			if c.MemoryLimit == "" || c.MemoryLimit == "0" {
+				return 0, nil
+			}
+			qty, err := resource.ParseQuantity(c.MemoryLimit)
+			if err != nil {
+				return 0, fmt.Errorf("failed to parse memory limit '%s': %v", c.MemoryLimit, err)
+			}
+			return uint64(qty.Value()), nil
+		}
+	}
+
+	return 0, fmt.Errorf("container not found in metadata")
 }

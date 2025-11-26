@@ -1,0 +1,370 @@
+[
+  {
+    "Image": "whatap/pytorch:latest",
+    "ImageID": "",
+    "RestartCount": 0,
+    "Status": "ImagePullBackOff",
+    "State": "waiting",
+    "Names": [
+      "main"
+    ],
+    "Id": "",
+    "Podname": "inference-6cb5c545c7-f8bvw",
+    "Command": "",
+    "Created": 1764136979000,
+    "Labels": {
+      "app": "inference",
+      "pod-template-hash": "6cb5c545c7"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "16069016Ki",
+    "CpuRequest": "0",
+    "MemoryRequest": "0",
+    "Namespace": "default",
+    "Ready": 0
+  },
+  {
+    "Image": "registry.k8s.io/coredns/coredns:v1.12.0",
+    "ImageID": "docker-pullable://registry.k8s.io/coredns/coredns@sha256:40384aa1f5ea6bfdc77997d243aec73da05f27aed0c5e9d65bfa98933c519d97",
+    "RestartCount": 0,
+    "Status": "Up 2h11m",
+    "State": "running",
+    "Names": [
+      "coredns"
+    ],
+    "Id": "5122a47810f09dc414ecef60847b965f90fdc5e8de65f2748dcdd805ac12f13f",
+    "Podname": "coredns-674b8bbfcf-bhvt5",
+    "Command": "",
+    "Created": 1764136240000,
+    "Labels": {
+      "k8s-app": "kube-dns",
+      "pod-template-hash": "674b8bbfcf"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "170Mi",
+    "CpuRequest": "100m",
+    "MemoryRequest": "70Mi",
+    "Namespace": "kube-system",
+    "Ready": 1
+  },
+  {
+    "Image": "registry.k8s.io/etcd:3.5.21-0",
+    "ImageID": "docker-pullable://registry.k8s.io/etcd@sha256:d58c035df557080a27387d687092e3fc2b64c6d0e3162dc51453a115f847d121",
+    "RestartCount": 0,
+    "Status": "Up 2h11m",
+    "State": "running",
+    "Names": [
+      "etcd"
+    ],
+    "Id": "a020057411619c3b807e93035f3c659eb53efc25acbf5496ccc9af920fb1010e",
+    "Podname": "etcd-minikube",
+    "Command": "etcd --advertise-client-urls=https://192.168.49.2:2379 --cert-file=/var/lib/minikube/certs/etcd/server.crt --client-cert-auth=true --data-dir=/var/lib/minikube/etcd --experimental-initial-corrupt-check=true --experimental-watch-progress-notify-interval=5s --initial-advertise-peer-urls=https://192.168.49.2:2380 --initial-cluster=minikube=https://192.168.49.2:2380 --key-file=/var/lib/minikube/certs/etcd/server.key --listen-client-urls=https://127.0.0.1:2379,https://192.168.49.2:2379 --listen-metrics-urls=http://127.0.0.1:2381 --listen-peer-urls=https://192.168.49.2:2380 --name=minikube --peer-cert-file=/var/lib/minikube/certs/etcd/peer.crt --peer-client-cert-auth=true --peer-key-file=/var/lib/minikube/certs/etcd/peer.key --peer-trusted-ca-file=/var/lib/minikube/certs/etcd/ca.crt --proxy-refresh-interval=70000 --snapshot-count=10000 --trusted-ca-file=/var/lib/minikube/certs/etcd/ca.crt",
+    "Created": 1764136234000,
+    "Labels": {
+      "component": "etcd",
+      "tier": "control-plane"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "16069016Ki",
+    "CpuRequest": "100m",
+    "MemoryRequest": "100Mi",
+    "Namespace": "kube-system",
+    "Ready": 1
+  },
+  {
+    "Image": "registry.k8s.io/kube-apiserver:v1.33.1",
+    "ImageID": "docker-pullable://registry.k8s.io/kube-apiserver@sha256:d8ae2fb01c39aa1c7add84f3d54425cf081c24c11e3946830292a8cfa4293548",
+    "RestartCount": 0,
+    "Status": "Up 2h11m",
+    "State": "running",
+    "Names": [
+      "kube-apiserver"
+    ],
+    "Id": "dd97d2502392b32cbdee5f36fdde5092fd6d70f06517179882f975c9a984d1c6",
+    "Podname": "kube-apiserver-minikube",
+    "Command": "kube-apiserver --advertise-address=192.168.49.2 --allow-privileged=true --authorization-mode=Node,RBAC --client-ca-file=/var/lib/minikube/certs/ca.crt --enable-admission-plugins=NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,DefaultTolerationSeconds,NodeRestriction,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota --enable-bootstrap-token-auth=true --etcd-cafile=/var/lib/minikube/certs/etcd/ca.crt --etcd-certfile=/var/lib/minikube/certs/apiserver-etcd-client.crt --etcd-keyfile=/var/lib/minikube/certs/apiserver-etcd-client.key --etcd-servers=https://127.0.0.1:2379 --kubelet-client-certificate=/var/lib/minikube/certs/apiserver-kubelet-client.crt --kubelet-client-key=/var/lib/minikube/certs/apiserver-kubelet-client.key --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname --proxy-client-cert-file=/var/lib/minikube/certs/front-proxy-client.crt --proxy-client-key-file=/var/lib/minikube/certs/front-proxy-client.key --requestheader-allowed-names=front-proxy-client --requestheader-client-ca-file=/var/lib/minikube/certs/front-proxy-ca.crt --requestheader-extra-headers-prefix=X-Remote-Extra- --requestheader-group-headers=X-Remote-Group --requestheader-username-headers=X-Remote-User --secure-port=8443 --service-account-issuer=https://kubernetes.default.svc.cluster.local --service-account-key-file=/var/lib/minikube/certs/sa.pub --service-account-signing-key-file=/var/lib/minikube/certs/sa.key --service-cluster-ip-range=10.96.0.0/12 --tls-cert-file=/var/lib/minikube/certs/apiserver.crt --tls-private-key-file=/var/lib/minikube/certs/apiserver.key",
+    "Created": 1764136234000,
+    "Labels": {
+      "component": "kube-apiserver",
+      "tier": "control-plane"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "16069016Ki",
+    "CpuRequest": "250m",
+    "MemoryRequest": "0",
+    "Namespace": "kube-system",
+    "Ready": 1
+  },
+  {
+    "Image": "registry.k8s.io/kube-controller-manager:v1.33.1",
+    "ImageID": "docker-pullable://registry.k8s.io/kube-controller-manager@sha256:7c9bea694e3a3c01ed6a5ee02d55a6124cc08e0b2eec6caa33f2c396b8cbc3f8",
+    "RestartCount": 0,
+    "Status": "Up 2h11m",
+    "State": "running",
+    "Names": [
+      "kube-controller-manager"
+    ],
+    "Id": "74a2e829722f580a0ff812c4dcffd52fcb0fd8c5ec1b7124baf1ba3f300eb1d0",
+    "Podname": "kube-controller-manager-minikube",
+    "Command": "kube-controller-manager --allocate-node-cidrs=true --authentication-kubeconfig=/etc/kubernetes/controller-manager.conf --authorization-kubeconfig=/etc/kubernetes/controller-manager.conf --bind-address=127.0.0.1 --client-ca-file=/var/lib/minikube/certs/ca.crt --cluster-cidr=10.244.0.0/16 --cluster-name=mk --cluster-signing-cert-file=/var/lib/minikube/certs/ca.crt --cluster-signing-key-file=/var/lib/minikube/certs/ca.key --controllers=*,bootstrapsigner,tokencleaner --kubeconfig=/etc/kubernetes/controller-manager.conf --leader-elect=false --requestheader-client-ca-file=/var/lib/minikube/certs/front-proxy-ca.crt --root-ca-file=/var/lib/minikube/certs/ca.crt --service-account-private-key-file=/var/lib/minikube/certs/sa.key --service-cluster-ip-range=10.96.0.0/12 --use-service-account-credentials=true",
+    "Created": 1764136234000,
+    "Labels": {
+      "component": "kube-controller-manager",
+      "tier": "control-plane"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "16069016Ki",
+    "CpuRequest": "200m",
+    "MemoryRequest": "0",
+    "Namespace": "kube-system",
+    "Ready": 1
+  },
+  {
+    "Image": "registry.k8s.io/kube-proxy:v1.33.1",
+    "ImageID": "docker-pullable://registry.k8s.io/kube-proxy@sha256:7ddf379897139ae8ade8b33cb9373b70c632a4d5491da6e234f5d830e0a50807",
+    "RestartCount": 0,
+    "Status": "Up 2h11m",
+    "State": "running",
+    "Names": [
+      "kube-proxy"
+    ],
+    "Id": "b021f9e4fd809e3edb2b08725e4d9f942a4221476b853e5a95936aea467abc44",
+    "Podname": "kube-proxy-dxf8k",
+    "Command": "/usr/local/bin/kube-proxy --config=/var/lib/kube-proxy/config.conf --hostname-override=$(NODE_NAME)",
+    "Created": 1764136240000,
+    "Labels": {
+      "controller-revision-hash": "84c68674f8",
+      "k8s-app": "kube-proxy",
+      "pod-template-generation": "1"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "16069016Ki",
+    "CpuRequest": "0",
+    "MemoryRequest": "0",
+    "Namespace": "kube-system",
+    "Ready": 1
+  },
+  {
+    "Image": "registry.k8s.io/kube-scheduler:v1.33.1",
+    "ImageID": "docker-pullable://registry.k8s.io/kube-scheduler@sha256:395b7de7cdbdcc3c3a3db270844a3f71d757e2447a1e4db76b4cce46fba7fd55",
+    "RestartCount": 0,
+    "Status": "Up 2h11m",
+    "State": "running",
+    "Names": [
+      "kube-scheduler"
+    ],
+    "Id": "1524126e08de447bb65232cf50f67d96d3b575acee76f653ed12c44b432af2ac",
+    "Podname": "kube-scheduler-minikube",
+    "Command": "kube-scheduler --authentication-kubeconfig=/etc/kubernetes/scheduler.conf --authorization-kubeconfig=/etc/kubernetes/scheduler.conf --bind-address=127.0.0.1 --kubeconfig=/etc/kubernetes/scheduler.conf --leader-elect=false",
+    "Created": 1764136234000,
+    "Labels": {
+      "component": "kube-scheduler",
+      "tier": "control-plane"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "16069016Ki",
+    "CpuRequest": "100m",
+    "MemoryRequest": "0",
+    "Namespace": "kube-system",
+    "Ready": 1
+  },
+  {
+    "Image": "nvcr.io/nvidia/k8s-device-plugin@sha256:037160a36de0f060fc21cc0cb2f795d980282ff1471b55530433ca4350b24c4f",
+    "ImageID": "docker-pullable://nvcr.io/nvidia/k8s-device-plugin@sha256:037160a36de0f060fc21cc0cb2f795d980282ff1471b55530433ca4350b24c4f",
+    "RestartCount": 0,
+    "Status": "Up 2h11m",
+    "State": "running",
+    "Names": [
+      "nvidia-device-plugin-ctr"
+    ],
+    "Id": "b1153507e5c1e4fcffabfdd3421a6eaa07e90d15f355dd86e2e0426c3cd5489f",
+    "Podname": "nvidia-device-plugin-daemonset-rxqvg",
+    "Command": "",
+    "Created": 1764136240000,
+    "Labels": {
+      "controller-revision-hash": "5b45d58bb7",
+      "name": "nvidia-device-plugin-ds",
+      "pod-template-generation": "1"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "16069016Ki",
+    "CpuRequest": "0",
+    "MemoryRequest": "0",
+    "Namespace": "kube-system",
+    "Ready": 1
+  },
+  {
+    "Image": "gcr.io/k8s-minikube/storage-provisioner:v5",
+    "ImageID": "docker-pullable://gcr.io/k8s-minikube/storage-provisioner@sha256:18eb69d1418e854ad5a19e399310e52808a8321e4c441c1dddad8977a0d7a944",
+    "RestartCount": 1,
+    "Status": "Up 2h10m",
+    "State": "running",
+    "Names": [
+      "storage-provisioner"
+    ],
+    "Id": "fcae5fb91e080a3e5113fb7c10ec09a227399a12f91ec2507f2b1760eb1a9a9e",
+    "Podname": "storage-provisioner",
+    "Command": "/storage-provisioner",
+    "Created": 1764136239000,
+    "Labels": {
+      "addonmanager.kubernetes.io/mode": "Reconcile",
+      "integration-test": "storage-provisioner"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "16069016Ki",
+    "CpuRequest": "0",
+    "MemoryRequest": "0",
+    "Namespace": "kube-system",
+    "Ready": 1
+  },
+  {
+    "Image": "public.ecr.aws/whatap/kube_agent:latest",
+    "ImageID": "docker-pullable://public.ecr.aws/whatap/kube_agent@sha256:f479458511570328925501952a8de2896d58f7f1aead9514222ed7f225fd4fb1",
+    "RestartCount": 0,
+    "Status": "Up 43m",
+    "State": "running",
+    "Names": [
+      "whatap-master-agent"
+    ],
+    "Id": "658cb9425a4eb949bea34713ceb3468a1966ffd2d2216d610bcf62e82f2a70a8",
+    "Podname": "whatap-master-agent-7cb847bcdc-m28ds",
+    "Command": "/bin/entrypoint.sh",
+    "Created": 1764141534000,
+    "Labels": {
+      "name": "whatap-master-agent",
+      "pod-template-hash": "7cb847bcdc"
+    },
+    "CpuLimit": "200m",
+    "MemoryLimit": "350Mi",
+    "CpuRequest": "100m",
+    "MemoryRequest": "300Mi",
+    "Namespace": "whatap-monitoring",
+    "Ready": 1
+  },
+  {
+    "Image": "public.ecr.aws/whatap/dcgm-exporter:4.4.0-4.5.0-ubuntu22.04",
+    "ImageID": "docker-pullable://public.ecr.aws/whatap/dcgm-exporter@sha256:5b17bc0886d4d0d69f2a4bd185e43fcf4f4f0685314fdaf539ca2384b1f92f4f",
+    "RestartCount": 0,
+    "Status": "Up 41m",
+    "State": "running",
+    "Names": [
+      "dcgm-exporter"
+    ],
+    "Id": "82c6b1233889de34c5337da64498d24218978779f05aaad2df0c82ddab731deb",
+    "Podname": "whatap-node-agent-2k65w",
+    "Command": "",
+    "Created": 1764141660000,
+    "Labels": {
+      "controller-revision-hash": "69dd95fb8f",
+      "name": "whatap-node-agent",
+      "pod-template-generation": "2",
+      "whatap-gpu": "true"
+    },
+    "CpuLimit": "1",
+    "MemoryLimit": "500Mi",
+    "CpuRequest": "1",
+    "MemoryRequest": "500Mi",
+    "Namespace": "whatap-monitoring",
+    "Ready": 1
+  },
+  {
+    "Image": "public.ecr.aws/whatap/kube_agent:latest",
+    "ImageID": "docker-pullable://public.ecr.aws/whatap/kube_agent@sha256:f479458511570328925501952a8de2896d58f7f1aead9514222ed7f225fd4fb1",
+    "RestartCount": 0,
+    "Status": "Up 41m",
+    "State": "running",
+    "Names": [
+      "whatap-node-agent"
+    ],
+    "Id": "7976c4960f0f60745acb7b8efb5ae2c867512a0afffa520e4abbe6912247643b",
+    "Podname": "whatap-node-agent-2k65w",
+    "Command": "/bin/entrypoint.sh",
+    "Created": 1764141660000,
+    "Labels": {
+      "controller-revision-hash": "69dd95fb8f",
+      "name": "whatap-node-agent",
+      "pod-template-generation": "2",
+      "whatap-gpu": "true"
+    },
+    "CpuLimit": "200m",
+    "MemoryLimit": "350Mi",
+    "CpuRequest": "100m",
+    "MemoryRequest": "300Mi",
+    "Namespace": "whatap-monitoring",
+    "Ready": 1
+  },
+  {
+    "Image": "public.ecr.aws/whatap/kube_agent:latest",
+    "ImageID": "docker-pullable://public.ecr.aws/whatap/kube_agent@sha256:f479458511570328925501952a8de2896d58f7f1aead9514222ed7f225fd4fb1",
+    "RestartCount": 0,
+    "Status": "Up 41m",
+    "State": "running",
+    "Names": [
+      "whatap-node-helper"
+    ],
+    "Id": "a65b779baa0d85d4a527cb98cc4ffd3bd6db208ebf7e8ce7eb92bd6134490a39",
+    "Podname": "whatap-node-agent-2k65w",
+    "Command": "/data/agent/node/cadvisor_helper -port 6801",
+    "Created": 1764141660000,
+    "Labels": {
+      "controller-revision-hash": "69dd95fb8f",
+      "name": "whatap-node-agent",
+      "pod-template-generation": "2",
+      "whatap-gpu": "true"
+    },
+    "CpuLimit": "200m",
+    "MemoryLimit": "350Mi",
+    "CpuRequest": "100m",
+    "MemoryRequest": "100Mi",
+    "Namespace": "whatap-monitoring",
+    "Ready": 1
+  },
+  {
+    "Image": "public.ecr.aws/whatap/open_agent:latest",
+    "ImageID": "docker-pullable://public.ecr.aws/whatap/open_agent@sha256:186fbe2d7a01b8601692c6055bed31ae88a899bb2874c31192d2b8c303c5d22f",
+    "RestartCount": 0,
+    "Status": "Up 43m",
+    "State": "running",
+    "Names": [
+      "whatap-open-agent"
+    ],
+    "Id": "306246e010b30dcd01c98268290e8dee8d8a72cf813e536f24825fd814fb7624",
+    "Podname": "whatap-open-agent-6f86c66bdd-79k94",
+    "Command": "",
+    "Created": 1764141534000,
+    "Labels": {
+      "app": "whatap-open-agent",
+      "pod-template-hash": "6f86c66bdd"
+    },
+    "CpuLimit": "4",
+    "MemoryLimit": "16069016Ki",
+    "CpuRequest": "0",
+    "MemoryRequest": "0",
+    "Namespace": "whatap-monitoring",
+    "Ready": 1
+  },
+  {
+    "Image": "public.ecr.aws/whatap/whatap-operator:2.6.7",
+    "ImageID": "docker-pullable://public.ecr.aws/whatap/whatap-operator@sha256:c601b4cfaa8311eea2e54d63d858b432b9ae4b7f85be9888bb8a9fc63fe190ee",
+    "RestartCount": 0,
+    "Status": "Up 8m",
+    "State": "running",
+    "Names": [
+      "operator"
+    ],
+    "Id": "9085e3c1d7a5df0b1e05b1e3909d7653a4cf36108ca2c6915c41b1ca4b958584",
+    "Podname": "whatap-operator-57858b56df-xq47r",
+    "Command": "/manager",
+    "Created": 1764143583000,
+    "Labels": {
+      "app.kubernetes.io/name": "whatap-operator",
+      "pod-template-hash": "57858b56df"
+    },
+    "CpuLimit": "200m",
+    "MemoryLimit": "256Mi",
+    "CpuRequest": "100m",
+    "MemoryRequest": "128Mi",
+    "Namespace": "whatap-monitoring",
+    "Ready": 1
+  }
+]

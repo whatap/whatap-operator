@@ -3,6 +3,8 @@ package controller
 import (
 	"encoding/json"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func TestParseContainerStats(t *testing.T) {
@@ -87,5 +89,52 @@ func TestParseContainerStats(t *testing.T) {
 	expectedRatio := 0.012866
 	if ratio < expectedRatio-0.00001 || ratio > expectedRatio+0.00001 {
 		t.Errorf("Expected ratio ~%f, got %f", expectedRatio, ratio)
+	}
+}
+
+func TestParseContainerMeta(t *testing.T) {
+	jsonStr := `[
+	  {
+		"Id": "5122a47810f09dc414ecef60847b965f90fdc5e8de65f2748dcdd805ac12f13f",
+		"MemoryLimit": "170Mi"
+	  },
+	  {
+		"Id": "a020057411619c3b807e93035f3c659eb53efc25acbf5496ccc9af920fb1010e",
+		"MemoryLimit": "16069016Ki"
+	  }
+	]`
+
+	var containers []ContainerMeta
+	if err := json.Unmarshal([]byte(jsonStr), &containers); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	if len(containers) != 2 {
+		t.Fatalf("Expected 2 containers, got %d", len(containers))
+	}
+
+	// Test Case 1: 170Mi
+	c1 := containers[0]
+	if c1.MemoryLimit != "170Mi" {
+		t.Errorf("Expected MemoryLimit 170Mi, got %s", c1.MemoryLimit)
+	}
+
+	qty, err := resource.ParseQuantity(c1.MemoryLimit)
+	if err != nil {
+		t.Errorf("Failed to parse quantity: %v", err)
+	}
+	if qty.Value() != 178257920 {
+		t.Errorf("Expected 178257920 bytes, got %d", qty.Value())
+	}
+
+	// Test Case 2: 16069016Ki
+	c2 := containers[1]
+	qty2, err := resource.ParseQuantity(c2.MemoryLimit)
+	if err != nil {
+		t.Errorf("Failed to parse quantity: %v", err)
+	}
+	// 16069016 * 1024 = 16454672384
+	if qty2.Value() != 16454672384 {
+		t.Errorf("Expected 16454672384 bytes, got %d", qty2.Value())
 	}
 }
