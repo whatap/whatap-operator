@@ -382,6 +382,9 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 
 	// Create base labels and merge with custom labels if provided
 	labels := map[string]string{"name": "whatap-node-agent"}
+	if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
+		labels["whatap-gpu"] = "true"
+	}
 	if nodeSpec.PodLabels != nil {
 		for k, v := range nodeSpec.PodLabels {
 			labels[k] = v
@@ -678,8 +681,13 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 
 // ensureDcgmExporterService creates or updates the service for dcgm-exporter
 func ensureDcgmExporterService(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
-	// Check if service is enabled
-	if cr.Spec.Features.K8sAgent.GpuMonitoring.Service == nil || !cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Enabled {
+	// Check if GPU monitoring is enabled
+	if !cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
+		return nil
+	}
+
+	// Check if service is explicitly disabled
+	if cr.Spec.Features.K8sAgent.GpuMonitoring.Service != nil && !cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Enabled {
 		return nil
 	}
 
@@ -714,16 +722,25 @@ func ensureDcgmExporterService(ctx context.Context, r *WhatapAgentReconciler, lo
 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
 		// Set default values
-		serviceType := corev1.ServiceTypeClusterIP
+		serviceType := corev1.ServiceTypeNodePort
 		port := int32(9400)
+		nodePort := int32(30400)
 
 		// Use configured values if provided
-		if cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Type != "" {
-			serviceType = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Type
+		if cr.Spec.Features.K8sAgent.GpuMonitoring.Service != nil {
+			if cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Type != "" {
+				serviceType = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Type
+			}
+			if cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Port != 0 {
+				port = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Port
+			}
+			if cr.Spec.Features.K8sAgent.GpuMonitoring.Service.NodePort != 0 {
+				nodePort = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.NodePort
+			}
 		}
-		if cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Port != 0 {
-			port = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.Port
-		}
+
+		// Backup existing ClusterIP
+		clusterIP := svc.Spec.ClusterIP
 
 		svc.Spec = corev1.ServiceSpec{
 			Selector: map[string]string{
@@ -738,14 +755,20 @@ func ensureDcgmExporterService(ctx context.Context, r *WhatapAgentReconciler, lo
 			}},
 		}
 
-		// If NodePort, enforce externalTrafficPolicy: Local
-		if serviceType == corev1.ServiceTypeNodePort {
-			svc.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+		// Restore ClusterIP if it existed
+		if clusterIP != "" {
+			svc.Spec.ClusterIP = clusterIP
 		}
 
-		// Set NodePort if specified and service type is NodePort
-		if serviceType == corev1.ServiceTypeNodePort && cr.Spec.Features.K8sAgent.GpuMonitoring.Service.NodePort != 0 {
-			svc.Spec.Ports[0].NodePort = cr.Spec.Features.K8sAgent.GpuMonitoring.Service.NodePort
+		// If NodePort, enforce externalTrafficPolicy: Local and set NodePort
+		if serviceType == corev1.ServiceTypeNodePort {
+			svc.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+			internalTrafficPolicy := corev1.ServiceInternalTrafficPolicyLocal
+			svc.Spec.InternalTrafficPolicy = &internalTrafficPolicy
+
+			if nodePort != 0 {
+				svc.Spec.Ports[0].NodePort = nodePort
+			}
 		}
 
 		return nil
@@ -1008,8 +1031,8 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			gpuTargetMap["selector"] = selector
 
 			// Set endpoint configuration for DCGM exporter with customizable options
-			// Create two endpoints: one for regular metrics and one for process metrics
-			endpoints := make([]interface{}, 2)
+			// Create one endpoint: regular metrics
+			endpoints := make([]interface{}, 1)
 
 			// First endpoint: regular metrics
 			endpointMap1 := make(map[string]interface{})
@@ -1045,35 +1068,6 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			endpointMap1["metricRelabelConfigs"] = metricRelabelConfigs1
 
 			endpoints[0] = endpointMap1
-
-			// Second endpoint: process metrics
-			endpointMap2 := make(map[string]interface{})
-			endpointMap2["port"] = "9400"
-			endpointMap2["path"] = "/metrics/process"
-			endpointMap2["interval"] = interval
-			endpointMap2["scheme"] = "http"
-			endpointMap2["addNodeLabel"] = true
-
-			// Add the same metricRelabelConfigs for process metrics
-			metricRelabelConfigs2 := make([]interface{}, 2)
-
-			// First relabel config: add wtp_src label
-			relabelConfig3 := make(map[string]interface{})
-			relabelConfig3["target_label"] = "wtp_src"
-			relabelConfig3["replacement"] = "true"
-			relabelConfig3["action"] = "replace"
-			metricRelabelConfigs2[0] = relabelConfig3
-
-			// Second relabel config: keep only DCGM metrics
-			relabelConfig4 := make(map[string]interface{})
-			relabelConfig4["source_labels"] = []string{"__name__"}
-			relabelConfig4["regex"] = "DCGM.*"
-			relabelConfig4["action"] = "keep"
-			metricRelabelConfigs2[1] = relabelConfig4
-
-			endpointMap2["metricRelabelConfigs"] = metricRelabelConfigs2
-
-			endpoints[1] = endpointMap2
 			gpuTargetMap["endpoints"] = endpoints
 
 			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, gpuTargetMap)
