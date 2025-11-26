@@ -27,6 +27,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,8 +45,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/whatap/whatap-operator/internal/config"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
+	"github.com/whatap/whatap-operator/internal/config"
 	"github.com/whatap/whatap-operator/internal/controller"
 	webhookmonitoringv2alpha1 "github.com/whatap/whatap-operator/internal/webhook/v2alpha1"
 	// +kubebuilder:scaffold:imports
@@ -122,6 +123,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var enableGpuMemCheck bool
 	var tlsOpts []func(*tls.Config)
 
 	//env에서 기본 네임스페이스 읽기
@@ -145,6 +147,15 @@ func main() {
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+
+	enableGpuMemCheckDefault := false
+	if val := os.Getenv("ENABLED_WHATAP_DCGM_EXPORTER_MEMORY_CHECK"); val != "" {
+		if parsed, err := strconv.ParseBool(val); err == nil {
+			enableGpuMemCheckDefault = parsed
+		}
+	}
+	flag.BoolVar(&enableGpuMemCheck, "enable-gpu-memory-check", enableGpuMemCheckDefault,
+		"Enable monitoring of dcgm-exporter memory usage and restart pod if needed")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -156,6 +167,7 @@ func main() {
 		"version", Version,
 		"buildTime", BuildTime,
 	)
+	setupLog.Info("GPU Memory Check Configuration", "ENABLED_WHATAP_DCGM_EXPORTER_MEMORY_CHECK", enableGpuMemCheck)
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
 	// prevent from being vulnerable to the HTTP/2 Stream Cancellation and
@@ -296,6 +308,17 @@ func main() {
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
+	}
+
+	if enableGpuMemCheck {
+		setupLog.Info("enabling GPU memory check")
+		if err := mgr.Add(&controller.GpuMemChecker{
+			Client:   mgr.GetClient(),
+			Interval: 60 * time.Second,
+		}); err != nil {
+			setupLog.Error(err, "unable to add GPU memory checker")
+			os.Exit(1)
+		}
 	}
 
 	setupLog.Info("starting manager")

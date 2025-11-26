@@ -96,6 +96,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: ENABLED_WHATAP_DCGM_EXPORTER_MEMORY_CHECK
+              value: "false"
             - name: WHATAP_LICENSE
               valueFrom:
                 secretKeyRef:
