@@ -334,6 +334,10 @@ type NodeAgentComponentSpec struct {
 	// e.g. for containerd: /var/run/containerd/containerd.sock
 	// +optional
 	RuntimeSocketPath string `json:"runtimeSocketPath,omitempty"`
+	// HostNetwork enables host networking for the Node Agent pod
+	// +kubebuilder:default=true
+	// +optional
+	HostNetwork bool `json:"hostNetwork,omitempty"`
 }
 
 // ContainerSpec defines configuration for a specific container

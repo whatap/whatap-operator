@@ -85,6 +85,11 @@ func (r *GpuMemChecker) checkGpuPods(ctx context.Context) {
 
 func (r *GpuMemChecker) checkPod(ctx context.Context, pod *corev1.Pod) {
 	r.Log.Info("Checking pod details", "pod", pod.Name, "phase", pod.Status.Phase)
+	// Skip if pod is being deleted
+	if pod.DeletionTimestamp != nil {
+		r.Log.Info("Pod is terminating, skipping", "pod", pod.Name)
+		return
+	}
 	// Skip if pod is not running
 	if pod.Status.Phase != corev1.PodRunning {
 		r.Log.Info("Pod not running, skipping", "pod", pod.Name)

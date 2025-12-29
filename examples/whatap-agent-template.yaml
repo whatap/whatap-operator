@@ -26,8 +26,30 @@ spec:
     # k8sAgent:
     #   masterAgent:
     #     enabled: true                 # 마스터 에이전트 활성화 (클러스터 수준 메트릭 수집)
+    #     affinity:                     # 노드 어피니티 예시
+    #       nodeAffinity:
+    #         requiredDuringSchedulingIgnoredDuringExecution:
+    #           nodeSelectorTerms:
+    #             - matchExpressions:
+    #                 - key: "kubernetes.io/os"
+    #                   operator: In
+    #                   values:
+    #                     - "linux"
+    #     nodeSelector:                 # 노드 셀렉터 예시
+    #       kubernetes.io/os: "linux"
     #   nodeAgent:
     #     enabled: true                 # 노드 에이전트 활성화 (노드 및 컨테이너 수준 메트릭 수집)
+    #     affinity:                     # 파드 안티어피니티 예시
+    #       podAntiAffinity:
+    #         preferredDuringSchedulingIgnoredDuringExecution:
+    #           - weight: 100
+    #             podAffinityTerm:
+    #               topologyKey: "kubernetes.io/hostname"
+    #               labelSelector:
+    #                 matchLabels:
+    #                   name: "whatap-node-agent"
+    #     nodeSelector:                 # 노드 셀렉터 예시
+    #       kubernetes.io/os: "linux"
     
     ### 오픈메트릭(프로메테우스 형태의 지표수집) 사용 시 주석 해제 - Prometheus 형식의 메트릭을 수집합니다.
     # openAgent:

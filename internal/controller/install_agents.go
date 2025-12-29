@@ -539,6 +539,11 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 
 	hostToContainer := corev1.MountPropagationHostToContainer
 
+	dnsPolicy := corev1.DNSClusterFirst
+	if nodeSpec.HostNetwork {
+		dnsPolicy = corev1.DNSClusterFirstWithHostNet
+	}
+
 	return appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{"name": "whatap-node-agent"},
@@ -549,6 +554,8 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
+				HostNetwork:        nodeSpec.HostNetwork,
+				DNSPolicy:          dnsPolicy,
 				ServiceAccountName: "whatap",
 				// Apply affinity/nodeSelector/priority from CR if specified
 				Affinity:          nodeSpec.Affinity,
@@ -634,7 +641,7 @@ func createOrUpdateGpuConfigMap(ctx context.Context, r *WhatapAgentReconciler, l
 
 func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.WhatapAgent) {
 	// Check if a custom image is specified
-	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.3.1-4.4.0-ubuntu22.04"
+	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.4.2-4.7.06-ubuntu22.04"
 	if cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName != "" {
 		dcgmImage = cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName
 	}

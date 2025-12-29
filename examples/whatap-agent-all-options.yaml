@@ -16,12 +16,7 @@ spec:
               java: "2.2.58"                   # 사용할 APM 에이전트 버전
 
             # 커스텀 에이전트 이미지 이름 (생략 시 기본 이미지 사용)
-            # customImageName: "my-registry.example.com/whatap/apm-init-java:2.2.58"
-
-            # 추가 에이전트 인자 설정
-            additionalArgs:
-              "whatap.app.name": "my-java-app"                        # 애플리케이션 이름 설정
-              # 참고: license와 whatap.server.host는 시크릿을 통해 설정하는 것을 권장합니다
+            # customImageFullName: "my-registry.example.com/whatap/apm-init-java:2.2.58"
 
             # 대상 네임스페이스 선택 (다음 중 하나 사용)
             namespaceSelector:
@@ -66,11 +61,6 @@ spec:
 
     ### Kubernetes 모니터링 설정 - 클러스터, 노드, 컨테이너 모니터링
     k8sAgent:
-      # 에이전트 이미지 이름 (생략 시 기본값 public.ecr.aws/whatap/kube_agent 사용)
-      agentImageName: "public.ecr.aws/whatap/kube_agent"
-      # 에이전트 이미지 버전 (생략 시 latest 사용)
-      agentImageVersion: "latest"
-
       # 에이전트가 설치될 네임스페이스 (생략 시 기본값 사용)
       namespace: "whatap-monitoring"
 
@@ -93,6 +83,21 @@ spec:
             operator: "Equal"                  # 연산자: Equal(키와 값 모두 일치), Exists(키만 일치)
             value: "monitoring"                # 테인트 값 (Equal 연산자에서만 사용)
             effect: "NoSchedule"               # 효과: NoSchedule, PreferNoSchedule, NoExecute
+
+        # 마스터 에이전트 노드 어피니티 설정
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: "kubernetes.io/os"
+                      operator: In
+                      values:
+                        - "linux"
+
+        # 마스터 에이전트 노드 셀렉터 설정
+        nodeSelector:
+          kubernetes.io/os: "linux"
 
         # 마스터 에이전트 Deployment에 추가할 라벨
         labels:
@@ -136,6 +141,21 @@ spec:
           - key: "gpu"
             operator: "Exists"
             effect: "NoSchedule"
+
+        # 노드 에이전트 어피니티/안티어피니티 설정
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  topologyKey: "kubernetes.io/hostname"
+                  labelSelector:
+                    matchLabels:
+                      name: "whatap-node-agent"
+
+        # 노드 에이전트 노드 셀렉터 설정
+        nodeSelector:
+          kubernetes.io/os: "linux"
 
         # 노드 에이전트 DaemonSet에 추가할 라벨
         labels:
@@ -266,9 +286,3 @@ spec:
               path: "/metrics"
               interval: "30s"
               scheme: "http"
-
-# 참고: 시크릿 기반 자격 증명 사용 시 다음 명령으로 시크릿을 생성하세요:
-# kubectl create secret generic whatap-credentials --namespace whatap-monitoring \
-#   --from-literal=license=$WHATAP_LICENSE \
-#   --from-literal=host=$WHATAP_HOST \
-#   --from-literal=port=$WHATAP_PORT

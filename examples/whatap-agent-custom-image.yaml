@@ -14,12 +14,8 @@ spec:
             language: "java"
             whatapApmVersions:
               java: "2.2.58"
-            # Custom image name for APM agent
-            customImageName: "my-registry.example.com/whatap/apm-init-java:2.2.58"
-            # Additional arguments for APM agent
-            additionalArgs:
-              "whatap.app.name": "my-java-app"
-              # 참고: license와 host는 시크릿을 통해 설정하는 것을 권장합니다
+            # Custom image full name for APM agent
+            customImageFullName: "my-registry.example.com/whatap/apm-init-java:2.2.58"
             namespaceSelector:
               matchNames:
                 - "default"
@@ -30,10 +26,6 @@ spec:
               mode: "default"
 
     k8sAgent:
-      # Custom agent image name for Kubernetes agent
-      agentImageName: "my-registry.example.com/whatap/kube_agent"
-      # Custom agent image version for Kubernetes agent
-      agentImageVersion: "v1.2.3"
       masterAgent:
         enabled: true
       nodeAgent:
