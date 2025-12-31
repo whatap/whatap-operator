@@ -223,6 +223,14 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
+				// RuntimeClassName and HostPID from CR
+				RuntimeClassName: func() *string {
+					if masterSpec.RuntimeClassName != "" {
+						return &masterSpec.RuntimeClassName
+					}
+					return nil
+				}(),
+				HostPID:            masterSpec.HostPID,
 				ServiceAccountName: "whatap",
 				// Apply tolerations from CR if specified
 				Tolerations: masterSpec.Tolerations,
@@ -564,7 +572,15 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
-				HostNetwork:        nodeSpec.HostNetwork,
+				HostNetwork: nodeSpec.HostNetwork,
+				// RuntimeClassName and HostPID from CR
+				RuntimeClassName: func() *string {
+					if nodeSpec.RuntimeClassName != "" {
+						return &nodeSpec.RuntimeClassName
+					}
+					return nil
+				}(),
+				HostPID:            nodeSpec.HostPID,
 				DNSPolicy:          dnsPolicy,
 				ServiceAccountName: "whatap",
 				// Apply affinity/nodeSelector/priority from CR if specified

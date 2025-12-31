@@ -278,6 +278,13 @@ type MasterAgentComponentSpec struct {
 	// If not set, the operator will apply a safe default (RunAsNonRoot= true, RunAsUser=1001, SeccompProfile=RuntimeDefault)
 	// +optional
 	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	// RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used
+	// to run this pod. If no RuntimeClass resource matches the named class, the pod will not be run.
+	// +optional
+	RuntimeClassName string `json:"runtimeClassName,omitempty"`
+	// Use the host's pid namespace.
+	// +optional
+	HostPID bool `json:"hostPID,omitempty"`
 	// MasterAgentContainer defines configuration specific to the whatap-master-agent container
 	// +optional
 	MasterAgentContainer *ContainerSpec `json:"masterAgentContainer,omitempty"`
@@ -338,6 +345,13 @@ type NodeAgentComponentSpec struct {
 	// +kubebuilder:default=true
 	// +optional
 	HostNetwork bool `json:"hostNetwork,omitempty"`
+	// RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used
+	// to run this pod. If no RuntimeClass resource matches the named class, the pod will not be run.
+	// +optional
+	RuntimeClassName string `json:"runtimeClassName,omitempty"`
+	// Use the host's pid namespace.
+	// +optional
+	HostPID bool `json:"hostPID,omitempty"`
 }
 
 // ContainerSpec defines configuration for a specific container

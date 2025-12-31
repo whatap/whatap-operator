@@ -1541,6 +1541,9 @@ spec:
                               - name
                               type: object
                             type: array
+                          hostPID:
+                            description: Use the host's pid namespace.
+                            type: boolean
                           imagePullSecrets:
                             description: ImagePullSecrets to use for MasterAgent pod
                               (overrides global if set)
@@ -2080,6 +2083,11 @@ spec:
                                   More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                                 type: object
                             type: object
+                          runtimeClassName:
+                            description: |-
+                              RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used
+                              to run this pod. If no RuntimeClass resource matches the named class, the pod will not be run.
+                            type: string
                           tolerations:
                             description: Tolerations to be added to the MasterAgent
                               pod
@@ -3189,6 +3197,9 @@ spec:
                             description: HostNetwork enables host networking for the
                               Node Agent pod
                             type: boolean
+                          hostPID:
+                            description: Use the host's pid namespace.
+                            type: boolean
                           imagePullSecrets:
                             description: ImagePullSecrets to use for NodeAgent pod
                               (overrides global if set)
@@ -3932,6 +3943,11 @@ spec:
                             - containerd
                             - docker
                             - crio
+                            type: string
+                          runtimeClassName:
+                            description: |-
+                              RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used
+                              to run this pod. If no RuntimeClass resource matches the named class, the pod will not be run.
                             type: string
                           runtimeSocketPath:
                             description: |-
