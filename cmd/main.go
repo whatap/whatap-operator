@@ -284,6 +284,7 @@ func main() {
 	if err = (&controller.WhatapAgentReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
+		Recorder:         mgr.GetEventRecorderFor("whatap-operator"),
 		DefaultNamespace: defaultNS,
 		WebhookCABundle:  caCert,
 		CaKey:            caKey,

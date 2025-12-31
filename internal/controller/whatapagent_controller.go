@@ -10,9 +10,11 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -30,6 +32,7 @@ const (
 type WhatapAgentReconciler struct {
 	client.Client
 	Scheme           *runtime.Scheme
+	Recorder         record.EventRecorder
 	DefaultNamespace string
 	// from main.go
 	WebhookCABundle []byte
@@ -357,19 +360,53 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	logger.Info("Reconciling WhatapAgent", "Name", whatapAgent.Name)
 
+	// Update Status to Progressing
+	apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+		Type:    "Available",
+		Status:  metav1.ConditionFalse,
+		Reason:  "Reconciling",
+		Message: "Reconciling WhatapAgent resources",
+	})
+	// Ignore error on status update to proceed with reconciliation
+	_ = r.Status().Update(ctx, whatapAgent)
+
 	// --- 1. create webhook service
 	if err := r.ensureWebhookService(ctx, whatapAgent); err != nil {
 		logger.Error(err, "failed to ensure ensureWebhookService")
+		r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to ensure Webhook Service: "+err.Error())
+		apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+			Type:    "Available",
+			Status:  metav1.ConditionFalse,
+			Reason:  "InstallFailed",
+			Message: err.Error(),
+		})
+		r.Status().Update(ctx, whatapAgent)
 		return ctrl.Result{}, err
 	}
 
 	// --- 2. create webhook secret
 	if err := r.ensureWebhookTLSSecret(ctx, whatapAgent); err != nil {
+		r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to ensure Webhook Secret: "+err.Error())
+		apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+			Type:    "Available",
+			Status:  metav1.ConditionFalse,
+			Reason:  "InstallFailed",
+			Message: err.Error(),
+		})
+		r.Status().Update(ctx, whatapAgent)
 		return ctrl.Result{}, err
 	}
 
 	// 5) WebhookConfiguration 생성/업데이트
 	if err := r.ensureMutatingWebhookConfiguration(ctx, whatapAgent); err != nil {
+		r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to ensure MutatingWebhookConfiguration: "+err.Error())
+		apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+			Type:    "Available",
+			Status:  metav1.ConditionFalse,
+			Reason:  "InstallFailed",
+			Message: err.Error(),
+		})
+		r.Status().Update(ctx, whatapAgent)
 		return ctrl.Result{}, err
 	}
 
@@ -388,30 +425,75 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Info("createOrUpdate Whatap Master Agent")
 		if err := createOrUpdateMasterAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to createOrUpdate Master Agent")
+			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to createOrUpdate Master Agent: "+err.Error())
+			apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+				Type:    "Available",
+				Status:  metav1.ConditionFalse,
+				Reason:  "InstallFailed",
+				Message: err.Error(),
+			})
+			r.Status().Update(ctx, whatapAgent)
+			return ctrl.Result{}, err
 		}
 	}
 	if k8sAgentSpec.NodeAgent.Enabled {
 		logger.Info("createOrUpdate Whatap Node Agent")
 		if err := createOrUpdateNodeAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to createOrUpdate Node Agent")
+			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to createOrUpdate Node Agent: "+err.Error())
+			apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+				Type:    "Available",
+				Status:  metav1.ConditionFalse,
+				Reason:  "InstallFailed",
+				Message: err.Error(),
+			})
+			r.Status().Update(ctx, whatapAgent)
+			return ctrl.Result{}, err
 		}
 	}
 	if k8sAgentSpec.ApiserverMonitoring.Enabled {
 		logger.Info("Installing Apiserver Monitoring Agent")
 		if err := installApiserverMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Apiserver Monitor")
+			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to install Apiserver Monitor: "+err.Error())
+			apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+				Type:    "Available",
+				Status:  metav1.ConditionFalse,
+				Reason:  "InstallFailed",
+				Message: err.Error(),
+			})
+			r.Status().Update(ctx, whatapAgent)
+			return ctrl.Result{}, err
 		}
 	}
 	if k8sAgentSpec.EtcdMonitoring.Enabled {
 		logger.Info("Installing Etcd Monitoring Agent")
 		if err := installEtcdMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Etcd Monitor")
+			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to install Etcd Monitor: "+err.Error())
+			apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+				Type:    "Available",
+				Status:  metav1.ConditionFalse,
+				Reason:  "InstallFailed",
+				Message: err.Error(),
+			})
+			r.Status().Update(ctx, whatapAgent)
+			return ctrl.Result{}, err
 		}
 	}
 	if k8sAgentSpec.SchedulerMonitoring.Enabled {
 		logger.Info("Installing Scheduler Monitoring Agent")
 		if err := installSchedulerMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Scheduler Monitor")
+			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to install Scheduler Monitor: "+err.Error())
+			apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+				Type:    "Available",
+				Status:  metav1.ConditionFalse,
+				Reason:  "InstallFailed",
+				Message: err.Error(),
+			})
+			r.Status().Update(ctx, whatapAgent)
+			return ctrl.Result{}, err
 		}
 	}
 	// OpenAgent
@@ -419,8 +501,42 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		logger.Info("Installing Open Agent")
 		if err := installOpenAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Open Agent")
+			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to install Open Agent: "+err.Error())
+			apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+				Type:    "Available",
+				Status:  metav1.ConditionFalse,
+				Reason:  "InstallFailed",
+				Message: err.Error(),
+			})
+			r.Status().Update(ctx, whatapAgent)
+			return ctrl.Result{}, err
 		}
 	}
+
+	// Success
+	apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+		Type:    "Available",
+		Status:  metav1.ConditionTrue,
+		Reason:  "Installed",
+		Message: "WhatapAgent installed successfully",
+	})
+	whatapAgent.Status.ObservedGeneration = whatapAgent.Generation
+	if err := r.Status().Update(ctx, whatapAgent); err != nil {
+		logger.Error(err, "Failed to update WhatapAgent status")
+		return ctrl.Result{}, err
+	}
+	// Do not emit event on every reconcile loop if it's already available?
+	// But Reconcile is periodic. We should only emit if status changed?
+	// For simplicity, I'll only emit if I just set it to True.
+	// But `SetStatusCondition` handles deduplication.
+	// I'll emit "Installed" event. It might spam if we requeue every 5 mins.
+	// Better to check if condition changed.
+	// apimeta.SetStatusCondition returns bool (if changed).
+	// But I just called it.
+	// Let's just emit it. `kubectl describe` shows last seen.
+	// Actually, if we want to avoid spamming events, we can skip it.
+	// But the user asked for improvements.
+	// I will just add the status update and return.
 
 	// Schedule periodic reconciliation to ensure resources are maintained
 	return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
