@@ -108,27 +108,32 @@ func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, lo
 		},
 	}
 
-	// Apply custom labels if provided
-	if masterSpec.Labels != nil {
-		if deploy.Labels == nil {
-			deploy.Labels = make(map[string]string)
-		}
-		for k, v := range masterSpec.Labels {
-			deploy.Labels[k] = v
-		}
-	}
-
-	// Apply custom annotations if provided
-	if masterSpec.Annotations != nil {
-		if deploy.Annotations == nil {
-			deploy.Annotations = make(map[string]string)
-		}
-		for k, v := range masterSpec.Annotations {
-			deploy.Annotations[k] = v
-		}
-	}
-
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		// Apply custom labels if provided
+		if masterSpec.Labels != nil {
+			if deploy.Labels == nil {
+				deploy.Labels = make(map[string]string)
+			}
+			for k, v := range masterSpec.Labels {
+				deploy.Labels[k] = v
+			}
+		}
+
+		// Apply custom annotations if provided
+		if masterSpec.Annotations != nil {
+			if deploy.Annotations == nil {
+				deploy.Annotations = make(map[string]string)
+			}
+			for k, v := range masterSpec.Annotations {
+				deploy.Annotations[k] = v
+			}
+		}
+
+		// Set controller reference
+		if err := controllerutil.SetControllerReference(cr, deploy, r.Scheme); err != nil {
+			return err
+		}
+
 		deploy.Spec = getMasterAgentDeploymentSpec(img, resources, cr)
 		return nil
 	})
@@ -323,27 +328,32 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 		},
 	}
 
-	// Apply custom labels if provided
-	if nodeSpec.Labels != nil {
-		if ds.Labels == nil {
-			ds.Labels = make(map[string]string)
-		}
-		for k, v := range nodeSpec.Labels {
-			ds.Labels[k] = v
-		}
-	}
-
-	// Apply custom annotations if provided
-	if nodeSpec.Annotations != nil {
-		if ds.Annotations == nil {
-			ds.Annotations = make(map[string]string)
-		}
-		for k, v := range nodeSpec.Annotations {
-			ds.Annotations[k] = v
-		}
-	}
-
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, ds, func() error {
+		// Apply custom labels if provided
+		if nodeSpec.Labels != nil {
+			if ds.Labels == nil {
+				ds.Labels = make(map[string]string)
+			}
+			for k, v := range nodeSpec.Labels {
+				ds.Labels[k] = v
+			}
+		}
+
+		// Apply custom annotations if provided
+		if nodeSpec.Annotations != nil {
+			if ds.Annotations == nil {
+				ds.Annotations = make(map[string]string)
+			}
+			for k, v := range nodeSpec.Annotations {
+				ds.Annotations[k] = v
+			}
+		}
+
+		// Set controller reference
+		if err := controllerutil.SetControllerReference(cr, ds, r.Scheme); err != nil {
+			return err
+		}
+
 		ds.Spec = getNodeAgentDaemonSetSpec(img, resources, cr)
 		podSpec := &ds.Spec.Template.Spec
 		if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
@@ -715,19 +725,18 @@ func ensureDcgmExporterService(ctx context.Context, r *WhatapAgentReconciler, lo
 		},
 	}
 
-	// Set WhatapAgent instance as the owner and controller
-	logger.Info("Setting controller reference for resource",
-		"resourceType", "Service",
-		"resourceName", svc.Name,
-		"resourceNamespace", svc.Namespace,
-		"ownerType", "WhatapAgent",
-		"ownerName", cr.Name,
-		"ownerNamespace", cr.Namespace)
-	if err := controllerutil.SetControllerReference(cr, svc, r.Scheme); err != nil {
-		return err
-	}
-
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
+		// Enforce labels
+		if svc.Labels == nil {
+			svc.Labels = make(map[string]string)
+		}
+		svc.Labels["app.kubernetes.io/name"] = "dcgm-exporter"
+		svc.Labels["app.kubernetes.io/managed-by"] = "whatap-operator"
+
+		// Set WhatapAgent instance as the owner and controller
+		if err := controllerutil.SetControllerReference(cr, svc, r.Scheme); err != nil {
+			return err
+		}
 		// Set default values
 		serviceType := corev1.ServiceTypeNodePort
 		port := int32(9400)
@@ -1158,6 +1167,9 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 		},
 	}
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, sa, func() error {
+		if err := controllerutil.SetControllerReference(cr, sa, r.Scheme); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -1173,6 +1185,9 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 		},
 	}
 	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, cr1, func() error {
+		if err := controllerutil.SetControllerReference(cr, cr1, r.Scheme); err != nil {
+			return err
+		}
 		cr1.Rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"discovery.k8s.io"},
@@ -1204,6 +1219,9 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 		},
 	}
 	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, crb, func() error {
+		if err := controllerutil.SetControllerReference(cr, crb, r.Scheme); err != nil {
+			return err
+		}
 		crb.Subjects = []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -1232,6 +1250,9 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 		},
 	}
 	op, err = controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		if err := controllerutil.SetControllerReference(cr, cm, r.Scheme); err != nil {
+			return err
+		}
 		// Generate scrape_config.yaml content from CR
 		scrapeConfig := generateScrapeConfig(cr, r.DefaultNamespace)
 		cm.Data = map[string]string{
@@ -1263,29 +1284,34 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 		// Get the OpenAgent spec for easier access
 		openAgentSpec := cr.Spec.Features.OpenAgent
 
-		// Set up base labels
-		deploy.Labels = map[string]string{
-			"app": "whatap-open-agent",
-		}
-
-		// Apply custom labels if provided
-		if openAgentSpec.Labels != nil {
-			for k, v := range openAgentSpec.Labels {
-				deploy.Labels[k] = v
-			}
-		}
-
-		// Apply custom annotations if provided
-		if openAgentSpec.Annotations != nil {
-			if deploy.Annotations == nil {
-				deploy.Annotations = make(map[string]string)
-			}
-			for k, v := range openAgentSpec.Annotations {
-				deploy.Annotations[k] = v
-			}
-		}
-
 		deployOp, err = controllerutil.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+			// Set up base labels
+			if deploy.Labels == nil {
+				deploy.Labels = map[string]string{}
+			}
+			deploy.Labels["app"] = "whatap-open-agent"
+
+			// Apply custom labels if provided
+			if openAgentSpec.Labels != nil {
+				for k, v := range openAgentSpec.Labels {
+					deploy.Labels[k] = v
+				}
+			}
+
+			// Apply custom annotations if provided
+			if openAgentSpec.Annotations != nil {
+				if deploy.Annotations == nil {
+					deploy.Annotations = make(map[string]string)
+				}
+				for k, v := range openAgentSpec.Annotations {
+					deploy.Annotations[k] = v
+				}
+			}
+
+			if err := controllerutil.SetControllerReference(cr, deploy, r.Scheme); err != nil {
+				return err
+			}
+
 			// Create base labels for pod template
 			podLabels := map[string]string{"app": "whatap-open-agent"}
 			if openAgentSpec.PodLabels != nil {

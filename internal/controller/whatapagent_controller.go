@@ -39,7 +39,6 @@ type WhatapAgentReconciler struct {
 }
 
 func (r *WhatapAgentReconciler) ensureWebhookTLSSecret(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
-	logger := log.FromContext(ctx)
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      webhookSecretName,
@@ -47,19 +46,11 @@ func (r *WhatapAgentReconciler) ensureWebhookTLSSecret(ctx context.Context, what
 		},
 	}
 
-	// Set WhatapAgent instance as the owner and controller
-	logger.Info("Setting controller reference for resource",
-		"resourceType", "Secret",
-		"resourceName", secret.Name,
-		"resourceNamespace", secret.Namespace,
-		"ownerType", "WhatapAgent",
-		"ownerName", whatapAgent.Name,
-		"ownerNamespace", whatapAgent.Namespace)
-	if err := controllerutil.SetControllerReference(whatapAgent, secret, r.Scheme); err != nil {
-		return err
-	}
-
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+		// Set WhatapAgent instance as the owner and controller
+		if err := controllerutil.SetControllerReference(whatapAgent, secret, r.Scheme); err != nil {
+			return err
+		}
 		secret.Data = map[string][]byte{
 			"cert.pem": r.WebhookCABundle, // CA 번들
 			"key.pem":  r.CaKey,
@@ -181,7 +172,6 @@ func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
 }
 
 func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
-	logger := log.FromContext(ctx)
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      webhookServiceName,
@@ -193,19 +183,18 @@ func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context, whatap
 		},
 	}
 
-	// Set WhatapAgent instance as the owner and controller
-	logger.Info("Setting controller reference for resource",
-		"resourceType", "Service",
-		"resourceName", svc.Name,
-		"resourceNamespace", svc.Namespace,
-		"ownerType", "WhatapAgent",
-		"ownerName", whatapAgent.Name,
-		"ownerNamespace", whatapAgent.Namespace)
-	if err := controllerutil.SetControllerReference(whatapAgent, svc, r.Scheme); err != nil {
-		return err
-	}
-
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
+		// Set WhatapAgent instance as the owner and controller
+		if err := controllerutil.SetControllerReference(whatapAgent, svc, r.Scheme); err != nil {
+			return err
+		}
+		// Apply labels
+		if svc.Labels == nil {
+			svc.Labels = make(map[string]string)
+		}
+		svc.Labels["app.kubernetes.io/name"] = "whatap-operator"
+		svc.Labels["app.kubernetes.io/managed-by"] = "whatap-operator"
+
 		svc.Spec = corev1.ServiceSpec{
 			Selector: map[string]string{
 				"app.kubernetes.io/name": "whatap-operator",
@@ -222,26 +211,17 @@ func (r *WhatapAgentReconciler) ensureWebhookService(ctx context.Context, whatap
 	return err
 }
 func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.Context, whatapAgent *monitoringv2alpha1.WhatapAgent) error {
-	logger := log.FromContext(ctx)
 	mwc := &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: webhookConfigurationName,
 		},
 	}
 
-	// Set WhatapAgent instance as the owner and controller (kept as-is for minimal change)
-	logger.Info("Setting controller reference for resource",
-		"resourceType", "MutatingWebhookConfiguration",
-		"resourceName", mwc.Name,
-		"resourceNamespace", mwc.Namespace,
-		"ownerType", "WhatapAgent",
-		"ownerName", whatapAgent.Name,
-		"ownerNamespace", whatapAgent.Namespace)
-	if err := controllerutil.SetControllerReference(whatapAgent, mwc, r.Scheme); err != nil {
-		return err
-	}
-
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, mwc, func() error {
+		// Set WhatapAgent instance as the owner and controller
+		if err := controllerutil.SetControllerReference(whatapAgent, mwc, r.Scheme); err != nil {
+			return err
+		}
 		// Build desired webhooks (without selectors), CABundle is set by operator as required
 		mpod := admissionregistrationv1.MutatingWebhook{
 			Name: "mpod.kb.io",
