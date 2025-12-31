@@ -142,6 +142,9 @@ type OpenAgentEndpoint struct {
 	// TLSConfig defines the TLS configuration for the endpoint
 	// +optional
 	TLSConfig *TLSConfig `json:"tlsConfig,omitempty"`
+	// BasicAuth defines the HTTP Basic Auth configuration for the endpoint
+	// +optional
+	BasicAuth *BasicAuthConfig `json:"basicAuth,omitempty"`
 	// MetricRelabelConfigs defines the metric relabeling configurations for this endpoint
 	// +optional
 	MetricRelabelConfigs []MetricRelabelConfig `json:"metricRelabelConfigs,omitempty"`
@@ -160,6 +163,19 @@ type SecretKeySelector struct {
 	Name string `json:"name"`
 	// Key within the secret
 	Key string `json:"key"`
+	// Namespace of the secret (optional, defaults to agent's namespace)
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// BasicAuthConfig represents HTTP Basic Auth configuration
+type BasicAuthConfig struct {
+	// Username configuration via Kubernetes Secret
+	// +optional
+	Username *SecretKeySelector `json:"username,omitempty"`
+	// Password configuration via Kubernetes Secret
+	// +optional
+	Password *SecretKeySelector `json:"password,omitempty"`
 }
 
 // TLSConfig defines the TLS configuration for an endpoint

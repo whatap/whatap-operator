@@ -667,7 +667,7 @@ func createOrUpdateGpuConfigMap(ctx context.Context, r *WhatapAgentReconciler, l
 
 func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.WhatapAgent) {
 	// Check if a custom image is specified
-	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.4.2-4.7.06-ubuntu22.04"
+	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.4.2-4.7.09-ubuntu22.04"
 	if cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName != "" {
 		dcgmImage = cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName
 	}
@@ -926,6 +926,27 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 				if endpoint.Scheme != "" {
 					endpointMap["scheme"] = endpoint.Scheme
 				}
+				// Add Basic Auth if present
+				if endpoint.BasicAuth != nil {
+					basicAuth := make(map[string]interface{})
+					if endpoint.BasicAuth.Username != nil {
+						basicAuth["username"] = map[string]interface{}{
+							"name":      endpoint.BasicAuth.Username.Name,
+							"key":       endpoint.BasicAuth.Username.Key,
+							"namespace": endpoint.BasicAuth.Username.Namespace,
+						}
+					}
+					if endpoint.BasicAuth.Password != nil {
+						basicAuth["password"] = map[string]interface{}{
+							"name":      endpoint.BasicAuth.Password.Name,
+							"key":       endpoint.BasicAuth.Password.Key,
+							"namespace": endpoint.BasicAuth.Password.Namespace,
+						}
+					}
+					endpointMap["basicAuth"] = basicAuth
+				}
+
+				// Add TLS config if present
 				if endpoint.TLSConfig != nil {
 					tlsConfig := make(map[string]interface{})
 					tlsConfig["insecureSkipVerify"] = endpoint.TLSConfig.InsecureSkipVerify
