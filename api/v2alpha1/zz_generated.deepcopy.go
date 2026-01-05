@@ -659,6 +659,13 @@ func (in *OpenAgentTargetSpec) DeepCopyInto(out *OpenAgentTargetSpec) {
 	*out = *in
 	in.NamespaceSelector.DeepCopyInto(&out.NamespaceSelector)
 	in.Selector.DeepCopyInto(&out.Selector)
+	if in.RelabelConfigs != nil {
+		in, out := &in.RelabelConfigs, &out.RelabelConfigs
+		*out = make([]MetricRelabelConfig, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.Endpoints != nil {
 		in, out := &in.Endpoints, &out.Endpoints
 		*out = make([]OpenAgentEndpoint, len(*in))

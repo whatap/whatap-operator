@@ -225,68 +225,66 @@ func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.C
 		if err := controllerutil.SetControllerReference(whatapAgent, mwc, r.Scheme); err != nil {
 			return err
 		}
-		// Build desired webhooks (without selectors), CABundle is set by operator as required
-		mpod := admissionregistrationv1.MutatingWebhook{
-			Name: "mpod.kb.io",
-			ClientConfig: admissionregistrationv1.WebhookClientConfig{
-				Service: &admissionregistrationv1.ServiceReference{
-					Name:      webhookServiceName,
-					Namespace: r.DefaultNamespace,
-					Path:      strPtr("/whatap-injection--v1-pod"),
-				},
-				CABundle: r.WebhookCABundle,
-			},
-			Rules: []admissionregistrationv1.RuleWithOperations{{
-				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
-				Rule: admissionregistrationv1.Rule{
-					APIGroups:   []string{""},
-					APIVersions: []string{"v1"},
-					Resources:   []string{"pods"},
-				},
-			}},
-			FailurePolicy:           failurePtr(admissionregistrationv1.Ignore),
-			AdmissionReviewVersions: []string{"v1"},
-			SideEffects:             &sideEffectNone,
+
+		// Helper to find existing webhook by name
+		// If found, return it (copy). If not, return a new one with Name set.
+		findWebhook := func(name string) (admissionregistrationv1.MutatingWebhook, bool) {
+			for _, wh := range mwc.Webhooks {
+				if wh.Name == name {
+					return wh, true
+				}
+			}
+			return admissionregistrationv1.MutatingWebhook{Name: name}, false
 		}
 
-		whatap := admissionregistrationv1.MutatingWebhook{
-			Name: "whatapagent.kb.io",
-			ClientConfig: admissionregistrationv1.WebhookClientConfig{
-				Service: &admissionregistrationv1.ServiceReference{
-					Name:      webhookServiceName,
-					Namespace: r.DefaultNamespace,
-					Path:      strPtr("/whatap-validation--v2alpha1-whatapagent"),
-				},
-				CABundle: r.WebhookCABundle,
+		// 1. mpod.kb.io
+		mpod, _ := findWebhook("mpod.kb.io")
+		mpod.ClientConfig = admissionregistrationv1.WebhookClientConfig{
+			Service: &admissionregistrationv1.ServiceReference{
+				Name:      webhookServiceName,
+				Namespace: r.DefaultNamespace,
+				Path:      strPtr("/whatap-injection--v1-pod"),
 			},
-			Rules: []admissionregistrationv1.RuleWithOperations{{
-				Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
-				Rule: admissionregistrationv1.Rule{
-					APIGroups:   []string{"monitoring.whatap.com"},
-					APIVersions: []string{"v2alpha1"},
-					Resources:   []string{"whatapagents"},
-				},
-			}},
-			FailurePolicy:           failurePtr(admissionregistrationv1.Ignore),
-			AdmissionReviewVersions: []string{"v1"},
-			SideEffects:             &sideEffectNone,
+			CABundle: r.WebhookCABundle,
 		}
+		mpod.Rules = []admissionregistrationv1.RuleWithOperations{{
+			Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+			Rule: admissionregistrationv1.Rule{
+				APIGroups:   []string{""},
+				APIVersions: []string{"v1"},
+				Resources:   []string{"pods"},
+			},
+		}}
+		mpod.FailurePolicy = failurePtr(admissionregistrationv1.Ignore)
+		mpod.AdmissionReviewVersions = []string{"v1"}
+		mpod.SideEffects = &sideEffectNone
 
-		// Preserve selectors from existing webhooks if present (namespaceSelector/objectSelector)
-		existingSelectors := map[string]admissionregistrationv1.MutatingWebhook{}
-		for _, wh := range mwc.Webhooks {
-			existingSelectors[wh.Name] = wh
+		// 2. whatapagent.kb.io
+		whatap, _ := findWebhook("whatapagent.kb.io")
+		whatap.ClientConfig = admissionregistrationv1.WebhookClientConfig{
+			Service: &admissionregistrationv1.ServiceReference{
+				Name:      webhookServiceName,
+				Namespace: r.DefaultNamespace,
+				Path:      strPtr("/whatap-validation--v2alpha1-whatapagent"),
+			},
+			CABundle: r.WebhookCABundle,
 		}
-		if cur, ok := existingSelectors["mpod.kb.io"]; ok {
-			mpod.NamespaceSelector = cur.NamespaceSelector
-			mpod.ObjectSelector = cur.ObjectSelector
-		}
-		if cur, ok := existingSelectors["whatapagent.kb.io"]; ok {
-			whatap.NamespaceSelector = cur.NamespaceSelector
-			whatap.ObjectSelector = cur.ObjectSelector
-		}
+		whatap.Rules = []admissionregistrationv1.RuleWithOperations{{
+			Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create, admissionregistrationv1.Update},
+			Rule: admissionregistrationv1.Rule{
+				APIGroups:   []string{"monitoring.whatap.com"},
+				APIVersions: []string{"v2alpha1"},
+				Resources:   []string{"whatapagents"},
+			},
+		}}
+		whatap.FailurePolicy = failurePtr(admissionregistrationv1.Ignore)
+		whatap.AdmissionReviewVersions = []string{"v1"}
+		whatap.SideEffects = &sideEffectNone
 
 		// Assign merged webhooks in stable order
+		// By using the structs retrieved from 'mwc.Webhooks', we preserve all other fields
+		// (e.g., NamespaceSelector, ObjectSelector, MatchPolicy, TimeoutSeconds)
+		// that we did not explicitly overwrite.
 		mwc.Webhooks = []admissionregistrationv1.MutatingWebhook{mpod, whatap}
 		return nil
 	})
