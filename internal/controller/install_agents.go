@@ -903,6 +903,37 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			targetMap["selector"] = selector
 		}
 
+		// Add RelabelConfigs if present
+		if len(target.RelabelConfigs) > 0 {
+			relabelConfigs := make([]interface{}, 0)
+			for _, rc := range target.RelabelConfigs {
+				rcMap := make(map[string]interface{})
+				if len(rc.SourceLabels) > 0 {
+					rcMap["source_labels"] = rc.SourceLabels
+				}
+				if rc.Separator != "" {
+					rcMap["separator"] = rc.Separator
+				}
+				if rc.Regex != "" {
+					rcMap["regex"] = rc.Regex
+				}
+				if rc.Modulus != 0 {
+					rcMap["modulus"] = rc.Modulus
+				}
+				if rc.TargetLabel != "" {
+					rcMap["target_label"] = rc.TargetLabel
+				}
+				if rc.Replacement != "" {
+					rcMap["replacement"] = rc.Replacement
+				}
+				if rc.Action != "" {
+					rcMap["action"] = rc.Action
+				}
+				relabelConfigs = append(relabelConfigs, rcMap)
+			}
+			targetMap["relabelConfigs"] = relabelConfigs
+		}
+
 		// Add endpoints if present
 		if len(target.Endpoints) > 0 {
 			endpoints := make([]interface{}, 0)
@@ -1004,8 +1035,14 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 						if len(relabelConfig.SourceLabels) > 0 {
 							relabelMap["source_labels"] = relabelConfig.SourceLabels
 						}
+						if relabelConfig.Separator != "" {
+							relabelMap["separator"] = relabelConfig.Separator
+						}
 						if relabelConfig.Regex != "" {
 							relabelMap["regex"] = relabelConfig.Regex
+						}
+						if relabelConfig.Modulus != 0 {
+							relabelMap["modulus"] = relabelConfig.Modulus
 						}
 						if relabelConfig.TargetLabel != "" {
 							relabelMap["target_label"] = relabelConfig.TargetLabel

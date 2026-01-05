@@ -115,6 +115,9 @@ type OpenAgentTargetSpec struct {
 	NamespaceSelector NamespaceSelector `json:"namespaceSelector,omitempty"`
 	// Selector selects the targets to scrape
 	Selector PodSelector `json:"selector,omitempty"`
+	// RelabelConfigs defines the relabeling configurations for this target
+	// +optional
+	RelabelConfigs []MetricRelabelConfig `json:"relabelConfigs,omitempty"`
 	// Endpoints defines the endpoints to scrape metrics from
 	Endpoints []OpenAgentEndpoint `json:"endpoints,omitempty"`
 
@@ -218,9 +221,15 @@ type MetricRelabelConfig struct {
 	// SourceLabels is the list of source labels to use in the relabeling
 	// +optional
 	SourceLabels []string `json:"source_labels,omitempty"`
+	// Separator is the string between concatenated source labels (default: ";")
+	// +optional
+	Separator string `json:"separator,omitempty"`
 	// Regex is the regular expression to match against the source labels
 	// +optional
 	Regex string `json:"regex,omitempty"`
+	// Modulus is the modulus for hashmod action
+	// +optional
+	Modulus uint64 `json:"modulus,omitempty"`
 	// TargetLabel is the label to set in the relabeling
 	// +optional
 	TargetLabel string `json:"target_label,omitempty"`
