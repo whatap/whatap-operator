@@ -1241,8 +1241,22 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			targetMap["selector"] = convertLabelSelector(monitor.Spec.Selector)
 
 			// RelabelConfigs
+			var relabelConfigs []interface{}
 			if len(monitor.Spec.RelabelConfigs) > 0 {
-				targetMap["relabelConfigs"] = convertRelabelConfigs(monitor.Spec.RelabelConfigs)
+				relabelConfigs = convertRelabelConfigs(monitor.Spec.RelabelConfigs)
+			}
+
+			// JobLabel
+			if monitor.Spec.JobLabel != "" {
+				jobRelabel := make(map[string]interface{})
+				jobRelabel["source_labels"] = []string{monitor.Spec.JobLabel}
+				jobRelabel["target_label"] = "job"
+				jobRelabel["action"] = "replace"
+				relabelConfigs = append(relabelConfigs, jobRelabel)
+			}
+
+			if len(relabelConfigs) > 0 {
+				targetMap["relabelConfigs"] = relabelConfigs
 			}
 
 			// Endpoints
@@ -1293,8 +1307,23 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 
 			targetMap["selector"] = convertLabelSelector(monitor.Spec.Selector)
 
+			// RelabelConfigs
+			var relabelConfigs []interface{}
 			if len(monitor.Spec.RelabelConfigs) > 0 {
-				targetMap["relabelConfigs"] = convertRelabelConfigs(monitor.Spec.RelabelConfigs)
+				relabelConfigs = convertRelabelConfigs(monitor.Spec.RelabelConfigs)
+			}
+
+			// JobLabel
+			if monitor.Spec.JobLabel != "" {
+				jobRelabel := make(map[string]interface{})
+				jobRelabel["source_labels"] = []string{monitor.Spec.JobLabel}
+				jobRelabel["target_label"] = "job"
+				jobRelabel["action"] = "replace"
+				relabelConfigs = append(relabelConfigs, jobRelabel)
+			}
+
+			if len(relabelConfigs) > 0 {
+				targetMap["relabelConfigs"] = relabelConfigs
 			}
 
 			if len(monitor.Spec.Endpoints) > 0 {
@@ -1400,100 +1429,6 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			gpuTargetMap["endpoints"] = endpoints
 
 			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, gpuTargetMap)
-		}
-	}
-
-	// Process PodMonitors
-	if podMonitors != nil {
-		for _, pm := range podMonitors.Items {
-			targetMap := make(map[string]interface{})
-			targetMap["targetName"] = fmt.Sprintf("%s/%s", pm.Namespace, pm.Name)
-			targetMap["type"] = "PodMonitor"
-			targetMap["enabled"] = true
-
-			// Namespace Selector: Fixed to CR's namespace
-			nsSelector := make(map[string]interface{})
-			nsSelector["matchNames"] = []string{pm.Namespace}
-			targetMap["namespaceSelector"] = nsSelector
-
-			// Selector
-			selectorMap := convertLabelSelector(pm.Spec.Selector)
-			if len(selectorMap) > 0 {
-				targetMap["selector"] = selectorMap
-			}
-
-			// RelabelConfigs
-			var relabelConfigs []interface{}
-			if len(pm.Spec.RelabelConfigs) > 0 {
-				relabelConfigs = convertRelabelConfigs(pm.Spec.RelabelConfigs)
-			}
-
-			// JobLabel
-			if pm.Spec.JobLabel != "" {
-				jobRelabel := make(map[string]interface{})
-				jobRelabel["source_labels"] = []string{pm.Spec.JobLabel}
-				jobRelabel["target_label"] = "job"
-				jobRelabel["action"] = "replace"
-				relabelConfigs = append(relabelConfigs, jobRelabel)
-			}
-
-			if len(relabelConfigs) > 0 {
-				targetMap["relabelConfigs"] = relabelConfigs
-			}
-
-			// Endpoints
-			if len(pm.Spec.Endpoints) > 0 {
-				targetMap["endpoints"] = convertEndpoints(pm.Spec.Endpoints)
-			}
-
-			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
-		}
-	}
-
-	// Process ServiceMonitors
-	if serviceMonitors != nil {
-		for _, sm := range serviceMonitors.Items {
-			targetMap := make(map[string]interface{})
-			targetMap["targetName"] = fmt.Sprintf("%s/%s", sm.Namespace, sm.Name)
-			targetMap["type"] = "ServiceMonitor"
-			targetMap["enabled"] = true
-
-			// Namespace Selector: Fixed to CR's namespace
-			nsSelector := make(map[string]interface{})
-			nsSelector["matchNames"] = []string{sm.Namespace}
-			targetMap["namespaceSelector"] = nsSelector
-
-			// Selector
-			selectorMap := convertLabelSelector(sm.Spec.Selector)
-			if len(selectorMap) > 0 {
-				targetMap["selector"] = selectorMap
-			}
-
-			// RelabelConfigs
-			var relabelConfigs []interface{}
-			if len(sm.Spec.RelabelConfigs) > 0 {
-				relabelConfigs = convertRelabelConfigs(sm.Spec.RelabelConfigs)
-			}
-
-			// JobLabel
-			if sm.Spec.JobLabel != "" {
-				jobRelabel := make(map[string]interface{})
-				jobRelabel["source_labels"] = []string{sm.Spec.JobLabel}
-				jobRelabel["target_label"] = "job"
-				jobRelabel["action"] = "replace"
-				relabelConfigs = append(relabelConfigs, jobRelabel)
-			}
-
-			if len(relabelConfigs) > 0 {
-				targetMap["relabelConfigs"] = relabelConfigs
-			}
-
-			// Endpoints
-			if len(sm.Spec.Endpoints) > 0 {
-				targetMap["endpoints"] = convertEndpoints(sm.Spec.Endpoints)
-			}
-
-			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
 		}
 	}
 
