@@ -826,8 +826,141 @@ func installSchedulerMonitor(ctx context.Context, r *WhatapAgentReconciler, logg
 	return nil
 }
 
+// Helper to convert LabelSelector to interface{}
+func convertLabelSelector(selector metav1.LabelSelector) map[string]interface{} {
+	result := make(map[string]interface{})
+	if len(selector.MatchLabels) > 0 {
+		result["matchLabels"] = selector.MatchLabels
+	}
+	if len(selector.MatchExpressions) > 0 {
+		matchExpressions := make([]interface{}, 0)
+		for _, expr := range selector.MatchExpressions {
+			exprMap := make(map[string]interface{})
+			exprMap["key"] = expr.Key
+			exprMap["operator"] = string(expr.Operator)
+			exprMap["values"] = expr.Values
+			matchExpressions = append(matchExpressions, exprMap)
+		}
+		result["matchExpressions"] = matchExpressions
+	}
+	return result
+}
+
+// Helper to convert RelabelConfigs to interface{}
+func convertRelabelConfigs(configs []monitoringv2alpha1.MetricRelabelConfig) []interface{} {
+	relabelConfigs := make([]interface{}, 0)
+	for _, rc := range configs {
+		rcMap := make(map[string]interface{})
+		if len(rc.SourceLabels) > 0 {
+			rcMap["source_labels"] = rc.SourceLabels
+		}
+		if rc.Separator != "" {
+			rcMap["separator"] = rc.Separator
+		}
+		if rc.Regex != "" {
+			rcMap["regex"] = rc.Regex
+		}
+		if rc.Modulus != 0 {
+			rcMap["modulus"] = rc.Modulus
+		}
+		if rc.TargetLabel != "" {
+			rcMap["target_label"] = rc.TargetLabel
+		}
+		if rc.Replacement != "" {
+			rcMap["replacement"] = rc.Replacement
+		}
+		if rc.Action != "" {
+			rcMap["action"] = rc.Action
+		}
+		relabelConfigs = append(relabelConfigs, rcMap)
+	}
+	return relabelConfigs
+}
+
+// Helper to convert Endpoints to interface{}
+func convertEndpoints(endpoints []monitoringv2alpha1.OpenAgentEndpoint) []interface{} {
+	result := make([]interface{}, 0)
+	for _, endpoint := range endpoints {
+		endpointMap := make(map[string]interface{})
+
+		if endpoint.Port != "" {
+			endpointMap["port"] = endpoint.Port
+		}
+		if endpoint.Address != "" {
+			endpointMap["address"] = endpoint.Address
+		}
+		if endpoint.Path != "" {
+			endpointMap["path"] = endpoint.Path
+		}
+		if endpoint.Interval != "" {
+			endpointMap["interval"] = endpoint.Interval
+		}
+		if endpoint.Scheme != "" {
+			endpointMap["scheme"] = endpoint.Scheme
+		}
+		if endpoint.BasicAuth != nil {
+			basicAuth := make(map[string]interface{})
+			if endpoint.BasicAuth.Username != nil {
+				basicAuth["username"] = map[string]interface{}{
+					"name":      endpoint.BasicAuth.Username.Name,
+					"key":       endpoint.BasicAuth.Username.Key,
+					"namespace": endpoint.BasicAuth.Username.Namespace,
+				}
+			}
+			if endpoint.BasicAuth.Password != nil {
+				basicAuth["password"] = map[string]interface{}{
+					"name":      endpoint.BasicAuth.Password.Name,
+					"key":       endpoint.BasicAuth.Password.Key,
+					"namespace": endpoint.BasicAuth.Password.Namespace,
+				}
+			}
+			endpointMap["basicAuth"] = basicAuth
+		}
+		if endpoint.TLSConfig != nil {
+			tlsConfig := make(map[string]interface{})
+			tlsConfig["insecureSkipVerify"] = endpoint.TLSConfig.InsecureSkipVerify
+			if endpoint.TLSConfig.CAFile != "" {
+				tlsConfig["caFile"] = endpoint.TLSConfig.CAFile
+			} else if endpoint.TLSConfig.CASecret != nil {
+				tlsConfig["caFile"] = fmt.Sprintf("/etc/ssl/certs/%s/%s",
+					endpoint.TLSConfig.CASecret.Name,
+					endpoint.TLSConfig.CASecret.Key)
+			}
+			if endpoint.TLSConfig.CertFile != "" {
+				tlsConfig["certFile"] = endpoint.TLSConfig.CertFile
+			} else if endpoint.TLSConfig.CertSecret != nil {
+				tlsConfig["certFile"] = fmt.Sprintf("/etc/ssl/certs/%s/%s",
+					endpoint.TLSConfig.CertSecret.Name,
+					endpoint.TLSConfig.CertSecret.Key)
+			}
+			if endpoint.TLSConfig.KeyFile != "" {
+				tlsConfig["keyFile"] = endpoint.TLSConfig.KeyFile
+			} else if endpoint.TLSConfig.KeySecret != nil {
+				tlsConfig["keyFile"] = fmt.Sprintf("/etc/ssl/certs/%s/%s",
+					endpoint.TLSConfig.KeySecret.Name,
+					endpoint.TLSConfig.KeySecret.Key)
+			}
+			if endpoint.TLSConfig.ServerName != "" {
+				tlsConfig["serverName"] = endpoint.TLSConfig.ServerName
+			}
+			endpointMap["tlsConfig"] = tlsConfig
+		}
+		if len(endpoint.Params) > 0 {
+			endpointMap["params"] = endpoint.Params
+		}
+		if endpoint.AddNodeLabel {
+			endpointMap["addNodeLabel"] = endpoint.AddNodeLabel
+		}
+		if len(endpoint.MetricRelabelConfigs) > 0 {
+			endpointMap["metricRelabelConfigs"] = convertRelabelConfigs(endpoint.MetricRelabelConfigs)
+		}
+		result = append(result, endpointMap)
+	}
+	return result
+}
+
 // generateScrapeConfig generates the scrape_config.yaml content from the CR
-func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace string) string {
+func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace string, podMonitors *monitoringv2alpha1.WhatapPodMonitorList, serviceMonitors *monitoringv2alpha1.WhatapServiceMonitorList) string {
 	// Define the structure for the scrape config
 	type ScrapeConfig struct {
 		Features struct {
@@ -1066,6 +1199,112 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 		config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
 	}
 
+	// Process WhatapPodMonitors
+	if podMonitors != nil {
+		for _, monitor := range podMonitors.Items {
+			targetMap := make(map[string]interface{})
+
+			// Generate target name: <Namespace>/<Name>
+			targetName := fmt.Sprintf("%s/%s", monitor.Namespace, monitor.Name)
+			targetMap["targetName"] = targetName
+			targetMap["type"] = "PodMonitor"
+			targetMap["enabled"] = true
+
+			// Namespace Selector
+			nsSelector := make(map[string]interface{})
+			if monitor.Spec.NamespaceSelector != nil {
+				// User provided a selector
+				if len(monitor.Spec.NamespaceSelector.MatchNames) > 0 {
+					nsSelector["matchNames"] = monitor.Spec.NamespaceSelector.MatchNames
+				}
+				if len(monitor.Spec.NamespaceSelector.MatchLabels) > 0 {
+					nsSelector["matchLabels"] = monitor.Spec.NamespaceSelector.MatchLabels
+				}
+				if len(monitor.Spec.NamespaceSelector.MatchExpressions) > 0 {
+					matchExpressions := make([]interface{}, 0)
+					for _, expr := range monitor.Spec.NamespaceSelector.MatchExpressions {
+						exprMap := make(map[string]interface{})
+						exprMap["key"] = expr.Key
+						exprMap["operator"] = expr.Operator
+						exprMap["values"] = expr.Values
+						matchExpressions = append(matchExpressions, exprMap)
+					}
+					nsSelector["matchExpressions"] = matchExpressions
+				}
+			} else {
+				// Default to CR's namespace
+				nsSelector["matchNames"] = []string{monitor.Namespace}
+			}
+			targetMap["namespaceSelector"] = nsSelector
+
+			// Selector
+			targetMap["selector"] = convertLabelSelector(monitor.Spec.Selector)
+
+			// RelabelConfigs
+			if len(monitor.Spec.RelabelConfigs) > 0 {
+				targetMap["relabelConfigs"] = convertRelabelConfigs(monitor.Spec.RelabelConfigs)
+			}
+
+			// Endpoints
+			if len(monitor.Spec.Endpoints) > 0 {
+				targetMap["endpoints"] = convertEndpoints(monitor.Spec.Endpoints)
+			}
+
+			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
+		}
+	}
+
+	// Process WhatapServiceMonitors
+	if serviceMonitors != nil {
+		for _, monitor := range serviceMonitors.Items {
+			targetMap := make(map[string]interface{})
+
+			targetName := fmt.Sprintf("%s/%s", monitor.Namespace, monitor.Name)
+			targetMap["targetName"] = targetName
+			targetMap["type"] = "ServiceMonitor"
+			targetMap["enabled"] = true
+
+			// Namespace Selector
+			nsSelector := make(map[string]interface{})
+			if monitor.Spec.NamespaceSelector != nil {
+				// User provided a selector
+				if len(monitor.Spec.NamespaceSelector.MatchNames) > 0 {
+					nsSelector["matchNames"] = monitor.Spec.NamespaceSelector.MatchNames
+				}
+				if len(monitor.Spec.NamespaceSelector.MatchLabels) > 0 {
+					nsSelector["matchLabels"] = monitor.Spec.NamespaceSelector.MatchLabels
+				}
+				if len(monitor.Spec.NamespaceSelector.MatchExpressions) > 0 {
+					matchExpressions := make([]interface{}, 0)
+					for _, expr := range monitor.Spec.NamespaceSelector.MatchExpressions {
+						exprMap := make(map[string]interface{})
+						exprMap["key"] = expr.Key
+						exprMap["operator"] = expr.Operator
+						exprMap["values"] = expr.Values
+						matchExpressions = append(matchExpressions, exprMap)
+					}
+					nsSelector["matchExpressions"] = matchExpressions
+				}
+			} else {
+				// Default to CR's namespace
+				nsSelector["matchNames"] = []string{monitor.Namespace}
+			}
+			targetMap["namespaceSelector"] = nsSelector
+
+			targetMap["selector"] = convertLabelSelector(monitor.Spec.Selector)
+
+			if len(monitor.Spec.RelabelConfigs) > 0 {
+				targetMap["relabelConfigs"] = convertRelabelConfigs(monitor.Spec.RelabelConfigs)
+			}
+
+			if len(monitor.Spec.Endpoints) > 0 {
+				targetMap["endpoints"] = convertEndpoints(monitor.Spec.Endpoints)
+			}
+
+			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
+		}
+	}
+
 	// Auto-add GPU monitoring target if gpuMonitoring is enabled
 	if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
 		// Check for duplicate targets to avoid conflicts
@@ -1161,6 +1400,100 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			gpuTargetMap["endpoints"] = endpoints
 
 			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, gpuTargetMap)
+		}
+	}
+
+	// Process PodMonitors
+	if podMonitors != nil {
+		for _, pm := range podMonitors.Items {
+			targetMap := make(map[string]interface{})
+			targetMap["targetName"] = fmt.Sprintf("%s/%s", pm.Namespace, pm.Name)
+			targetMap["type"] = "PodMonitor"
+			targetMap["enabled"] = true
+
+			// Namespace Selector: Fixed to CR's namespace
+			nsSelector := make(map[string]interface{})
+			nsSelector["matchNames"] = []string{pm.Namespace}
+			targetMap["namespaceSelector"] = nsSelector
+
+			// Selector
+			selectorMap := convertLabelSelector(pm.Spec.Selector)
+			if len(selectorMap) > 0 {
+				targetMap["selector"] = selectorMap
+			}
+
+			// RelabelConfigs
+			var relabelConfigs []interface{}
+			if len(pm.Spec.RelabelConfigs) > 0 {
+				relabelConfigs = convertRelabelConfigs(pm.Spec.RelabelConfigs)
+			}
+
+			// JobLabel
+			if pm.Spec.JobLabel != "" {
+				jobRelabel := make(map[string]interface{})
+				jobRelabel["source_labels"] = []string{pm.Spec.JobLabel}
+				jobRelabel["target_label"] = "job"
+				jobRelabel["action"] = "replace"
+				relabelConfigs = append(relabelConfigs, jobRelabel)
+			}
+
+			if len(relabelConfigs) > 0 {
+				targetMap["relabelConfigs"] = relabelConfigs
+			}
+
+			// Endpoints
+			if len(pm.Spec.Endpoints) > 0 {
+				targetMap["endpoints"] = convertEndpoints(pm.Spec.Endpoints)
+			}
+
+			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
+		}
+	}
+
+	// Process ServiceMonitors
+	if serviceMonitors != nil {
+		for _, sm := range serviceMonitors.Items {
+			targetMap := make(map[string]interface{})
+			targetMap["targetName"] = fmt.Sprintf("%s/%s", sm.Namespace, sm.Name)
+			targetMap["type"] = "ServiceMonitor"
+			targetMap["enabled"] = true
+
+			// Namespace Selector: Fixed to CR's namespace
+			nsSelector := make(map[string]interface{})
+			nsSelector["matchNames"] = []string{sm.Namespace}
+			targetMap["namespaceSelector"] = nsSelector
+
+			// Selector
+			selectorMap := convertLabelSelector(sm.Spec.Selector)
+			if len(selectorMap) > 0 {
+				targetMap["selector"] = selectorMap
+			}
+
+			// RelabelConfigs
+			var relabelConfigs []interface{}
+			if len(sm.Spec.RelabelConfigs) > 0 {
+				relabelConfigs = convertRelabelConfigs(sm.Spec.RelabelConfigs)
+			}
+
+			// JobLabel
+			if sm.Spec.JobLabel != "" {
+				jobRelabel := make(map[string]interface{})
+				jobRelabel["source_labels"] = []string{sm.Spec.JobLabel}
+				jobRelabel["target_label"] = "job"
+				jobRelabel["action"] = "replace"
+				relabelConfigs = append(relabelConfigs, jobRelabel)
+			}
+
+			if len(relabelConfigs) > 0 {
+				targetMap["relabelConfigs"] = relabelConfigs
+			}
+
+			// Endpoints
+			if len(sm.Spec.Endpoints) > 0 {
+				targetMap["endpoints"] = convertEndpoints(sm.Spec.Endpoints)
+			}
+
+			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
 		}
 	}
 
@@ -1307,6 +1640,7 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 			Kind:     "ClusterRole",
 			Name:     "whatap-open-agent-role",
 			APIGroup: "rbac.authorization.k8s.io",
+			// API Group should be rbac.authorization.k8s.io
 		}
 		return nil
 	})
@@ -1315,6 +1649,20 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 		return err
 	}
 	logResult(logger, "Whatap", "OpenAgent ClusterRoleBinding", op)
+
+	// Fetch WhatapPodMonitors
+	podMonitors := &monitoringv2alpha1.WhatapPodMonitorList{}
+	if err := r.Client.List(ctx, podMonitors); err != nil {
+		logger.Error(err, "Failed to list WhatapPodMonitors")
+		return err
+	}
+
+	// Fetch WhatapServiceMonitors
+	serviceMonitors := &monitoringv2alpha1.WhatapServiceMonitorList{}
+	if err := r.Client.List(ctx, serviceMonitors); err != nil {
+		logger.Error(err, "Failed to list WhatapServiceMonitors")
+		return err
+	}
 
 	// Create ConfigMap
 	cm := &corev1.ConfigMap{
@@ -1328,7 +1676,7 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 			return err
 		}
 		// Generate scrape_config.yaml content from CR
-		scrapeConfig := generateScrapeConfig(cr, r.DefaultNamespace)
+		scrapeConfig := generateScrapeConfig(cr, r.DefaultNamespace, podMonitors, serviceMonitors)
 		cm.Data = map[string]string{
 			"scrape_config.yaml": scrapeConfig,
 		}

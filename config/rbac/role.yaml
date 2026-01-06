@@ -30,7 +30,12 @@ rules:
   - get
   - patch
   - update
-- nonResourceURLs:
-  - /metrics
+- apiGroups:
+  - monitoring.whatap.com
+  resources:
+  - whatappodmonitors
+  - whatapservicemonitors
   verbs:
-  - "*"
+  - get
+  - list
+  - watch

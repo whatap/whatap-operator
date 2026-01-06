@@ -13,12 +13,15 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -321,6 +324,11 @@ func (r *WhatapAgentReconciler) populateCredentialsFromEnv(ctx context.Context, 
 	return nil
 }
 
+//+kubebuilder:rbac:groups=monitoring.whatap.com,resources=whatapagents,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=monitoring.whatap.com,resources=whatapagents/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=monitoring.whatap.com,resources=whatapagents/finalizers,verbs=update
+//+kubebuilder:rbac:groups=monitoring.whatap.com,resources=whatappodmonitors;whatapservicemonitors,verbs=get;list;watch
+
 // Reconcile
 func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -575,5 +583,33 @@ func (r *WhatapAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
 		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
+		// Watch for WhatapPodMonitor
+		Watches(
+			&monitoringv2alpha1.WhatapPodMonitor{},
+			handler.EnqueueRequestsFromMapFunc(r.findWhatapAgents),
+		).
+		// Watch for WhatapServiceMonitor
+		Watches(
+			&monitoringv2alpha1.WhatapServiceMonitor{},
+			handler.EnqueueRequestsFromMapFunc(r.findWhatapAgents),
+		).
 		Complete(r)
+}
+
+// findWhatapAgents lists all WhatapAgent CRs and returns requests for them
+func (r *WhatapAgentReconciler) findWhatapAgents(ctx context.Context, obj client.Object) []reconcile.Request {
+	whatapAgents := &monitoringv2alpha1.WhatapAgentList{}
+	if err := r.List(ctx, whatapAgents); err != nil {
+		return []reconcile.Request{}
+	}
+	requests := make([]reconcile.Request, len(whatapAgents.Items))
+	for i, item := range whatapAgents.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(), // Use Namespace if present (WhatapAgent might be Namespaced in practice)
+			},
+		}
+	}
+	return requests
 }
