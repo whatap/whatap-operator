@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -18,6 +19,55 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+// toOrderedYAML converts Go maps (which have random iteration order) into yaml.MapSlice
+// with sorted keys, recursively. This makes YAML output deterministic so that
+// ConfigMap data doesn't change on every reconcile.
+func toOrderedYAML(v interface{}) interface{} {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		ms := yaml.MapSlice{}
+		for _, k := range keys {
+			ms = append(ms, yaml.MapItem{Key: k, Value: toOrderedYAML(x[k])})
+		}
+		return ms
+	case map[string]string:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		ms := yaml.MapSlice{}
+		for _, k := range keys {
+			ms = append(ms, yaml.MapItem{Key: k, Value: x[k]})
+		}
+		return ms
+	case map[string][]string:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		ms := yaml.MapSlice{}
+		for _, k := range keys {
+			ms = append(ms, yaml.MapItem{Key: k, Value: x[k]})
+		}
+		return ms
+	case []interface{}:
+		out := make([]interface{}, 0, len(x))
+		for _, it := range x {
+			out = append(out, toOrderedYAML(it))
+		}
+		return out
+	default:
+		return v
+	}
+}
 
 // ---------- 유틸 함수 ----------
 
@@ -1357,7 +1407,7 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			targetMap["endpoints"] = endpoints
 		}
 
-		config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
+		config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, toOrderedYAML(targetMap))
 	}
 
 	// Process WhatapPodMonitors
@@ -1425,7 +1475,7 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 				targetMap["endpoints"] = convertEndpoints(monitor.Spec.Endpoints)
 			}
 
-			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
+			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, toOrderedYAML(targetMap))
 		}
 	}
 
@@ -1491,7 +1541,7 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 				targetMap["endpoints"] = convertEndpoints(monitor.Spec.Endpoints)
 			}
 
-			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, targetMap)
+			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, toOrderedYAML(targetMap))
 		}
 	}
 
@@ -1502,24 +1552,73 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 		isDuplicate := false
 
 		for _, existingTarget := range config.Features.OpenAgent.Targets {
-			if targetMap, ok := existingTarget.(map[string]interface{}); ok {
-				if targetName, exists := targetMap["targetName"]; exists && targetName == gpuTargetName {
-					isDuplicate = true
-					break
+			// Targets can be either map[string]interface{} (legacy) or yaml.MapSlice (deterministic output)
+			var targetNameVal interface{}
+			var selectorVal interface{}
+			switch t := existingTarget.(type) {
+			case map[string]interface{}:
+				targetNameVal = t["targetName"]
+				selectorVal = t["selector"]
+			case yaml.MapSlice:
+				for _, it := range t {
+					k, ok := it.Key.(string)
+					if !ok {
+						continue
+					}
+					switch k {
+					case "targetName":
+						targetNameVal = it.Value
+					case "selector":
+						selectorVal = it.Value
+					}
 				}
-				// Also check if there's already a target for whatap-node-agent pods
-				if selector, exists := targetMap["selector"]; exists {
-					if selectorMap, ok := selector.(map[string]interface{}); ok {
-						if matchLabels, exists := selectorMap["matchLabels"]; exists {
-							if labelsMap, ok := matchLabels.(map[string]string); ok {
-								if labelsMap["name"] == "whatap-node-agent" {
+			}
+
+			if targetNameVal == gpuTargetName {
+				isDuplicate = true
+				break
+			}
+
+			// Also check if there's already a target for whatap-node-agent pods
+			if selectorVal == nil {
+				continue
+			}
+			// selector.matchLabels.name == whatap-node-agent
+			switch sel := selectorVal.(type) {
+			case map[string]interface{}:
+				if matchLabels, ok := sel["matchLabels"]; ok {
+					if labelsMap, ok := matchLabels.(map[string]string); ok {
+						if labelsMap["name"] == "whatap-node-agent" {
+							isDuplicate = true
+							break
+						}
+					}
+				}
+			case yaml.MapSlice:
+				for _, it := range sel {
+					k, ok := it.Key.(string)
+					if !ok || k != "matchLabels" {
+						continue
+					}
+					switch ml := it.Value.(type) {
+					case map[string]string:
+						if ml["name"] == "whatap-node-agent" {
+							isDuplicate = true
+						}
+					case yaml.MapSlice:
+						for _, lab := range ml {
+							kk, ok := lab.Key.(string)
+							if ok && kk == "name" {
+								if vv, ok := lab.Value.(string); ok && vv == "whatap-node-agent" {
 									isDuplicate = true
-									break
 								}
 							}
 						}
 					}
 				}
+			}
+			if isDuplicate {
+				break
 			}
 		}
 
@@ -1589,12 +1688,12 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			endpoints[0] = endpointMap1
 			gpuTargetMap["endpoints"] = endpoints
 
-			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, gpuTargetMap)
+			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, toOrderedYAML(gpuTargetMap))
 		}
 	}
 
-	// Marshal to YAML
-	yamlBytes, err := yaml.Marshal(config)
+	// Marshal to YAML (deterministic ordering)
+	yamlBytes, err := yaml.Marshal(toOrderedYAML(config))
 	if err != nil {
 		return "# Error generating scrape config: " + err.Error()
 	}
