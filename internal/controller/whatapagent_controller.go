@@ -2,8 +2,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	"github.com/whatap/whatap-operator/internal/config"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -18,10 +20,13 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -619,30 +624,61 @@ func removeString(slice []string, s string) []string {
 }
 
 func (r *WhatapAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	lp := loggingPredicate(mgr.GetLogger().WithName("event-watcher"))
 	return ctrl.NewControllerManagedBy(mgr).
 		// 1) Watch the cluster-scoped WhatapAgent so CR changes still reconcile
-		For(&monitoringv2alpha1.WhatapAgent{}).
+		For(&monitoringv2alpha1.WhatapAgent{}, builder.WithPredicates(lp)).
 		// Watch for changes to resources created by this controller
-		Owns(&appsv1.Deployment{}).
-		Owns(&appsv1.DaemonSet{}).
-		Owns(&corev1.Service{}).
-		Owns(&corev1.ConfigMap{}).
-		Owns(&corev1.Secret{}).
-		Owns(&corev1.ServiceAccount{}).
-		Owns(&rbacv1.ClusterRole{}).
-		Owns(&rbacv1.ClusterRoleBinding{}).
-		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}).
+		Owns(&appsv1.Deployment{}, builder.WithPredicates(lp)).
+		Owns(&appsv1.DaemonSet{}, builder.WithPredicates(lp)).
+		Owns(&corev1.Service{}, builder.WithPredicates(lp)).
+		Owns(&corev1.ConfigMap{}, builder.WithPredicates(lp)).
+		Owns(&corev1.Secret{}, builder.WithPredicates(lp)).
+		Owns(&corev1.ServiceAccount{}, builder.WithPredicates(lp)).
+		Owns(&rbacv1.ClusterRole{}, builder.WithPredicates(lp)).
+		Owns(&rbacv1.ClusterRoleBinding{}, builder.WithPredicates(lp)).
+		Owns(&admissionregistrationv1.MutatingWebhookConfiguration{}, builder.WithPredicates(lp)).
 		// Watch for WhatapPodMonitor
 		Watches(
 			&monitoringv2alpha1.WhatapPodMonitor{},
 			handler.EnqueueRequestsFromMapFunc(r.findWhatapAgents),
+			builder.WithPredicates(lp),
 		).
 		// Watch for WhatapServiceMonitor
 		Watches(
 			&monitoringv2alpha1.WhatapServiceMonitor{},
 			handler.EnqueueRequestsFromMapFunc(r.findWhatapAgents),
+			builder.WithPredicates(lp),
 		).
 		Complete(r)
+}
+
+func loggingPredicate(logger logr.Logger) predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			logger.V(1).Info("Watch Event: Create", "kind", e.Object.GetObjectKind().GroupVersionKind().Kind, "name", e.Object.GetName())
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			logger.V(1).Info("Watch Event: Delete", "kind", e.Object.GetObjectKind().GroupVersionKind().Kind, "name", e.Object.GetName())
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld.GetResourceVersion() != e.ObjectNew.GetResourceVersion() {
+				logger.V(1).Info("Watch Event: Update",
+					"kind", e.ObjectNew.GetObjectKind().GroupVersionKind().Kind,
+					"name", e.ObjectNew.GetName(),
+					"diff", "ResourceVersion changed",
+					"gen", fmt.Sprintf("%d->%d", e.ObjectOld.GetGeneration(), e.ObjectNew.GetGeneration()),
+				)
+			}
+			return true
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			logger.V(1).Info("Watch Event: Generic", "kind", e.Object.GetObjectKind().GroupVersionKind().Kind, "name", e.Object.GetName())
+			return true
+		},
+	}
 }
 
 // findWhatapAgents lists all WhatapAgent CRs and returns requests for them
