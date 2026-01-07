@@ -223,12 +223,25 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{"name": "whatap-master-agent"},
 		},
+		Strategy: appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDeployment{
+				MaxUnavailable: &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
+				MaxSurge:       &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
+			},
+		},
+		RevisionHistoryLimit:    int32Ptr(10),
+		ProgressDeadlineSeconds: int32Ptr(600),
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:      labels,
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
+				RestartPolicy:                 corev1.RestartPolicyAlways,
+				TerminationGracePeriodSeconds: int64Ptr(30),
+				DNSPolicy:                     corev1.DNSClusterFirst,
+				SchedulerName:                 "default-scheduler",
 				// RuntimeClassName and HostPID from CR
 				RuntimeClassName: func() *string {
 					if masterSpec.RuntimeClassName != "" {
@@ -573,13 +586,23 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{"name": "whatap-node-agent"},
 		},
+		UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+			Type: appsv1.RollingUpdateDaemonSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+				MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
+			},
+		},
+		RevisionHistoryLimit: int32Ptr(10),
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:      labels,
 				Annotations: annotations,
 			},
 			Spec: corev1.PodSpec{
-				HostNetwork: nodeSpec.HostNetwork,
+				RestartPolicy:                 corev1.RestartPolicyAlways,
+				TerminationGracePeriodSeconds: int64Ptr(30),
+				SchedulerName:                 "default-scheduler",
+				HostNetwork:                   nodeSpec.HostNetwork,
 				// RuntimeClassName and HostPID from CR
 				RuntimeClassName: func() *string {
 					if nodeSpec.RuntimeClassName != "" {
@@ -1768,13 +1791,26 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 						"app": "whatap-open-agent",
 					},
 				},
+				Strategy: appsv1.DeploymentStrategy{
+					Type: appsv1.RollingUpdateDeploymentStrategyType,
+					RollingUpdate: &appsv1.RollingUpdateDeployment{
+						MaxUnavailable: &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
+						MaxSurge:       &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
+					},
+				},
+				RevisionHistoryLimit:    int32Ptr(10),
+				ProgressDeadlineSeconds: int32Ptr(600),
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels:      podLabels,
 						Annotations: podAnnotations,
 					},
 					Spec: corev1.PodSpec{
-						ServiceAccountName: "whatap-open-agent-sa",
+						RestartPolicy:                 corev1.RestartPolicyAlways,
+						TerminationGracePeriodSeconds: int64Ptr(30),
+						DNSPolicy:                     corev1.DNSClusterFirst,
+						SchedulerName:                 "default-scheduler",
+						ServiceAccountName:            "whatap-open-agent-sa",
 						// Apply tolerations from CR if specified
 						Tolerations: openAgentSpec.Tolerations,
 						// Scheduling and image settings from CR if specified
