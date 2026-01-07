@@ -49,6 +49,22 @@ func setDefaultResource(res *corev1.ResourceRequirements, defReq, defLim corev1.
 	}
 }
 
+func applyContainerDefaults(c *corev1.Container) {
+	if c.TerminationMessagePath == "" {
+		c.TerminationMessagePath = "/dev/termination-log"
+	}
+	if c.TerminationMessagePolicy == "" {
+		c.TerminationMessagePolicy = corev1.TerminationMessageReadFile
+	}
+	if c.ImagePullPolicy == "" {
+		c.ImagePullPolicy = corev1.PullIfNotPresent
+	}
+}
+
+func isResourceEmpty(res corev1.ResourceRequirements) bool {
+	return len(res.Limits) == 0 && len(res.Requests) == 0
+}
+
 // 결과 메시지 helper
 func logResult(logger logr.Logger, what, target string, op controllerutil.OperationResult) {
 	var verb string
@@ -140,7 +156,47 @@ func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, lo
 			return err
 		}
 
-		deploy.Spec = getMasterAgentDeploymentSpec(img, resources, cr)
+		newSpec := getMasterAgentDeploymentSpec(img, resources, cr)
+
+		// Preserve sidecars and reconcile resources
+		if !deploy.CreationTimestamp.IsZero() {
+			userSetResources := !isResourceEmpty(masterSpec.Resources)
+			var finalContainers []corev1.Container
+			newContainersMap := make(map[string]corev1.Container)
+			for _, c := range newSpec.Template.Spec.Containers {
+				applyContainerDefaults(&c)
+				newContainersMap[c.Name] = c
+			}
+
+			// Iterate over existing containers to preserve order and sidecars
+			for _, existingC := range deploy.Spec.Template.Spec.Containers {
+				if newC, ok := newContainersMap[existingC.Name]; ok {
+					if !userSetResources {
+						newC.Resources = existingC.Resources
+					}
+					finalContainers = append(finalContainers, newC)
+					delete(newContainersMap, existingC.Name)
+				} else {
+					finalContainers = append(finalContainers, existingC)
+				}
+			}
+			// Append new containers that were not in existing
+			for _, c := range newContainersMap {
+				finalContainers = append(finalContainers, c)
+			}
+			newSpec.Template.Spec.Containers = finalContainers
+
+			// Preserve InitContainers
+			if len(deploy.Spec.Template.Spec.InitContainers) > 0 {
+				newSpec.Template.Spec.InitContainers = deploy.Spec.Template.Spec.InitContainers
+			}
+		} else {
+			for i := range newSpec.Template.Spec.Containers {
+				applyContainerDefaults(&newSpec.Template.Spec.Containers[i])
+			}
+		}
+
+		deploy.Spec = newSpec
 		return nil
 	})
 	if err != nil {
@@ -382,11 +438,57 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 			return err
 		}
 
-		ds.Spec = getNodeAgentDaemonSetSpec(img, resources, cr)
-		podSpec := &ds.Spec.Template.Spec
+		newSpec := getNodeAgentDaemonSetSpec(img, resources, cr)
 		if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
-			addDcgmExporterToNodeAgent(podSpec, cr)
+			addDcgmExporterToNodeAgent(&newSpec.Template.Spec, cr)
 		}
+
+		// Preserve sidecars and reconcile resources
+		if !ds.CreationTimestamp.IsZero() {
+			userSetResources := !isResourceEmpty(nodeSpec.Resources)
+			var finalContainers []corev1.Container
+			newContainersMap := make(map[string]corev1.Container)
+			for _, c := range newSpec.Template.Spec.Containers {
+				applyContainerDefaults(&c)
+				newContainersMap[c.Name] = c
+			}
+
+			// Iterate over existing containers to preserve order and sidecars
+			for _, existingC := range ds.Spec.Template.Spec.Containers {
+				if newC, ok := newContainersMap[existingC.Name]; ok {
+					// Special handling for node-agent resources
+					if newC.Name == "whatap-node-agent" {
+						if !userSetResources {
+							newC.Resources = existingC.Resources
+						}
+					}
+					// Special handling for dcgm-exporter if needed?
+					// Currently no special resource handling for dcgm in CR, so we use code defaults or whatever addDcgmExporter sets.
+					// Ideally we should preserve existing resources for dcgm too if not managed.
+
+					finalContainers = append(finalContainers, newC)
+					delete(newContainersMap, existingC.Name)
+				} else {
+					finalContainers = append(finalContainers, existingC)
+				}
+			}
+			// Append new containers
+			for _, c := range newContainersMap {
+				finalContainers = append(finalContainers, c)
+			}
+			newSpec.Template.Spec.Containers = finalContainers
+
+			// Preserve InitContainers
+			if len(ds.Spec.Template.Spec.InitContainers) > 0 {
+				newSpec.Template.Spec.InitContainers = ds.Spec.Template.Spec.InitContainers
+			}
+		} else {
+			for i := range newSpec.Template.Spec.Containers {
+				applyContainerDefaults(&newSpec.Template.Spec.Containers[i])
+			}
+		}
+
+		ds.Spec = newSpec
 		return nil
 	})
 	if err != nil {
@@ -1833,11 +1935,10 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 						}(),
 						Containers: []corev1.Container{
 							{
-								Name:            "whatap-open-agent",
-								Image:           getOpenAgentImage(openAgentSpec),
-								ImagePullPolicy: corev1.PullAlways,
-								Command:         getOpenAgentCommand(openAgentSpec),
-								Args:            getOpenAgentArgs(openAgentSpec),
+								Name:    "whatap-open-agent",
+								Image:   getOpenAgentImage(openAgentSpec),
+								Command: getOpenAgentCommand(openAgentSpec),
+								Args:    getOpenAgentArgs(openAgentSpec),
 								Env: append([]corev1.EnvVar{
 									getWhatapLicenseEnvVar(cr),
 									getWhatapHostEnvVar(cr),
@@ -1851,13 +1952,38 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 				},
 			}
 
-			// Preserve resources from existing deployment to avoid infinite loop (e.g. LimitRanges)
-			if len(deploy.Spec.Template.Spec.Containers) > 0 {
-				for _, c := range deploy.Spec.Template.Spec.Containers {
-					if c.Name == "whatap-open-agent" {
-						newSpec.Template.Spec.Containers[0].Resources = c.Resources
-						break
+			// Preserve sidecars and reconcile resources
+			if !deploy.CreationTimestamp.IsZero() {
+				var finalContainers []corev1.Container
+				newContainersMap := make(map[string]corev1.Container)
+				for _, c := range newSpec.Template.Spec.Containers {
+					applyContainerDefaults(&c)
+					newContainersMap[c.Name] = c
+				}
+
+				for _, existingC := range deploy.Spec.Template.Spec.Containers {
+					if newC, ok := newContainersMap[existingC.Name]; ok {
+						// For OpenAgent, since CRD has no Resources field, we ALWAYS preserve existing resources
+						newC.Resources = existingC.Resources
+
+						finalContainers = append(finalContainers, newC)
+						delete(newContainersMap, existingC.Name)
+					} else {
+						finalContainers = append(finalContainers, existingC)
 					}
+				}
+				for _, c := range newContainersMap {
+					finalContainers = append(finalContainers, c)
+				}
+				newSpec.Template.Spec.Containers = finalContainers
+
+				// Preserve InitContainers
+				if len(deploy.Spec.Template.Spec.InitContainers) > 0 {
+					newSpec.Template.Spec.InitContainers = deploy.Spec.Template.Spec.InitContainers
+				}
+			} else {
+				for i := range newSpec.Template.Spec.Containers {
+					applyContainerDefaults(&newSpec.Template.Spec.Containers[i])
 				}
 			}
 
