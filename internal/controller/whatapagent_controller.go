@@ -627,7 +627,8 @@ func (r *WhatapAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	lp := loggingPredicate(mgr.GetLogger().WithName("event-watcher"))
 	return ctrl.NewControllerManagedBy(mgr).
 		// 1) Watch the cluster-scoped WhatapAgent so CR changes still reconcile
-		For(&monitoringv2alpha1.WhatapAgent{}, builder.WithPredicates(lp)).
+		// Use GenerationChangedPredicate to avoid reconciliation loops on Status updates
+		For(&monitoringv2alpha1.WhatapAgent{}, builder.WithPredicates(predicate.GenerationChangedPredicate{}, lp)).
 		// Watch for changes to resources created by this controller
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(lp)).
 		Owns(&appsv1.DaemonSet{}, builder.WithPredicates(lp)).
@@ -653,20 +654,31 @@ func (r *WhatapAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+func getKind(obj client.Object) string {
+	if obj == nil {
+		return "nil"
+	}
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if gvk.Kind != "" {
+		return gvk.Kind
+	}
+	return fmt.Sprintf("%T", obj)
+}
+
 func loggingPredicate(logger logr.Logger) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			logger.V(1).Info("Watch Event: Create", "kind", e.Object.GetObjectKind().GroupVersionKind().Kind, "name", e.Object.GetName())
+			logger.V(1).Info("Watch Event: Create", "kind", getKind(e.Object), "name", e.Object.GetName())
 			return true
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			logger.V(1).Info("Watch Event: Delete", "kind", e.Object.GetObjectKind().GroupVersionKind().Kind, "name", e.Object.GetName())
+			logger.V(1).Info("Watch Event: Delete", "kind", getKind(e.Object), "name", e.Object.GetName())
 			return true
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			if e.ObjectOld.GetResourceVersion() != e.ObjectNew.GetResourceVersion() {
 				logger.V(1).Info("Watch Event: Update",
-					"kind", e.ObjectNew.GetObjectKind().GroupVersionKind().Kind,
+					"kind", getKind(e.ObjectNew),
 					"name", e.ObjectNew.GetName(),
 					"diff", "ResourceVersion changed",
 					"gen", fmt.Sprintf("%d->%d", e.ObjectOld.GetGeneration(), e.ObjectNew.GetGeneration()),
@@ -675,7 +687,7 @@ func loggingPredicate(logger logr.Logger) predicate.Predicate {
 			return true
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
-			logger.V(1).Info("Watch Event: Generic", "kind", e.Object.GetObjectKind().GroupVersionKind().Kind, "name", e.Object.GetName())
+			logger.V(1).Info("Watch Event: Generic", "kind", getKind(e.Object), "name", e.Object.GetName())
 			return true
 		},
 	}
