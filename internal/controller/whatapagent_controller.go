@@ -453,7 +453,7 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// }
 
 	if k8sAgentSpec.MasterAgent.Enabled {
-		logger.Info("createOrUpdate Whatap Master Agent")
+		logger.V(1).Info("createOrUpdate Whatap Master Agent")
 		if err := createOrUpdateMasterAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to createOrUpdate Master Agent")
 			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to createOrUpdate Master Agent: "+err.Error())
@@ -468,13 +468,13 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	} else {
 		// Cleanup Master Agent if disabled
-		logger.Info("Cleaning up Whatap Master Agent (disabled)")
+		logger.V(1).Info("Cleaning up Whatap Master Agent (disabled)")
 		if err := r.cleanupMasterAgent(ctx); err != nil {
 			logger.Error(err, "Failed to cleanup Master Agent")
 		}
 	}
 	if k8sAgentSpec.NodeAgent.Enabled {
-		logger.Info("createOrUpdate Whatap Node Agent")
+		logger.V(1).Info("createOrUpdate Whatap Node Agent")
 		if err := createOrUpdateNodeAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to createOrUpdate Node Agent")
 			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to createOrUpdate Node Agent: "+err.Error())
@@ -489,13 +489,13 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	} else {
 		// Cleanup Node Agent if disabled
-		logger.Info("Cleaning up Whatap Node Agent (disabled)")
+		logger.V(1).Info("Cleaning up Whatap Node Agent (disabled)")
 		if err := r.cleanupNodeAgent(ctx); err != nil {
 			logger.Error(err, "Failed to cleanup Node Agent")
 		}
 	}
 	if k8sAgentSpec.ApiserverMonitoring.Enabled {
-		logger.Info("Installing Apiserver Monitoring Agent")
+		logger.V(1).Info("Installing Apiserver Monitoring Agent")
 		if err := installApiserverMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Apiserver Monitor")
 			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to install Apiserver Monitor: "+err.Error())
@@ -510,7 +510,7 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 	if k8sAgentSpec.EtcdMonitoring.Enabled {
-		logger.Info("Installing Etcd Monitoring Agent")
+		logger.V(1).Info("Installing Etcd Monitoring Agent")
 		if err := installEtcdMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Etcd Monitor")
 			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to install Etcd Monitor: "+err.Error())
@@ -525,7 +525,7 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 	if k8sAgentSpec.SchedulerMonitoring.Enabled {
-		logger.Info("Installing Scheduler Monitoring Agent")
+		logger.V(1).Info("Installing Scheduler Monitoring Agent")
 		if err := installSchedulerMonitor(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Scheduler Monitor")
 			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to install Scheduler Monitor: "+err.Error())
@@ -541,7 +541,7 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 	// OpenAgent
 	if openAgentSpec.Enabled {
-		logger.Info("Installing Open Agent")
+		logger.V(1).Info("Installing Open Agent")
 		if err := installOpenAgent(ctx, r, logger, whatapAgent); err != nil {
 			logger.Error(err, "Failed to install Open Agent")
 			r.Recorder.Event(whatapAgent, corev1.EventTypeWarning, "InstallFailed", "Failed to install Open Agent: "+err.Error())
@@ -556,7 +556,7 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	} else {
 		// Cleanup Open Agent if disabled
-		logger.Info("Cleaning up Whatap Open Agent (disabled)")
+		logger.V(1).Info("Cleaning up Whatap Open Agent (disabled)")
 		if err := r.cleanupOpenAgent(ctx); err != nil {
 			logger.Error(err, "Failed to cleanup Open Agent")
 		}

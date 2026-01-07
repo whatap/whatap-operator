@@ -60,7 +60,13 @@ func logResult(logger logr.Logger, what, target string, op controllerutil.Operat
 	default:
 		verb = "unchanged"
 	}
-	logger.Info(fmt.Sprintf("%s %s has been %s.", what, target, verb))
+
+	msg := fmt.Sprintf("%s %s has been %s.", what, target, verb)
+	if op == controllerutil.OperationResultNone {
+		logger.V(1).Info(msg)
+	} else {
+		logger.Info(msg)
+	}
 }
 
 // ---------- 주요 리소스 배포 함수 ----------
