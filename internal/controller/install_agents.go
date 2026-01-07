@@ -882,16 +882,39 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 		dcgmImage = cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName
 	}
 
+	// Default environment variables
+	defaultEnvVars := []corev1.EnvVar{
+		{Name: "DCGM_EXPORTER_LISTEN", Value: ":9400"},
+		{Name: "DCGM_EXPORTER_KUBERNETES", Value: "true"},
+		{Name: "DCGM_EXPORTER_COLLECTORS", Value: "/etc/dcgm-exporter/whatap-dcgm-exporter.csv"},
+	}
+
+	envVars := make([]corev1.EnvVar, len(defaultEnvVars))
+	copy(envVars, defaultEnvVars)
+
+	// Append or overwrite user-defined environment variables
+	if len(cr.Spec.Features.K8sAgent.GpuMonitoring.Envs) > 0 {
+		for _, userEnv := range cr.Spec.Features.K8sAgent.GpuMonitoring.Envs {
+			found := false
+			for i, env := range envVars {
+				if env.Name == userEnv.Name {
+					envVars[i] = userEnv
+					found = true
+					break
+				}
+			}
+			if !found {
+				envVars = append(envVars, userEnv)
+			}
+		}
+	}
+
 	dcgmContainer := corev1.Container{
 		Name:            "dcgm-exporter",
 		Image:           dcgmImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Env: []corev1.EnvVar{
-			{Name: "DCGM_EXPORTER_LISTEN", Value: ":9400"},
-			{Name: "DCGM_EXPORTER_KUBERNETES", Value: "true"},
-			{Name: "DCGM_EXPORTER_COLLECTORS", Value: "/etc/dcgm-exporter/whatap-dcgm-exporter.csv"},
-		},
-		Ports: []corev1.ContainerPort{{Name: "metrics", ContainerPort: 9400, Protocol: corev1.ProtocolTCP}},
+		Env:             envVars,
+		Ports:           []corev1.ContainerPort{{Name: "metrics", ContainerPort: 9400, Protocol: corev1.ProtocolTCP}},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: boolPtr(false),
 			RunAsUser:    int64Ptr(0),

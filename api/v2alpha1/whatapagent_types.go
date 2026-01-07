@@ -414,6 +414,9 @@ type GpuMonitoringSpec struct {
 	// Service defines service configuration for dcgm-exporter
 	// +optional
 	Service *GpuMonitoringServiceSpec `json:"service,omitempty"`
+	// Envs allows injecting extra environment variables into the dcgm-exporter container
+	// +optional
+	Envs []corev1.EnvVar `json:"envs,omitempty"`
 }
 
 // GpuMonitoringServiceSpec defines service configuration for GPU monitoring
