@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -68,38 +69,41 @@ func (r *WhatapAgentReconciler) ensureWebhookTLSSecret(ctx context.Context, what
 	return err
 }
 
-func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
+func (r *WhatapAgentReconciler) cleanupMasterAgent(ctx context.Context) error {
 	logger := log.FromContext(ctx)
-	logger.Info("Cleaning up Whatap agents and resources")
-
-	// Delete Master Agent Deployment
 	if err := r.Delete(ctx, &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-master-agent", Namespace: r.DefaultNamespace},
 	}); err != nil {
-		// Ignore NotFound errors
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error(err, "Failed to delete Master Agent Deployment")
+			return err
 		}
 	}
+	return nil
+}
 
-	// Delete Node Agent DaemonSet
+func (r *WhatapAgentReconciler) cleanupNodeAgent(ctx context.Context) error {
+	logger := log.FromContext(ctx)
 	if err := r.Delete(ctx, &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-node-agent", Namespace: r.DefaultNamespace},
 	}); err != nil {
-		// Ignore NotFound errors
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error(err, "Failed to delete Node Agent DaemonSet")
+			return err
 		}
 	}
+	return nil
+}
 
-	// Delete OpenAgent resources
+func (r *WhatapAgentReconciler) cleanupOpenAgent(ctx context.Context) error {
+	logger := log.FromContext(ctx)
 	// Delete OpenAgent Deployment
 	if err := r.Delete(ctx, &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent", Namespace: r.DefaultNamespace},
 	}); err != nil {
-		// Ignore NotFound errors
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error(err, "Failed to delete OpenAgent Deployment")
+			return err
 		}
 	}
 
@@ -107,9 +111,9 @@ func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
 	if err := r.Delete(ctx, &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-config", Namespace: r.DefaultNamespace},
 	}); err != nil {
-		// Ignore NotFound errors
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error(err, "Failed to delete OpenAgent ConfigMap")
+			return err
 		}
 	}
 
@@ -117,9 +121,9 @@ func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
 	if err := r.Delete(ctx, &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-sa", Namespace: r.DefaultNamespace},
 	}); err != nil {
-		// Ignore NotFound errors
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error(err, "Failed to delete OpenAgent ServiceAccount")
+			return err
 		}
 	}
 
@@ -127,9 +131,9 @@ func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
 	if err := r.Delete(ctx, &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-role"},
 	}); err != nil {
-		// Ignore NotFound errors
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error(err, "Failed to delete OpenAgent ClusterRole")
+			return err
 		}
 	}
 
@@ -137,10 +141,31 @@ func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
 	if err := r.Delete(ctx, &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-role-binding"},
 	}); err != nil {
-		// Ignore NotFound errors
 		if client.IgnoreNotFound(err) != nil {
 			logger.Error(err, "Failed to delete OpenAgent ClusterRoleBinding")
+			return err
 		}
+	}
+	return nil
+}
+
+func (r *WhatapAgentReconciler) cleanupAgents(ctx context.Context) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Cleaning up Whatap agents and resources")
+
+	// Delete Master Agent
+	if err := r.cleanupMasterAgent(ctx); err != nil {
+		// Logged in helper
+	}
+
+	// Delete Node Agent
+	if err := r.cleanupNodeAgent(ctx); err != nil {
+		// Logged in helper
+	}
+
+	// Delete OpenAgent resources
+	if err := r.cleanupOpenAgent(ctx); err != nil {
+		// Logged in helper
 	}
 
 	// Delete MutatingWebhookConfiguration
@@ -441,6 +466,12 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			r.Status().Update(ctx, whatapAgent)
 			return ctrl.Result{}, err
 		}
+	} else {
+		// Cleanup Master Agent if disabled
+		logger.Info("Cleaning up Whatap Master Agent (disabled)")
+		if err := r.cleanupMasterAgent(ctx); err != nil {
+			logger.Error(err, "Failed to cleanup Master Agent")
+		}
 	}
 	if k8sAgentSpec.NodeAgent.Enabled {
 		logger.Info("createOrUpdate Whatap Node Agent")
@@ -455,6 +486,12 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			})
 			r.Status().Update(ctx, whatapAgent)
 			return ctrl.Result{}, err
+		}
+	} else {
+		// Cleanup Node Agent if disabled
+		logger.Info("Cleaning up Whatap Node Agent (disabled)")
+		if err := r.cleanupNodeAgent(ctx); err != nil {
+			logger.Error(err, "Failed to cleanup Node Agent")
 		}
 	}
 	if k8sAgentSpec.ApiserverMonitoring.Enabled {
@@ -517,17 +554,29 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			r.Status().Update(ctx, whatapAgent)
 			return ctrl.Result{}, err
 		}
+	} else {
+		// Cleanup Open Agent if disabled
+		logger.Info("Cleaning up Whatap Open Agent (disabled)")
+		if err := r.cleanupOpenAgent(ctx); err != nil {
+			logger.Error(err, "Failed to cleanup Open Agent")
+		}
 	}
 
 	// Success
-	apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
-		Type:    "Available",
-		Status:  metav1.ConditionTrue,
-		Reason:  "Installed",
-		Message: "WhatapAgent installed successfully",
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Get(ctx, req.NamespacedName, whatapAgent); err != nil {
+			return err
+		}
+		apimeta.SetStatusCondition(&whatapAgent.Status.Conditions, metav1.Condition{
+			Type:    "Available",
+			Status:  metav1.ConditionTrue,
+			Reason:  "Installed",
+			Message: "WhatapAgent installed successfully",
+		})
+		whatapAgent.Status.ObservedGeneration = whatapAgent.Generation
+		return r.Status().Update(ctx, whatapAgent)
 	})
-	whatapAgent.Status.ObservedGeneration = whatapAgent.Generation
-	if err := r.Status().Update(ctx, whatapAgent); err != nil {
+	if err != nil {
 		logger.Error(err, "Failed to update WhatapAgent status")
 		return ctrl.Result{}, err
 	}

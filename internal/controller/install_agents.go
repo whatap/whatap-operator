@@ -251,11 +251,12 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 				}(),
 				Containers: []corev1.Container{
 					{
-						Name:    "whatap-master-agent",
-						Image:   masterImage,
-						Command: []string{"/bin/entrypoint.sh"},
-						Ports:   []corev1.ContainerPort{{ContainerPort: 6600}},
-						Env:     masterEnvs,
+						Name:            "whatap-master-agent",
+						Image:           masterImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         []string{"/bin/entrypoint.sh"},
+						Ports:           []corev1.ContainerPort{{ContainerPort: 6600, Protocol: corev1.ProtocolTCP}},
+						Env:             masterEnvs,
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "start-script-volume",
@@ -599,12 +600,13 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 				}(),
 				Containers: []corev1.Container{
 					{
-						Name:      "whatap-node-helper",
-						Image:     helperImage,
-						Command:   []string{"/data/agent/node/cadvisor_helper", "-port", "6801"},
-						Ports:     []corev1.ContainerPort{{Name: "helperport", ContainerPort: 6801}},
-						Env:       helperEnvs,
-						Resources: helperResources,
+						Name:            "whatap-node-helper",
+						Image:           helperImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         []string{"/data/agent/node/cadvisor_helper", "-port", "6801"},
+						Ports:           []corev1.ContainerPort{{Name: "helperport", ContainerPort: 6801, Protocol: corev1.ProtocolTCP}},
+						Env:             helperEnvs,
+						Resources:       helperResources,
 						VolumeMounts: []corev1.VolumeMount{
 							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true, MountPropagation: &hostToContainer},
 							{Name: "hostsys", MountPath: "/sys", ReadOnly: true},
@@ -613,12 +615,13 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						},
 					},
 					{
-						Name:      "whatap-node-agent",
-						Image:     agentImage,
-						Command:   []string{"/bin/entrypoint.sh"},
-						Ports:     []corev1.ContainerPort{{Name: "nodeport", ContainerPort: 6600}},
-						Env:       agentEnvs,
-						Resources: agentResources,
+						Name:            "whatap-node-agent",
+						Image:           agentImage,
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						Command:         []string{"/bin/entrypoint.sh"},
+						Ports:           []corev1.ContainerPort{{Name: "nodeport", ContainerPort: 6600, Protocol: corev1.ProtocolTCP}},
+						Env:             agentEnvs,
+						Resources:       agentResources,
 						VolumeMounts: []corev1.VolumeMount{
 							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true, MountPropagation: &hostToContainer},
 							{Name: "start-script-volume", MountPath: "/bin/entrypoint.sh", SubPath: "entrypoint.sh", ReadOnly: true},
@@ -673,14 +676,15 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 	}
 
 	dcgmContainer := corev1.Container{
-		Name:  "dcgm-exporter",
-		Image: dcgmImage,
+		Name:            "dcgm-exporter",
+		Image:           dcgmImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
 		Env: []corev1.EnvVar{
 			{Name: "DCGM_EXPORTER_LISTEN", Value: ":9400"},
 			{Name: "DCGM_EXPORTER_KUBERNETES", Value: "true"},
 			{Name: "DCGM_EXPORTER_COLLECTORS", Value: "/etc/dcgm-exporter/whatap-dcgm-exporter.csv"},
 		},
-		Ports: []corev1.ContainerPort{{Name: "metrics", ContainerPort: 9400}},
+		Ports: []corev1.ContainerPort{{Name: "metrics", ContainerPort: 9400, Protocol: corev1.ProtocolTCP}},
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: boolPtr(false),
 			RunAsUser:    int64Ptr(0),
@@ -1751,7 +1755,7 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 				})
 			}
 
-			deploy.Spec = appsv1.DeploymentSpec{
+			newSpec := appsv1.DeploymentSpec{
 				Replicas: int32Ptr(1),
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -1804,6 +1808,18 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 					},
 				},
 			}
+
+			// Preserve resources from existing deployment to avoid infinite loop (e.g. LimitRanges)
+			if len(deploy.Spec.Template.Spec.Containers) > 0 {
+				for _, c := range deploy.Spec.Template.Spec.Containers {
+					if c.Name == "whatap-open-agent" {
+						newSpec.Template.Spec.Containers[0].Resources = c.Resources
+						break
+					}
+				}
+			}
+
+			deploy.Spec = newSpec
 			return nil
 		})
 
