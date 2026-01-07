@@ -160,6 +160,19 @@ func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, lo
 
 		// Preserve sidecars and reconcile resources
 		if !deploy.CreationTimestamp.IsZero() {
+			// Preserve existing labels on PodTemplate
+			if newSpec.Template.Labels == nil {
+				newSpec.Template.Labels = make(map[string]string)
+			}
+			for k, v := range deploy.Spec.Template.Labels {
+				if _, exists := newSpec.Template.Labels[k]; !exists {
+					newSpec.Template.Labels[k] = v
+				}
+			}
+
+			// Merge PodSpec defaults
+			mergePodSpec(&newSpec.Template.Spec, &deploy.Spec.Template.Spec)
+
 			userSetResources := !isResourceEmpty(masterSpec.Resources)
 			var finalContainers []corev1.Container
 			newContainersMap := make(map[string]corev1.Container)
@@ -445,6 +458,19 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 
 		// Preserve sidecars and reconcile resources
 		if !ds.CreationTimestamp.IsZero() {
+			// Preserve existing labels on PodTemplate
+			if newSpec.Template.Labels == nil {
+				newSpec.Template.Labels = make(map[string]string)
+			}
+			for k, v := range ds.Spec.Template.Labels {
+				if _, exists := newSpec.Template.Labels[k]; !exists {
+					newSpec.Template.Labels[k] = v
+				}
+			}
+
+			// Merge PodSpec defaults
+			mergePodSpec(&newSpec.Template.Spec, &ds.Spec.Template.Spec)
+
 			userSetResources := !isResourceEmpty(nodeSpec.Resources)
 			var finalContainers []corev1.Container
 			newContainersMap := make(map[string]corev1.Container)
@@ -513,8 +539,8 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 
 	// Default tolerations for node agent
 	defaultTolerations := []corev1.Toleration{
-		{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
-		{Key: "node-role.kubernetes.io/control-plane", Effect: corev1.TaintEffectNoSchedule},
+		{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
+		{Key: "node-role.kubernetes.io/control-plane", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
 	}
 
 	// Merge default tolerations with any specified in the CR
@@ -1954,6 +1980,19 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 
 			// Preserve sidecars and reconcile resources
 			if !deploy.CreationTimestamp.IsZero() {
+				// Preserve existing labels on PodTemplate
+				if newSpec.Template.Labels == nil {
+					newSpec.Template.Labels = make(map[string]string)
+				}
+				for k, v := range deploy.Spec.Template.Labels {
+					if _, exists := newSpec.Template.Labels[k]; !exists {
+						newSpec.Template.Labels[k] = v
+					}
+				}
+
+				// Merge PodSpec defaults
+				mergePodSpec(&newSpec.Template.Spec, &deploy.Spec.Template.Spec)
+
 				var finalContainers []corev1.Container
 				newContainersMap := make(map[string]corev1.Container)
 				for _, c := range newSpec.Template.Spec.Containers {
@@ -2108,4 +2147,46 @@ func getOpenAgentImage(spec monitoringv2alpha1.OpenAgentSpec) string {
 	}
 
 	return fmt.Sprintf("%s:%s", imageName, imageVersion)
+}
+
+// mergePodSpec merges the new PodSpec with the existing one to preserve defaults
+func mergePodSpec(newSpec, oldSpec *corev1.PodSpec) {
+	// Merge PodSecurityContext: fill nil fields in newSpec from oldSpec
+	if oldSpec.SecurityContext != nil {
+		if newSpec.SecurityContext == nil {
+			newSpec.SecurityContext = oldSpec.SecurityContext.DeepCopy()
+		} else {
+			// Both exist. Fill nil fields in newSpec from oldSpec to preserve defaults.
+			if newSpec.SecurityContext.SELinuxOptions == nil {
+				newSpec.SecurityContext.SELinuxOptions = oldSpec.SecurityContext.SELinuxOptions
+			}
+			if newSpec.SecurityContext.WindowsOptions == nil {
+				newSpec.SecurityContext.WindowsOptions = oldSpec.SecurityContext.WindowsOptions
+			}
+			if newSpec.SecurityContext.RunAsUser == nil {
+				newSpec.SecurityContext.RunAsUser = oldSpec.SecurityContext.RunAsUser
+			}
+			if newSpec.SecurityContext.RunAsGroup == nil {
+				newSpec.SecurityContext.RunAsGroup = oldSpec.SecurityContext.RunAsGroup
+			}
+			if newSpec.SecurityContext.RunAsNonRoot == nil {
+				newSpec.SecurityContext.RunAsNonRoot = oldSpec.SecurityContext.RunAsNonRoot
+			}
+			if newSpec.SecurityContext.SupplementalGroups == nil {
+				newSpec.SecurityContext.SupplementalGroups = oldSpec.SecurityContext.SupplementalGroups
+			}
+			if newSpec.SecurityContext.FSGroup == nil {
+				newSpec.SecurityContext.FSGroup = oldSpec.SecurityContext.FSGroup
+			}
+			if newSpec.SecurityContext.Sysctls == nil {
+				newSpec.SecurityContext.Sysctls = oldSpec.SecurityContext.Sysctls
+			}
+			if newSpec.SecurityContext.FSGroupChangePolicy == nil {
+				newSpec.SecurityContext.FSGroupChangePolicy = oldSpec.SecurityContext.FSGroupChangePolicy
+			}
+			if newSpec.SecurityContext.SeccompProfile == nil {
+				newSpec.SecurityContext.SeccompProfile = oldSpec.SecurityContext.SeccompProfile
+			}
+		}
+	}
 }
