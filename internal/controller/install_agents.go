@@ -74,6 +74,13 @@ func toOrderedYAML(v interface{}) interface{} {
 func int32Ptr(i int32) *int32 { return &i }
 func int64Ptr(i int64) *int64 { return &i }
 func boolPtr(b bool) *bool    { return &b }
+
+func boolValueOrDefault(v *bool, def bool) bool {
+	if v == nil {
+		return def
+	}
+	return *v
+}
 func resourceMustParse(q string) resource.Quantity {
 	qty, _ := resource.ParseQuantity(q)
 	return qty
@@ -337,6 +344,11 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 		masterEnvs = append(masterEnvs, masterSpec.Envs...)
 	}
 
+	var masterContainerSecurityContext *corev1.SecurityContext
+	if masterSpec.MasterAgentContainer != nil {
+		masterContainerSecurityContext = masterSpec.MasterAgentContainer.SecurityContext
+	}
+
 	return appsv1.DeploymentSpec{
 		Replicas: int32Ptr(1),
 		Selector: &metav1.LabelSelector{
@@ -382,8 +394,9 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 						return masterSpec.PodSecurityContext
 					}
 					return &corev1.PodSecurityContext{
-						RunAsNonRoot:   boolPtr(true),
-						RunAsUser:      int64Ptr(1001),
+						RunAsUser:      int64Ptr(0),
+						RunAsGroup:     int64Ptr(0),
+						FSGroup:        int64Ptr(0),
 						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 					}
 				}(),
@@ -395,6 +408,7 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 						Command:         []string{"/bin/entrypoint.sh"},
 						Ports:           []corev1.ContainerPort{{ContainerPort: 6600, Protocol: corev1.ProtocolTCP}},
 						Env:             masterEnvs,
+						SecurityContext: masterContainerSecurityContext,
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "start-script-volume",
@@ -700,6 +714,16 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		agentEnvs = append(agentEnvs, nodeSpec.Envs...)
 	}
 
+	var helperSecurityContext *corev1.SecurityContext
+	if nodeSpec.NodeHelperContainer != nil {
+		helperSecurityContext = nodeSpec.NodeHelperContainer.SecurityContext
+	}
+
+	var agentSecurityContext *corev1.SecurityContext
+	if nodeSpec.NodeAgentContainer != nil {
+		agentSecurityContext = nodeSpec.NodeAgentContainer.SecurityContext
+	}
+
 	// Determine imagePullSecrets (component override > global) for node agent
 	nodeImagePullSecrets := nodeSpec.ImagePullSecrets
 	if len(nodeImagePullSecrets) == 0 {
@@ -755,8 +779,10 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 
 	hostToContainer := corev1.MountPropagationHostToContainer
 
+	hostNetwork := boolValueOrDefault(nodeSpec.HostNetwork, true)
+
 	dnsPolicy := corev1.DNSClusterFirst
-	if nodeSpec.HostNetwork {
+	if hostNetwork {
 		dnsPolicy = corev1.DNSClusterFirstWithHostNet
 	}
 
@@ -780,7 +806,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 				RestartPolicy:                 corev1.RestartPolicyAlways,
 				TerminationGracePeriodSeconds: int64Ptr(30),
 				SchedulerName:                 "default-scheduler",
-				HostNetwork:                   nodeSpec.HostNetwork,
+				HostNetwork:                   hostNetwork,
 				// RuntimeClassName and HostPID from CR
 				RuntimeClassName: func() *string {
 					if nodeSpec.RuntimeClassName != "" {
@@ -800,8 +826,9 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						return nodeSpec.PodSecurityContext
 					}
 					return &corev1.PodSecurityContext{
-						RunAsNonRoot:   boolPtr(true),
-						RunAsUser:      int64Ptr(1001),
+						RunAsUser:      int64Ptr(0),
+						RunAsGroup:     int64Ptr(0),
+						FSGroup:        int64Ptr(0),
 						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 					}
 				}(),
@@ -814,6 +841,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						Ports:           []corev1.ContainerPort{{Name: "helperport", ContainerPort: 6801, Protocol: corev1.ProtocolTCP}},
 						Env:             helperEnvs,
 						Resources:       helperResources,
+						SecurityContext: helperSecurityContext,
 						VolumeMounts: []corev1.VolumeMount{
 							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true, MountPropagation: &hostToContainer},
 							{Name: "hostsys", MountPath: "/sys", ReadOnly: true},
@@ -829,6 +857,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 						Ports:           []corev1.ContainerPort{{Name: "nodeport", ContainerPort: 6600, Protocol: corev1.ProtocolTCP}},
 						Env:             agentEnvs,
 						Resources:       agentResources,
+						SecurityContext: agentSecurityContext,
 						VolumeMounts: []corev1.VolumeMount{
 							{Name: "rootfs", MountPath: "/rootfs", ReadOnly: true, MountPropagation: &hostToContainer},
 							{Name: "start-script-volume", MountPath: "/bin/entrypoint.sh", SubPath: "entrypoint.sh", ReadOnly: true},

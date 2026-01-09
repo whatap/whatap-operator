@@ -300,7 +300,7 @@ type MasterAgentComponentSpec struct {
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
 	// PodSecurityContext allows overriding the default Pod-level security context
-	// If not set, the operator will apply a safe default (RunAsNonRoot= true, RunAsUser=1001, SeccompProfile=RuntimeDefault)
+	// If not set, the operator will apply a default (RunAsUser=0, RunAsGroup=0, FSGroup=0, SeccompProfile=RuntimeDefault)
 	// +optional
 	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	// RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used
@@ -347,7 +347,7 @@ type NodeAgentComponentSpec struct {
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
 	// PodSecurityContext allows overriding the default Pod-level security context
-	// If not set, the operator will apply a safe default (RunAsNonRoot= true, RunAsUser=1001, SeccompProfile=RuntimeDefault)
+	// If not set, the operator will apply a default (RunAsUser=0, RunAsGroup=0, FSGroup=0, SeccompProfile=RuntimeDefault)
 	// +optional
 	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	// NodeAgentContainer defines configuration specific to the whatap-node-agent container
@@ -369,7 +369,7 @@ type NodeAgentComponentSpec struct {
 	// HostNetwork enables host networking for the Node Agent pod
 	// +kubebuilder:default=true
 	// +optional
-	HostNetwork bool `json:"hostNetwork,omitempty"`
+	HostNetwork *bool `json:"hostNetwork,omitempty"`
 	// RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used
 	// to run this pod. If no RuntimeClass resource matches the named class, the pod will not be run.
 	// +optional
@@ -392,6 +392,9 @@ type ContainerSpec struct {
 	// Envs defines environment variables for the container
 	// +optional
 	Envs []corev1.EnvVar `json:"envs,omitempty"`
+	// SecurityContext defines the security options the container should be run with.
+	// +optional
+	SecurityContext *corev1.SecurityContext `json:"securityContext,omitempty"`
 }
 
 type AgentComponentSpec struct {

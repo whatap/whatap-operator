@@ -46,10 +46,11 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 		}
 	}
 	if runAsNonRootOverride == nil && runAsUserOverride == nil {
-		// No overrides provided: default to non-root with UID 1001 for better security/OpenShift compatibility
+		// No overrides provided: default to non-root.
+		// We DO NOT set RunAsUser here to allow OpenShift SCC to assign a random UID (MustRunAsRange).
+		// If running on vanilla K8s, it will fallback to the image's USER (1001).
 		securityContext = &corev1.SecurityContext{
 			RunAsNonRoot: boolPtr(true),
-			RunAsUser:    int64Ptr(1001),
 		}
 	} else {
 		// Use only provided fields. If RunAsNonRoot=true without RunAsUser, leave RunAsUser nil for OpenShift compatibility
