@@ -157,8 +157,19 @@ func main() {
 	}
 	flag.BoolVar(&enableGpuMemCheck, "enable-gpu-memory-check", enableGpuMemCheckDefault,
 		"Enable monitoring of dcgm-exporter memory usage and restart pod if needed")
+
+	// Development mode configuration
+	// Default is false (Production mode: JSON logging, Info level)
+	// Can be enabled via DEBUG or debug env var or --zap-devel flag
+	enableDevMode := false
+	if val := config.GetDebugMode(); val != "" {
+		if parsed, err := strconv.ParseBool(val); err == nil {
+			enableDevMode = parsed
+		}
+	}
+
 	opts := zap.Options{
-		Development: true,
+		Development: enableDevMode,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()

@@ -56,14 +56,14 @@ func (r *GpuMemChecker) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			r.Log.Info("Ticker fired, initiating check")
+			r.Log.V(1).Info("Ticker fired, initiating check")
 			r.checkGpuPods(ctx)
 		}
 	}
 }
 
 func (r *GpuMemChecker) checkGpuPods(ctx context.Context) {
-	r.Log.Info("Listing GPU pods")
+	r.Log.V(1).Info("Listing GPU pods")
 
 	// Find pods with label whatap-gpu: true
 	listOpts := metav1.ListOptions{
@@ -76,7 +76,7 @@ func (r *GpuMemChecker) checkGpuPods(ctx context.Context) {
 		return
 	}
 
-	r.Log.Info("Listed GPU pods", "count", len(podList.Items))
+	r.Log.V(1).Info("Listed GPU pods", "count", len(podList.Items))
 
 	for _, pod := range podList.Items {
 		r.checkPod(ctx, &pod)
@@ -84,15 +84,15 @@ func (r *GpuMemChecker) checkGpuPods(ctx context.Context) {
 }
 
 func (r *GpuMemChecker) checkPod(ctx context.Context, pod *corev1.Pod) {
-	r.Log.Info("Checking pod details", "pod", pod.Name, "phase", pod.Status.Phase)
+	r.Log.V(1).Info("Checking pod details", "pod", pod.Name, "phase", pod.Status.Phase)
 	// Skip if pod is being deleted
 	if pod.DeletionTimestamp != nil {
-		r.Log.Info("Pod is terminating, skipping", "pod", pod.Name)
+		r.Log.V(1).Info("Pod is terminating, skipping", "pod", pod.Name)
 		return
 	}
 	// Skip if pod is not running
 	if pod.Status.Phase != corev1.PodRunning {
-		r.Log.Info("Pod not running, skipping", "pod", pod.Name)
+		r.Log.V(1).Info("Pod not running, skipping", "pod", pod.Name)
 		return
 	}
 
@@ -106,7 +106,7 @@ func (r *GpuMemChecker) checkPod(ctx context.Context, pod *corev1.Pod) {
 	}
 
 	if containerID == "" {
-		r.Log.Info("dcgm-exporter container not found", "pod", pod.Name)
+		r.Log.V(1).Info("dcgm-exporter container not found", "pod", pod.Name)
 		// dcgm-exporter might not be ready or present?
 		return
 	}
@@ -115,23 +115,23 @@ func (r *GpuMemChecker) checkPod(ctx context.Context, pod *corev1.Pod) {
 	if idx := strings.Index(containerID, "://"); idx != -1 {
 		containerID = containerID[idx+3:]
 	}
-	r.Log.Info("Found container ID", "pod", pod.Name, "containerID", containerID)
+	r.Log.V(1).Info("Found container ID", "pod", pod.Name, "containerID", containerID)
 
 	// Check memory usage
-	r.Log.Info("Requesting memory stats", "pod", pod.Name, "ip", pod.Status.PodIP)
+	r.Log.V(1).Info("Requesting memory stats", "pod", pod.Name, "ip", pod.Status.PodIP)
 	workingSet, _, err := r.getMemoryStats(ctx, pod.Status.PodIP, containerID)
 	if err != nil {
-		r.Log.Info("Failed to get memory stats", "pod", pod.Name, "error", err)
+		r.Log.V(1).Info("Failed to get memory stats", "pod", pod.Name, "error", err)
 		return
 	}
 
 	limit, err := r.getContainerLimit(ctx, pod.Status.PodIP, containerID)
 	if err != nil {
-		r.Log.Info("Failed to get container limit", "pod", pod.Name, "error", err)
+		r.Log.V(1).Info("Failed to get container limit", "pod", pod.Name, "error", err)
 		return
 	}
 
-	r.Log.Info("Memory stats retrieved", "pod", pod.Name, "workingSet", workingSet, "limit", limit)
+	r.Log.V(1).Info("Memory stats retrieved", "pod", pod.Name, "workingSet", workingSet, "limit", limit)
 
 	if limit == 0 {
 		return

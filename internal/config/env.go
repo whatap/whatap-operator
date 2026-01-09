@@ -12,6 +12,7 @@ type EnvConfig struct {
 	WhatapPort             string
 	WhatapDefaultNamespace string
 	EnableWebhooks         string
+	DebugMode              string
 }
 
 var (
@@ -22,12 +23,17 @@ var (
 // GetEnvConfig returns the singleton instance of environment configuration
 func GetEnvConfig() *EnvConfig {
 	once.Do(func() {
+		debugVal := os.Getenv("DEBUG")
+		if debugVal == "" {
+			debugVal = os.Getenv("debug")
+		}
 		envConfig = &EnvConfig{
 			WhatapLicense:          os.Getenv("WHATAP_LICENSE"),
 			WhatapHost:             os.Getenv("WHATAP_HOST"),
 			WhatapPort:             os.Getenv("WHATAP_PORT"),
 			WhatapDefaultNamespace: os.Getenv("WHATAP_DEFAULT_NAMESPACE"),
 			EnableWebhooks:         os.Getenv("ENABLE_WEBHOOKS"),
+			DebugMode:              debugVal,
 		}
 	})
 	return envConfig
@@ -56,4 +62,9 @@ func GetWhatapDefaultNamespace() string {
 // GetEnableWebhooks returns the cached ENABLE_WEBHOOKS value
 func GetEnableWebhooks() string {
 	return GetEnvConfig().EnableWebhooks
+}
+
+// GetDebugMode returns the cached DEBUG value
+func GetDebugMode() string {
+	return GetEnvConfig().DebugMode
 }
