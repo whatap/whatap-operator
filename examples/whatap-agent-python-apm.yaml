@@ -20,3 +20,14 @@ spec:
             namespaceSelector:
               matchNames:
                 - "default"
+            # Python Agent 상세 설정 (선택 사항)
+            envs:
+              # 애플리케이션 이름 설정 (기본값: 컨테이너 이름)
+              - name: "app_name"
+                value: "custom-python-service"
+              # 애플리케이션 프로세스 이름 설정
+              - name: "app_process_name"
+                value: "gunicorn"
+              # OKIND 설정 (애플리케이션 종류 그룹화)
+              - name: "OKIND"
+                value: "API_SERVER_GROUP"
