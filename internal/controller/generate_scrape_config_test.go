@@ -117,3 +117,34 @@ func TestGenerateScrapeConfig_JobLabel(t *testing.T) {
 		t.Errorf("Expected config to contain 'app', got: \n%s", config)
 	}
 }
+
+func TestGenerateScrapeConfig_GpuMonitoringGroupLabel(t *testing.T) {
+	cr := &monitoringv2alpha1.WhatapAgent{
+		Spec: monitoringv2alpha1.WhatapAgentSpec{
+			Features: monitoringv2alpha1.FeaturesSpec{
+				OpenAgent: monitoringv2alpha1.OpenAgentSpec{
+					Enabled: true,
+				},
+				K8sAgent: monitoringv2alpha1.K8sAgentSpec{
+					GpuMonitoring: monitoringv2alpha1.GpuMonitoringSpec{
+						Enabled:    true,
+						GroupLabel: "prjId",
+						Interval:   "30s",
+					},
+				},
+			},
+		},
+	}
+
+	config := generateScrapeConfig(cr, "default", nil, nil)
+
+	if !strings.Contains(config, "targetName: dcgm-exporter-auto") {
+		t.Errorf("Expected config to contain GPU auto target, got: \n%s", config)
+	}
+	if !strings.Contains(config, "whatap_kube_label_gpu_group") {
+		t.Errorf("Expected config to contain 'whatap_kube_label_gpu_group', got: \n%s", config)
+	}
+	if !strings.Contains(config, "prjId") {
+		t.Errorf("Expected config to contain group label key 'prjId', got: \n%s", config)
+	}
+}

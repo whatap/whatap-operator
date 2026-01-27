@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"time"
 
@@ -14,11 +15,18 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+var invalidPromLabelCharRE = regexp.MustCompile(`[^a-zA-Z0-9_]`)
+
+func sanitizePromLabelName(s string) string {
+	return invalidPromLabelCharRE.ReplaceAllString(s, "_")
+}
 
 // toOrderedYAML converts Go maps (which have random iteration order) into yaml.MapSlice
 // with sorted keys, recursively. This makes YAML output deterministic so that
@@ -478,114 +486,72 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 			corev1.ResourceMemory: resourceMustParse("350Mi")},
 	)
 
-	// Get the node agent component spec for easier access
-	nodeSpec := cr.Spec.Features.K8sAgent.NodeAgent
+	gpuSpec := cr.Spec.Features.K8sAgent.GpuMonitoring
 
-	// Create daemonset with base metadata
-	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "whatap-node-agent",
-			Namespace: r.DefaultNamespace,
-		},
-	}
+	// Check if NodeSelector or Affinity is used
+	hasNodeSelector := len(gpuSpec.NodeSelector) > 0
+	hasAffinity := gpuSpec.Affinity != nil && gpuSpec.Affinity.NodeAffinity != nil && gpuSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
 
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, ds, func() error {
-		// Apply custom labels if provided
-		if nodeSpec.Labels != nil {
-			if ds.Labels == nil {
-				ds.Labels = make(map[string]string)
-			}
-			for k, v := range nodeSpec.Labels {
-				ds.Labels[k] = v
-			}
+	if gpuSpec.Enabled && (hasNodeSelector || hasAffinity) {
+		// Collect GPU Affinity Terms
+		var gpuAffinityTerms []corev1.NodeSelectorTerm
+		if hasAffinity {
+			gpuAffinityTerms = gpuSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
 		}
 
-		// Apply custom annotations if provided
-		if nodeSpec.Annotations != nil {
-			if ds.Annotations == nil {
-				ds.Annotations = make(map[string]string)
-			}
-			for k, v := range nodeSpec.Annotations {
-				ds.Annotations[k] = v
-			}
-		}
-
-		// Set controller reference
-		if err := controllerutil.SetControllerReference(cr, ds, r.Scheme); err != nil {
+		// 1. Create GPU Agent
+		if err := reconcileNodeAgentDaemonSet(ctx, r, logger, cr, "whatap-node-agent-gpu", img, resources, true, gpuSpec.NodeSelector, gpuAffinityTerms); err != nil {
 			return err
 		}
 
-		newSpec := getNodeAgentDaemonSetSpec(img, resources, cr)
-		if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
-			addDcgmExporterToNodeAgent(&newSpec.Template.Spec, cr)
+		// 2. Create Normal Agent with Anti-Affinity
+		// Construct terms for "NOT (gpuSelector AND gpuAffinity)"
+		// Since terms are ORed, we create one term for each label key with NotIn operator (for NodeSelector)
+		// and one term for each negated matchExpression (for Affinity)
+		terms := []corev1.NodeSelectorTerm{}
+
+		// Negate NodeSelector
+		for k, v := range gpuSpec.NodeSelector {
+			terms = append(terms, corev1.NodeSelectorTerm{
+				MatchExpressions: []corev1.NodeSelectorRequirement{
+					{Key: k, Operator: corev1.NodeSelectorOpNotIn, Values: []string{v}},
+				},
+			})
 		}
 
-		// Preserve sidecars and reconcile resources
-		if !ds.CreationTimestamp.IsZero() {
-			// Preserve existing labels on PodTemplate
-			if newSpec.Template.Labels == nil {
-				newSpec.Template.Labels = make(map[string]string)
-			}
-			for k, v := range ds.Spec.Template.Labels {
-				if _, exists := newSpec.Template.Labels[k]; !exists {
-					newSpec.Template.Labels[k] = v
-				}
-			}
-
-			// Merge PodSpec defaults
-			mergePodSpec(&newSpec.Template.Spec, &ds.Spec.Template.Spec)
-
-			userSetResources := !isResourceEmpty(nodeSpec.Resources)
-			var finalContainers []corev1.Container
-			newContainersMap := make(map[string]corev1.Container)
-			for _, c := range newSpec.Template.Spec.Containers {
-				applyContainerDefaults(&c)
-				newContainersMap[c.Name] = c
-			}
-
-			// Iterate over existing containers to preserve order and sidecars
-			for _, existingC := range ds.Spec.Template.Spec.Containers {
-				if newC, ok := newContainersMap[existingC.Name]; ok {
-					// Special handling for node-agent resources
-					if newC.Name == "whatap-node-agent" {
-						if !userSetResources {
-							newC.Resources = existingC.Resources
-						}
-					}
-					// Special handling for dcgm-exporter if needed?
-					// Currently no special resource handling for dcgm in CR, so we use code defaults or whatever addDcgmExporter sets.
-					// Ideally we should preserve existing resources for dcgm too if not managed.
-
-					finalContainers = append(finalContainers, newC)
-					delete(newContainersMap, existingC.Name)
-				} else {
-					finalContainers = append(finalContainers, existingC)
-				}
-			}
-			// Append new containers
-			for _, c := range newContainersMap {
-				finalContainers = append(finalContainers, c)
-			}
-			newSpec.Template.Spec.Containers = finalContainers
-
-			// Preserve InitContainers
-			if len(ds.Spec.Template.Spec.InitContainers) > 0 {
-				newSpec.Template.Spec.InitContainers = ds.Spec.Template.Spec.InitContainers
-			}
-		} else {
-			for i := range newSpec.Template.Spec.Containers {
-				applyContainerDefaults(&newSpec.Template.Spec.Containers[i])
+		// Negate Affinity (only if single term)
+		if hasAffinity {
+			if len(gpuAffinityTerms) == 1 {
+				negated := negateNodeSelectorTerm(gpuAffinityTerms[0])
+				terms = append(terms, negated...)
+			} else if len(gpuAffinityTerms) > 1 {
+				logger.Info("Warning: GPU Affinity has multiple terms, automatic anti-affinity for normal agent might be incomplete")
 			}
 		}
 
-		ds.Spec = newSpec
-		return nil
-	})
-	if err != nil {
-		logger.Error(err, "Fail create/update Whatap Node Agent DaemonSet")
-		return err
+		if err := reconcileNodeAgentDaemonSet(ctx, r, logger, cr, "whatap-node-agent", img, resources, false, nil, terms); err != nil {
+			return err
+		}
+	} else {
+		// Legacy Mode
+		// Ensure GPU specific agent is deleted
+		gpuDS := &appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "whatap-node-agent-gpu",
+				Namespace: r.DefaultNamespace,
+			},
+		}
+		if err := r.Client.Delete(ctx, gpuDS); err != nil {
+			if !errors.IsNotFound(err) {
+				logger.Error(err, "Failed to delete whatap-node-agent-gpu", "name", "whatap-node-agent-gpu")
+			}
+		}
+
+		// Create Normal Agent (with GPU sidecar if enabled globally)
+		if err := reconcileNodeAgentDaemonSet(ctx, r, logger, cr, "whatap-node-agent", img, resources, gpuSpec.Enabled, nil, nil); err != nil {
+			return err
+		}
 	}
-	logResult(logger, "Whatap", "Node Agent DaemonSet", op)
 
 	// Create dcgm-exporter service if GPU monitoring is enabled and service is configured
 	if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
@@ -597,7 +563,7 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 	return nil
 }
 
-func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, cr *monitoringv2alpha1.WhatapAgent) appsv1.DaemonSetSpec {
+func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, cr *monitoringv2alpha1.WhatapAgent, dsName string) appsv1.DaemonSetSpec {
 	// Get the node agent component spec for easier access
 	nodeSpec := cr.Spec.Features.K8sAgent.NodeAgent
 
@@ -611,7 +577,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 	tolerations := append(defaultTolerations, nodeSpec.Tolerations...)
 
 	// Create base labels and merge with custom labels if provided
-	labels := map[string]string{"name": "whatap-node-agent"}
+	labels := map[string]string{"name": dsName}
 	if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
 		labels["whatap-gpu"] = "true"
 	}
@@ -788,7 +754,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 
 	return appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{
-			MatchLabels: map[string]string{"name": "whatap-node-agent"},
+			MatchLabels: map[string]string{"name": dsName},
 		},
 		UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 			Type: appsv1.RollingUpdateDaemonSetStrategyType,
@@ -905,10 +871,12 @@ func createOrUpdateGpuConfigMap(ctx context.Context, r *WhatapAgentReconciler, l
 // ---------- GPU Exporter 추가 함수 ----------
 
 func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.WhatapAgent) {
+	gpuSpec := cr.Spec.Features.K8sAgent.GpuMonitoring
+
 	// Check if a custom image is specified
-	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.4.2-4.7.09-ubuntu22.04"
-	if cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName != "" {
-		dcgmImage = cr.Spec.Features.K8sAgent.GpuMonitoring.CustomImageFullName
+	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.4.2-4.7.12-ubuntu22.04"
+	if gpuSpec.CustomImageFullName != "" {
+		dcgmImage = gpuSpec.CustomImageFullName
 	}
 
 	// Default environment variables
@@ -916,14 +884,33 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 		{Name: "DCGM_EXPORTER_LISTEN", Value: ":9400"},
 		{Name: "DCGM_EXPORTER_KUBERNETES", Value: "true"},
 		{Name: "DCGM_EXPORTER_COLLECTORS", Value: "/etc/dcgm-exporter/whatap-dcgm-exporter.csv"},
+		{
+			Name: "NODE_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+			},
+		},
+	}
+
+	// If groupLabel is set, enable dcgm-exporter to export selected Pod labels as metric labels
+	if gpuSpec.GroupLabel != "" {
+		allowlistRegex := gpuSpec.GroupLabelAllowlistRegex
+		if allowlistRegex == "" {
+			// Match the original Kubernetes label key (before sanitization)
+			allowlistRegex = fmt.Sprintf("^(%s)$", regexp.QuoteMeta(gpuSpec.GroupLabel))
+		}
+		defaultEnvVars = append(defaultEnvVars,
+			corev1.EnvVar{Name: "DCGM_EXPORTER_KUBERNETES_ENABLE_POD_LABELS", Value: "true"},
+			corev1.EnvVar{Name: "DCGM_EXPORTER_KUBERNETES_POD_LABEL_ALLOWLIST_REGEX", Value: allowlistRegex},
+		)
 	}
 
 	envVars := make([]corev1.EnvVar, len(defaultEnvVars))
 	copy(envVars, defaultEnvVars)
 
 	// Append or overwrite user-defined environment variables
-	if len(cr.Spec.Features.K8sAgent.GpuMonitoring.Envs) > 0 {
-		for _, userEnv := range cr.Spec.Features.K8sAgent.GpuMonitoring.Envs {
+	if len(gpuSpec.Envs) > 0 {
+		for _, userEnv := range gpuSpec.Envs {
 			found := false
 			for i, env := range envVars {
 				if env.Name == userEnv.Name {
@@ -1599,6 +1586,48 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 
 	// Auto-add GPU monitoring target if gpuMonitoring is enabled
 	if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
+		// Determine correct agent name
+		gpuSpec := cr.Spec.Features.K8sAgent.GpuMonitoring
+		hasNodeSelector := len(gpuSpec.NodeSelector) > 0
+		hasAffinity := gpuSpec.Affinity != nil && gpuSpec.Affinity.NodeAffinity != nil && gpuSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
+
+		targetAgentName := "whatap-node-agent"
+		if hasNodeSelector || hasAffinity {
+			targetAgentName = "whatap-node-agent-gpu"
+		}
+
+		// Prepare agent labels for duplicate check
+		nodeSpec := cr.Spec.Features.K8sAgent.NodeAgent
+		agentLabels := map[string]string{
+			"name": targetAgentName,
+		}
+		if gpuSpec.Enabled {
+			agentLabels["whatap-gpu"] = "true"
+		}
+		for k, v := range nodeSpec.PodLabels {
+			agentLabels[k] = v
+		}
+		identityKeys := []string{"name", "whatap-gpu", "app", "app.kubernetes.io/name", "app.kubernetes.io/instance"}
+
+		// Helper to check if matchLabels matches agentLabels AND uses an identity key
+		checkDuplicate := func(matchLabels map[string]string) bool {
+			if len(matchLabels) == 0 {
+				return false
+			}
+			match := true
+			hasIdentityKey := false
+			for k, v := range matchLabels {
+				if agentVal, ok := agentLabels[k]; !ok || agentVal != v {
+					match = false
+					break
+				}
+				if contains(identityKeys, k) {
+					hasIdentityKey = true
+				}
+			}
+			return match && hasIdentityKey
+		}
+
 		// Check for duplicate targets to avoid conflicts
 		gpuTargetName := "dcgm-exporter-auto"
 		isDuplicate := false
@@ -1635,12 +1664,24 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			if selectorVal == nil {
 				continue
 			}
-			// selector.matchLabels.name == whatap-node-agent
+
+			// Check if the selector matches the agent's identity
 			switch sel := selectorVal.(type) {
 			case map[string]interface{}:
 				if matchLabels, ok := sel["matchLabels"]; ok {
 					if labelsMap, ok := matchLabels.(map[string]string); ok {
-						if labelsMap["name"] == "whatap-node-agent" {
+						if checkDuplicate(labelsMap) {
+							isDuplicate = true
+							break
+						}
+					} else if labelsMapInterface, ok := matchLabels.(map[string]interface{}); ok {
+						convertedMap := make(map[string]string)
+						for k, v := range labelsMapInterface {
+							if s, ok := v.(string); ok {
+								convertedMap[k] = s
+							}
+						}
+						if checkDuplicate(convertedMap) {
 							isDuplicate = true
 							break
 						}
@@ -1652,20 +1693,32 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 					if !ok || k != "matchLabels" {
 						continue
 					}
+
+					convertedMap := make(map[string]string)
 					switch ml := it.Value.(type) {
 					case map[string]string:
-						if ml["name"] == "whatap-node-agent" {
-							isDuplicate = true
-						}
+						convertedMap = ml
 					case yaml.MapSlice:
 						for _, lab := range ml {
 							kk, ok := lab.Key.(string)
-							if ok && kk == "name" {
-								if vv, ok := lab.Value.(string); ok && vv == "whatap-node-agent" {
-									isDuplicate = true
+							if ok {
+								if vv, ok := lab.Value.(string); ok {
+									convertedMap[kk] = vv
 								}
 							}
 						}
+					case map[interface{}]interface{}:
+						for k, v := range ml {
+							if ks, ok := k.(string); ok {
+								if vs, ok := v.(string); ok {
+									convertedMap[ks] = vs
+								}
+							}
+						}
+					}
+
+					if checkDuplicate(convertedMap) {
+						isDuplicate = true
 					}
 				}
 			}
@@ -1693,12 +1746,17 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			nsSelector["matchNames"] = []string{targetNamespace}
 			gpuTargetMap["namespaceSelector"] = nsSelector
 
-			// Set pod selector to target whatap-node-agent pods
+			// Set pod selector to target the appropriate agent
 			selector := make(map[string]interface{})
 			selector["matchLabels"] = map[string]string{
-				"name": "whatap-node-agent",
+				"name": targetAgentName,
 			}
 			gpuTargetMap["selector"] = selector
+
+			// Add relabelConfigs if provided
+			if len(gpuSpec.RelabelConfigs) > 0 {
+				gpuTargetMap["relabelConfigs"] = convertRelabelConfigs(gpuSpec.RelabelConfigs)
+			}
 
 			// Set endpoint configuration for DCGM exporter with customizable options
 			// Create one endpoint: regular metrics
@@ -1711,6 +1769,9 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 
 			// Allow customization of scraping interval
 			interval := "30s" // Default interval
+			if gpuSpec.Interval != "" {
+				interval = gpuSpec.Interval
+			}
 			endpointMap1["interval"] = interval
 
 			endpointMap1["scheme"] = "http"
@@ -1719,21 +1780,38 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			endpointMap1["addNodeLabel"] = true
 
 			// Add metricRelabelConfigs at endpoint level for GPU monitoring
-			metricRelabelConfigs1 := make([]interface{}, 2)
+			metricRelabelConfigs1 := make([]interface{}, 0, 4)
 
 			// First relabel config: add wtp_src label
 			relabelConfig1 := make(map[string]interface{})
 			relabelConfig1["target_label"] = "wtp_src"
 			relabelConfig1["replacement"] = "true"
 			relabelConfig1["action"] = "replace"
-			metricRelabelConfigs1[0] = relabelConfig1
+			metricRelabelConfigs1 = append(metricRelabelConfigs1, relabelConfig1)
 
 			// Second relabel config: keep only DCGM metrics
 			relabelConfig2 := make(map[string]interface{})
 			relabelConfig2["source_labels"] = []string{"__name__"}
 			relabelConfig2["regex"] = "DCGM.*"
 			relabelConfig2["action"] = "keep"
-			metricRelabelConfigs1[1] = relabelConfig2
+			metricRelabelConfigs1 = append(metricRelabelConfigs1, relabelConfig2)
+
+			// If groupLabel is set, normalize it into whatap_kube_label_gpu_group
+			if gpuSpec.GroupLabel != "" {
+				groupRelabel := make(map[string]interface{})
+				groupRelabel["source_labels"] = []string{sanitizePromLabelName(gpuSpec.GroupLabel)}
+				groupRelabel["target_label"] = "whatap_kube_label_gpu_group"
+				groupRelabel["action"] = "replace"
+				metricRelabelConfigs1 = append(metricRelabelConfigs1, groupRelabel)
+			}
+
+			// Add custom metric relabel configs if provided
+			if len(gpuSpec.MetricRelabelConfigs) > 0 {
+				customMetricRelabels := convertRelabelConfigs(gpuSpec.MetricRelabelConfigs)
+				for _, cm := range customMetricRelabels {
+					metricRelabelConfigs1 = append(metricRelabelConfigs1, cm)
+				}
+			}
 
 			endpointMap1["metricRelabelConfigs"] = metricRelabelConfigs1
 
@@ -2340,4 +2418,174 @@ func mergePodSpec(newSpec, oldSpec *corev1.PodSpec) {
 			}
 		}
 	}
+}
+
+func negateNodeSelectorTerm(term corev1.NodeSelectorTerm) []corev1.NodeSelectorTerm {
+	var terms []corev1.NodeSelectorTerm
+	for _, req := range term.MatchExpressions {
+		var op corev1.NodeSelectorOperator
+		switch req.Operator {
+		case corev1.NodeSelectorOpIn:
+			op = corev1.NodeSelectorOpNotIn
+		case corev1.NodeSelectorOpNotIn:
+			op = corev1.NodeSelectorOpIn
+		case corev1.NodeSelectorOpExists:
+			op = corev1.NodeSelectorOpDoesNotExist
+		case corev1.NodeSelectorOpDoesNotExist:
+			op = corev1.NodeSelectorOpExists
+		default:
+			continue
+		}
+		terms = append(terms, corev1.NodeSelectorTerm{
+			MatchExpressions: []corev1.NodeSelectorRequirement{
+				{Key: req.Key, Operator: op, Values: req.Values},
+			},
+		})
+	}
+	return terms
+}
+
+func reconcileNodeAgentDaemonSet(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent, name string, img string, resources *corev1.ResourceRequirements, includeDcgm bool, nodeSelector map[string]string, affinityTerms []corev1.NodeSelectorTerm) error {
+	nodeSpec := cr.Spec.Features.K8sAgent.NodeAgent
+
+	// Create daemonset with base metadata
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: r.DefaultNamespace,
+		},
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, ds, func() error {
+		// Apply custom labels if provided
+		if nodeSpec.Labels != nil {
+			if ds.Labels == nil {
+				ds.Labels = make(map[string]string)
+			}
+			for k, v := range nodeSpec.Labels {
+				ds.Labels[k] = v
+			}
+		}
+
+		// Apply custom annotations if provided
+		if nodeSpec.Annotations != nil {
+			if ds.Annotations == nil {
+				ds.Annotations = make(map[string]string)
+			}
+			for k, v := range nodeSpec.Annotations {
+				ds.Annotations[k] = v
+			}
+		}
+
+		// Set controller reference
+		if err := controllerutil.SetControllerReference(cr, ds, r.Scheme); err != nil {
+			return err
+		}
+
+		newSpec := getNodeAgentDaemonSetSpec(img, resources, cr, name)
+
+		// Apply NodeSelector override
+		if nodeSelector != nil {
+			newSpec.Template.Spec.NodeSelector = nodeSelector
+		}
+
+		// Apply Affinity override (Anti-affinity)
+		if len(affinityTerms) > 0 {
+			if newSpec.Template.Spec.Affinity == nil {
+				newSpec.Template.Spec.Affinity = &corev1.Affinity{}
+			}
+			if newSpec.Template.Spec.Affinity.NodeAffinity == nil {
+				newSpec.Template.Spec.Affinity.NodeAffinity = &corev1.NodeAffinity{}
+			}
+			if newSpec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+				newSpec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{},
+				}
+			}
+
+			// Append terms or Merge with existing
+			existingTerms := newSpec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+			if len(existingTerms) == 0 {
+				newSpec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = append(newSpec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms, affinityTerms...)
+			} else {
+				// We need to merge affinityTerms into EACH existing term.
+				// (UserTerm1 OR UserTerm2) AND (NotGpuTerm1 OR NotGpuTerm2)
+				// = (UserTerm1 AND NotGpuTerm1) OR (UserTerm1 AND NotGpuTerm2) OR ...
+				newTerms := []corev1.NodeSelectorTerm{}
+				for _, et := range existingTerms {
+					for _, at := range affinityTerms {
+						nt := et.DeepCopy()
+						nt.MatchExpressions = append(nt.MatchExpressions, at.MatchExpressions...)
+						newTerms = append(newTerms, *nt)
+					}
+				}
+				newSpec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = newTerms
+			}
+		}
+
+		if includeDcgm {
+			addDcgmExporterToNodeAgent(&newSpec.Template.Spec, cr)
+		}
+
+		// Preserve sidecars and reconcile resources
+		if !ds.CreationTimestamp.IsZero() {
+			// Preserve existing labels on PodTemplate
+			if newSpec.Template.Labels == nil {
+				newSpec.Template.Labels = make(map[string]string)
+			}
+			for k, v := range ds.Spec.Template.Labels {
+				if _, exists := newSpec.Template.Labels[k]; !exists {
+					newSpec.Template.Labels[k] = v
+				}
+			}
+
+			// Merge PodSpec defaults
+			mergePodSpec(&newSpec.Template.Spec, &ds.Spec.Template.Spec)
+
+			userSetResources := !isResourceEmpty(nodeSpec.Resources)
+			var finalContainers []corev1.Container
+			newContainersMap := make(map[string]corev1.Container)
+			for _, c := range newSpec.Template.Spec.Containers {
+				applyContainerDefaults(&c)
+				newContainersMap[c.Name] = c
+			}
+
+			// Iterate over existing containers to preserve order and sidecars
+			for _, existingC := range ds.Spec.Template.Spec.Containers {
+				if newC, ok := newContainersMap[existingC.Name]; ok {
+					// Special handling for node-agent resources
+					if newC.Name == "whatap-node-agent" {
+						if !userSetResources {
+							newC.Resources = existingC.Resources
+						}
+					}
+					finalContainers = append(finalContainers, newC)
+					delete(newContainersMap, existingC.Name)
+				} else {
+					// Preserve sidecars
+					finalContainers = append(finalContainers, existingC)
+				}
+			}
+
+			// Append new containers
+			for _, c := range newContainersMap {
+				finalContainers = append(finalContainers, c)
+			}
+			newSpec.Template.Spec.Containers = finalContainers
+
+			// Preserve InitContainers
+			if len(ds.Spec.Template.Spec.InitContainers) > 0 {
+				newSpec.Template.Spec.InitContainers = ds.Spec.Template.Spec.InitContainers
+			}
+		} else {
+			for i := range newSpec.Template.Spec.Containers {
+				applyContainerDefaults(&newSpec.Template.Spec.Containers[i])
+			}
+		}
+
+		ds.Spec = newSpec
+		return nil
+	})
+
+	return err
 }

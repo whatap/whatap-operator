@@ -420,6 +420,30 @@ type GpuMonitoringSpec struct {
 	// Envs allows injecting extra environment variables into the dcgm-exporter container
 	// +optional
 	Envs []corev1.EnvVar `json:"envs,omitempty"`
+	// NodeSelector specifies the labels to select nodes for GPU monitoring agent
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Affinity specifies the affinity/anti-affinity for GPU monitoring agent
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+	// Interval specifies the scrape interval for GPU metrics
+	// +optional
+	Interval string `json:"interval,omitempty"`
+	// RelabelConfigs defines the relabeling configurations for GPU target
+	// +optional
+	RelabelConfigs []MetricRelabelConfig `json:"relabelConfigs,omitempty"`
+	// MetricRelabelConfigs defines the metric relabeling configurations for GPU endpoint
+	// +optional
+	MetricRelabelConfigs []MetricRelabelConfig `json:"metricRelabelConfigs,omitempty"`
+	// GroupLabel enables exporting a specific Kubernetes Pod label (from GPU-using pods)
+	// into DCGM metrics, and normalizes it into whatap_kube_label_gpu_group via OpenAgent.
+	// Example: groupLabel: prjId
+	// +optional
+	GroupLabel string `json:"groupLabel,omitempty"`
+	// GroupLabelAllowlistRegex controls which Pod label keys are allowed to be exported by dcgm-exporter.
+	// If not set and groupLabel is set, the operator will default to ^(<groupLabel>)$.
+	// +optional
+	GroupLabelAllowlistRegex string `json:"groupLabelAllowlistRegex,omitempty"`
 }
 
 // GpuMonitoringServiceSpec defines service configuration for GPU monitoring

@@ -40,7 +40,7 @@ func TestGetNodeAgentDaemonSetSpec_GpuLabel(t *testing.T) {
 			}
 
 			res := &corev1.ResourceRequirements{}
-			dsSpec := getNodeAgentDaemonSetSpec("test-image", res, cr)
+			dsSpec := getNodeAgentDaemonSetSpec("test-image", res, cr, "whatap-node-agent")
 
 			labels := dsSpec.Template.ObjectMeta.Labels
 			val, ok := labels["whatap-gpu"]
@@ -107,5 +107,47 @@ func TestGetOpenAgentCommand(t *testing.T) {
 
 	if result != nil {
 		t.Errorf("getOpenAgentCommand() = %v, expected nil", result)
+	}
+}
+
+func TestAddDcgmExporterToNodeAgent_AddsNodeNameEnv(t *testing.T) {
+	cr := &monitoringv2alpha1.WhatapAgent{
+		Spec: monitoringv2alpha1.WhatapAgentSpec{
+			Features: monitoringv2alpha1.FeaturesSpec{
+				K8sAgent: monitoringv2alpha1.K8sAgentSpec{
+					GpuMonitoring: monitoringv2alpha1.GpuMonitoringSpec{
+						Enabled: true,
+					},
+				},
+			},
+		},
+	}
+
+	podSpec := corev1.PodSpec{}
+	addDcgmExporterToNodeAgent(&podSpec, cr)
+
+	var dcgm *corev1.Container
+	for i := range podSpec.Containers {
+		if podSpec.Containers[i].Name == "dcgm-exporter" {
+			dcgm = &podSpec.Containers[i]
+			break
+		}
+	}
+	if dcgm == nil {
+		t.Fatalf("expected dcgm-exporter container to be added")
+	}
+
+	found := false
+	for _, env := range dcgm.Env {
+		if env.Name != "NODE_NAME" {
+			continue
+		}
+		found = true
+		if env.ValueFrom == nil || env.ValueFrom.FieldRef == nil || env.ValueFrom.FieldRef.FieldPath != "spec.nodeName" {
+			t.Fatalf("expected NODE_NAME to be populated from fieldRef spec.nodeName, got: %#v", env.ValueFrom)
+		}
+	}
+	if !found {
+		t.Fatalf("expected NODE_NAME env var to be present")
 	}
 }

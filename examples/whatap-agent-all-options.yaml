@@ -13,10 +13,10 @@ spec:
             enabled: true                      # 이 대상에 대한 APM 활성화 여부
             language: "java"                   # 지원 언어: java, python, php, dotnet, nodejs, golang
             whatapApmVersions:
-              java: "2.2.58"                   # 사용할 APM 에이전트 버전
+              java: "2.2.68"                   # 사용할 APM 에이전트 버전
 
             # 커스텀 에이전트 이미지 이름 (생략 시 기본 이미지 사용)
-            # customImageFullName: "my-registry.example.com/whatap/apm-init-java:2.2.58"
+            # customImageFullName: "my-registry.example.com/whatap/apm-init-java:2.2.68"
 
             # 대상 네임스페이스 선택 (다음 중 하나 사용)
             namespaceSelector:
@@ -63,7 +63,6 @@ spec:
     k8sAgent:
       # 에이전트가 설치될 네임스페이스 (생략 시 기본값 사용)
       namespace: "whatap-monitoring"
-
       # 마스터 에이전트 설정 (클러스터 수준 메트릭 수집)
       masterAgent:
         enabled: true                          # 마스터 에이전트 활성화
@@ -123,6 +122,16 @@ spec:
           - name: "WHATAP_DEBUG_LEVEL"
             value: "info"
 
+        # (추가 설정 옵션)
+        # Pod 우선순위 클래스 이름
+        # priorityClassName: "system-cluster-critical"
+
+        # 특정 런타임 클래스 사용 시 지정
+        # runtimeClassName: "kata-qemu"
+
+        # 호스트 PID 네임스페이스 사용 여부
+        # hostPID: false
+
       # 노드 에이전트 설정 (노드 및 컨테이너 수준 메트릭 수집)
       nodeAgent:
         enabled: true                          # 노드 에이전트 활성화
@@ -181,9 +190,66 @@ spec:
           - name: "WHATAP_DEBUG_LEVEL"
             value: "info"
 
+        # (추가 설정 옵션)
+        # 호스트 네트워크 사용 여부 (기본값: true)
+        # hostNetwork: true
+
+        # 컨테이너 런타임 지정 (containerd, docker, crio) - 소켓 경로 자동 설정을 위해 사용
+        # runtime: "containerd"
+
+        # 런타임 소켓 경로 수동 지정 (필요 시)
+        # runtimeSocketPath: "/var/run/containerd/containerd.sock"
+
+        # 특정 런타임 클래스 사용 시 지정
+        # runtimeClassName: "runc"
+
+        # Pod 우선순위 클래스 이름
+        # priorityClassName: "system-node-critical"
+
+        # 호스트 PID 네임스페이스 사용 여부
+        # hostPID: true
+
       # GPU 모니터링 설정 (NVIDIA GPU 메트릭 수집)
       gpuMonitoring:
         enabled: true                          # GPU 모니터링 활성화
+
+        # GPU 메트릭 스크래핑 간격 (기본값: 30s)
+        # interval: "15s"
+
+        # GPU 노드 선택을 위한 NodeSelector (옵션)
+        # nodeSelector:
+        #   accelerator: nvidia
+
+        # GPU 노드 선택을 위한 Affinity (옵션)
+        # affinity:
+        #   nodeAffinity:
+        #     requiredDuringSchedulingIgnoredDuringExecution:
+        #       nodeSelectorTerms:
+        #         - matchExpressions:
+        #             - key: accelerator
+        #               operator: In
+        #               values:
+        #                 - nvidia
+
+        # GPU 타겟에 대한 RelabelConfigs (옵션)
+        # relabelConfigs:
+        #   - source_labels: ["__meta_kubernetes_pod_node_name"]
+        #     target_label: "node"
+        #     action: "replace"
+
+        # (권장) GPU를 사용하는 애플리케이션 파드의 특정 라벨(예: prjId)을
+        # DCGM 메트릭 라벨로 포함시키고 whatap_kube_label_gpu_group 으로 정규화하려면
+        # groupLabel 을 사용하세요.
+        # groupLabel: "prjId"
+
+        # (옵션) 노출할 파드 라벨 키 allowlist 정규식 (기본: ^(groupLabel)$)
+        # groupLabelAllowlistRegex: "^(prjId)$"
+
+        # GPU 메트릭에 대한 MetricRelabelConfigs (옵션)
+        # metricRelabelConfigs:
+        #   - source_labels: ["__name__"]
+        #     regex: "DCGM_FI_DEV_GPU_TEMP"
+        #     action: "drop"
 
       # API 서버 모니터링 설정
       apiserverMonitoring:
@@ -200,10 +266,8 @@ spec:
     ### 오픈메트릭 설정 - Prometheus 형식의 메트릭 수집
     openAgent:
       enabled: true                            # OpenAgent 활성화
-      globalInterval: "60s"                    # 기본 스크래핑 간격
-      globalPath: "/metrics"                   # 기본 메트릭 경로
-      imageName: "custom-registry.example.com/whatap/open_agent"  # OpenAgent 이미지 이름 (기본값: whatap/open_agent)
-      imageVersion: "v1.2.3"                   # OpenAgent 이미지 버전 (기본값: latest)
+      # 커스텀 에이전트 이미지 전체 이름 (imageName, imageVersion 설정보다 우선됨)
+      customImageFullName: "custom-registry.example.com/whatap/open_agent:v1.2.3"
 
       # OpenAgent Deployment에 추가할 라벨
       labels:
@@ -235,6 +299,10 @@ spec:
           value: "Asia/Seoul"
         - name: "WHATAP_DEBUG_LEVEL"
           value: "info"
+
+      # (추가 설정 옵션)
+      # Pod 우선순위 클래스 이름
+      # priorityClassName: "system-cluster-critical"
 
       # 메트릭 수집 대상 설정
       targets:
