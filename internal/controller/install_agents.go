@@ -874,7 +874,7 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 	gpuSpec := cr.Spec.Features.K8sAgent.GpuMonitoring
 
 	// Check if a custom image is specified
-	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.4.2-4.7.12-ubuntu22.04"
+	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.4.2-4.7.13-ubuntu22.04"
 	if gpuSpec.CustomImageFullName != "" {
 		dcgmImage = gpuSpec.CustomImageFullName
 	}
