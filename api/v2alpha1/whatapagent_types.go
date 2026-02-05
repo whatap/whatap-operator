@@ -444,6 +444,9 @@ type GpuMonitoringSpec struct {
 	// If not set and groupLabel is set, the operator will default to ^(<groupLabel>)$.
 	// +optional
 	GroupLabelAllowlistRegex string `json:"groupLabelAllowlistRegex,omitempty"`
+	// ClusterName specifies the cluster name to be added as a label to the GPU metrics.
+	// +optional
+	ClusterName string `json:"clusterName,omitempty"`
 }
 
 // GpuMonitoringServiceSpec defines service configuration for GPU monitoring

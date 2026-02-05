@@ -148,3 +148,33 @@ func TestGenerateScrapeConfig_GpuMonitoringGroupLabel(t *testing.T) {
 		t.Errorf("Expected config to contain group label key 'prjId', got: \n%s", config)
 	}
 }
+
+func TestGenerateScrapeConfig_GpuMonitoringClusterName(t *testing.T) {
+	cr := &monitoringv2alpha1.WhatapAgent{
+		Spec: monitoringv2alpha1.WhatapAgentSpec{
+			Features: monitoringv2alpha1.FeaturesSpec{
+				OpenAgent: monitoringv2alpha1.OpenAgentSpec{
+					Enabled: true,
+				},
+				K8sAgent: monitoringv2alpha1.K8sAgentSpec{
+					GpuMonitoring: monitoringv2alpha1.GpuMonitoringSpec{
+						Enabled:     true,
+						ClusterName: "test-cluster",
+					},
+				},
+			},
+		},
+	}
+
+	config := generateScrapeConfig(cr, "default", nil, nil)
+
+	if !strings.Contains(config, "targetName: dcgm-exporter-auto") {
+		t.Errorf("Expected config to contain GPU auto target")
+	}
+	if !strings.Contains(config, "target_label: cluster") {
+		t.Errorf("Expected config to contain 'target_label: cluster', got: \n%s", config)
+	}
+	if !strings.Contains(config, "replacement: test-cluster") {
+		t.Errorf("Expected config to contain 'replacement: test-cluster', got: \n%s", config)
+	}
+}

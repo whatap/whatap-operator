@@ -245,6 +245,9 @@ spec:
         # (옵션) 노출할 파드 라벨 키 allowlist 정규식 (기본: ^(groupLabel)$)
         # groupLabelAllowlistRegex: "^(prjId)$"
 
+        # (옵션) GPU 메트릭에 'cluster' 라벨 추가 (값: 클러스터 이름)
+        # clusterName: "my-k8s-cluster"
+
         # GPU 메트릭에 대한 MetricRelabelConfigs (옵션)
         # metricRelabelConfigs:
         #   - source_labels: ["__name__"]

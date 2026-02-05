@@ -151,3 +151,46 @@ func TestAddDcgmExporterToNodeAgent_AddsNodeNameEnv(t *testing.T) {
 		t.Fatalf("expected NODE_NAME env var to be present")
 	}
 }
+
+func TestAddDcgmExporterToNodeAgent_ClusterNameEnv(t *testing.T) {
+	cr := &monitoringv2alpha1.WhatapAgent{
+		Spec: monitoringv2alpha1.WhatapAgentSpec{
+			Features: monitoringv2alpha1.FeaturesSpec{
+				K8sAgent: monitoringv2alpha1.K8sAgentSpec{
+					GpuMonitoring: monitoringv2alpha1.GpuMonitoringSpec{
+						Enabled:     true,
+						ClusterName: "test-cluster",
+					},
+				},
+			},
+		},
+	}
+
+	podSpec := corev1.PodSpec{}
+	addDcgmExporterToNodeAgent(&podSpec, cr)
+
+	var dcgm *corev1.Container
+	for i := range podSpec.Containers {
+		if podSpec.Containers[i].Name == "dcgm-exporter" {
+			dcgm = &podSpec.Containers[i]
+			break
+		}
+	}
+	if dcgm == nil {
+		t.Fatalf("expected dcgm-exporter container to be added")
+	}
+
+	found := false
+	for _, env := range dcgm.Env {
+		if env.Name == "DCGM_EXPORTER_KUBERNETES_CLUSTER_NAME" {
+			found = true
+			if env.Value != "test-cluster" {
+				t.Errorf("expected DCGM_EXPORTER_KUBERNETES_CLUSTER_NAME to be 'test-cluster', got '%s'", env.Value)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected DCGM_EXPORTER_KUBERNETES_CLUSTER_NAME env var to be present")
+	}
+}

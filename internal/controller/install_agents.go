@@ -905,6 +905,13 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 		)
 	}
 
+	// If ClusterName is set, pass it as an environment variable
+	if gpuSpec.ClusterName != "" {
+		defaultEnvVars = append(defaultEnvVars,
+			corev1.EnvVar{Name: "DCGM_EXPORTER_KUBERNETES_CLUSTER_NAME", Value: gpuSpec.ClusterName},
+		)
+	}
+
 	envVars := make([]corev1.EnvVar, len(defaultEnvVars))
 	copy(envVars, defaultEnvVars)
 
@@ -1795,6 +1802,15 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 			relabelConfig2["regex"] = "DCGM.*"
 			relabelConfig2["action"] = "keep"
 			metricRelabelConfigs1 = append(metricRelabelConfigs1, relabelConfig2)
+
+			// If ClusterName is set, add it as a label
+			if gpuSpec.ClusterName != "" {
+				clusterRelabel := make(map[string]interface{})
+				clusterRelabel["target_label"] = "cluster"
+				clusterRelabel["replacement"] = gpuSpec.ClusterName
+				clusterRelabel["action"] = "replace"
+				metricRelabelConfigs1 = append(metricRelabelConfigs1, clusterRelabel)
+			}
 
 			// If groupLabel is set, normalize it into whatap_kube_label_gpu_group
 			if gpuSpec.GroupLabel != "" {
