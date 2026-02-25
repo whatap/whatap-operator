@@ -16,14 +16,14 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 		appName = container.Name
 	}
 
-	// Python 전용 환경변수 추가 (CR 기반)
-	licenseEnv := getWhatapLicenseEnvVar(cr)
+	// Python 전용 환경변수 추가 (CR 기반, target envs 오버라이드 지원)
+	licenseEnv := getWhatapLicenseEnvVar(cr, target)
 	licenseEnv.Name = EnvPythonLicense // Python agent expects "license" env var name
 
-	hostEnv := getWhatapHostEnvVar(cr)
+	hostEnv := getWhatapHostEnvVar(cr, target)
 	hostEnv.Name = EnvPythonWhatapHost // Python agent expects "whatap_server_host" env var name
 
-	portEnv := getWhatapPortEnvVar(cr)
+	portEnv := getWhatapPortEnvVar(cr, target)
 	portEnv.Name = EnvPythonWhatapPort
 
 	// Python APM 환경변수 구성

@@ -11,19 +11,41 @@ import (
 func boolPtr(b bool) *bool    { return &b }
 func int64Ptr(i int64) *int64 { return &i }
 
-func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
-	license := config.GetWhatapLicense()
-	return corev1.EnvVar{Name: EnvWhatapLicense, Value: license}
+// findEnvValueByKeys searches for an environment variable by multiple candidate keys.
+// Returns the value of the first matching key found.
+func findEnvValueByKeys(envs []corev1.EnvVar, keys ...string) (string, bool) {
+	for _, key := range keys {
+		for _, e := range envs {
+			if e.Name == key {
+				return e.Value, true
+			}
+		}
+	}
+	return "", false
 }
 
-func getWhatapHostEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
-	host := config.GetWhatapHost()
-	return corev1.EnvVar{Name: EnvWhatapHost, Value: host}
+func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec) corev1.EnvVar {
+	// target envs에서 license 오버라이드 검색: WHATAP_LICENSE, license (Java/Python whatap.conf 키)
+	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapLicense, EnvJavaLicense); ok {
+		return corev1.EnvVar{Name: EnvWhatapLicense, Value: val}
+	}
+	return corev1.EnvVar{Name: EnvWhatapLicense, Value: config.GetWhatapLicense()}
 }
 
-func getWhatapPortEnvVar(cr monitoringv2alpha1.WhatapAgent) corev1.EnvVar {
-	port := config.GetWhatapPort()
-	return corev1.EnvVar{Name: EnvWhatapPort, Value: port}
+func getWhatapHostEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec) corev1.EnvVar {
+	// target envs에서 host 오버라이드 검색: WHATAP_HOST, whatap.server.host, whatap_server_host, WHATAP_SERVER_HOST
+	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapHost, EnvJavaWhatapHost, EnvPythonWhatapHost, EnvNodeWhatapHost); ok {
+		return corev1.EnvVar{Name: EnvWhatapHost, Value: val}
+	}
+	return corev1.EnvVar{Name: EnvWhatapHost, Value: config.GetWhatapHost()}
+}
+
+func getWhatapPortEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec) corev1.EnvVar {
+	// target envs에서 port 오버라이드 검색: WHATAP_PORT, whatap.server.port, whatap_server_port, WHATAP_SERVER_PORT
+	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapPort, EnvJavaWhatapPort, EnvPythonWhatapPort, EnvNodeWhatapPort); ok {
+		return corev1.EnvVar{Name: EnvWhatapPort, Value: val}
+	}
+	return corev1.EnvVar{Name: EnvWhatapPort, Value: config.GetWhatapPort()}
 }
 
 func appendIfNotExists(volumes []corev1.Volume, newVol corev1.Volume) []corev1.Volume {

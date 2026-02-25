@@ -7,7 +7,7 @@ import (
 )
 
 // injectJavaEnvVars handles Java-specific environment variable injection
-func injectJavaEnvVars(container corev1.Container, cr monitoringv2alpha1.WhatapAgent, logger logr.Logger) []corev1.EnvVar {
+func injectJavaEnvVars(container corev1.Container, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, logger logr.Logger) []corev1.EnvVar {
 	agentOption := ValJavaAgentOptionPrefix + ValJavaAgentPath
 	envVars := injectJavaToolOptions(container.Env, agentOption, logger)
 
@@ -33,14 +33,14 @@ func injectJavaEnvVars(container corev1.Container, cr monitoringv2alpha1.WhatapA
 		}
 	}
 
-	// Java 전용 환경변수 추가 (CR 기반)
-	licenseEnv := getWhatapLicenseEnvVar(cr)
+	// Java 전용 환경변수 추가 (CR 기반, target envs 오버라이드 지원)
+	licenseEnv := getWhatapLicenseEnvVar(cr, target)
 	licenseEnv.Name = EnvJavaLicense // Java agent expects "license" env var name
 
-	hostEnv := getWhatapHostEnvVar(cr)
+	hostEnv := getWhatapHostEnvVar(cr, target)
 	hostEnv.Name = EnvJavaWhatapHost // Java agent expects "whatap.server.host" env var name
 
-	portEnv := getWhatapPortEnvVar(cr)
+	portEnv := getWhatapPortEnvVar(cr, target)
 	portEnv.Name = EnvJavaWhatapPort
 
 	javaEnvVars := []corev1.EnvVar{
