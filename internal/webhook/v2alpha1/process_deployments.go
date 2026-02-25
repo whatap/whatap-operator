@@ -58,9 +58,9 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 
 		// Prepare environment variables for Python InitContainer
 		envVars := []corev1.EnvVar{
-			getWhatapLicenseEnvVar(cr),
-			getWhatapHostEnvVar(cr),
-			getWhatapPortEnvVar(cr),
+			getWhatapLicenseEnvVar(cr, target),
+			getWhatapHostEnvVar(cr, target),
+			getWhatapPortEnvVar(cr, target),
 			{Name: EnvAppName, Value: appName},
 			{Name: EnvAppProcessName, Value: appProcessName},
 			{Name: EnvOkind, Value: OKIND},
@@ -83,9 +83,9 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 
 		// Java 설정을 위한 환경변수 준비
 		envVars := []corev1.EnvVar{
-			getWhatapLicenseEnvVar(cr),
-			getWhatapHostEnvVar(cr),
-			getWhatapPortEnvVar(cr),
+			getWhatapLicenseEnvVar(cr, target),
+			getWhatapHostEnvVar(cr, target),
+			getWhatapPortEnvVar(cr, target),
 		}
 
 		return []corev1.Container{
@@ -117,11 +117,11 @@ func injectLanguageSpecificEnvVars(container corev1.Container, target monitoring
 
 	switch lang {
 	case "java":
-		envs = injectJavaEnvVars(container, cr, logger)
+		envs = injectJavaEnvVars(container, target, cr, logger)
 	case "python":
 		envs = injectPythonEnvVars(container, target, cr, version, logger)
 	case "nodejs":
-		envs = injectNodejsEnvVars(container, cr)
+		envs = injectNodejsEnvVars(container, target, cr)
 	default:
 		// Other languages might just need basic Kubernetes envs + standard whatap envs if implemented
 		// For now, if not specialized, just return original + basic

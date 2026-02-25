@@ -6,15 +6,15 @@ import (
 )
 
 // injectNodejsEnvVars handles Node.js-specific environment variable injection
-func injectNodejsEnvVars(container corev1.Container, cr monitoringv2alpha1.WhatapAgent) []corev1.EnvVar {
-	// Node.js 전용 환경변수 추가 (CR 기반)
-	licenseEnv := getWhatapLicenseEnvVar(cr)
+func injectNodejsEnvVars(container corev1.Container, target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent) []corev1.EnvVar {
+	// Node.js 전용 환경변수 추가 (CR 기반, target envs 오버라이드 지원)
+	licenseEnv := getWhatapLicenseEnvVar(cr, target)
 	licenseEnv.Name = EnvNodeLicense // Node.js agent expects "WHATAP_LICENSE" env var name
 
-	hostEnv := getWhatapHostEnvVar(cr)
+	hostEnv := getWhatapHostEnvVar(cr, target)
 	hostEnv.Name = EnvNodeWhatapHost // Node.js agent expects "WHATAP_SERVER_HOST" env var name
 
-	portEnv := getWhatapPortEnvVar(cr)
+	portEnv := getWhatapPortEnvVar(cr, target)
 	portEnv.Name = EnvNodeWhatapPort // Node.js agent expects "WHATAP_SERVER_PORT" env var name
 
 	nodejsEnvVars := []corev1.EnvVar{
