@@ -1028,12 +1028,21 @@ func ensureDcgmExporterService(ctx context.Context, r *WhatapAgentReconciler, lo
 			}
 		}
 
+		// Determine the correct selector based on GPU deployment mode
+		gpuSpec := cr.Spec.Features.K8sAgent.GpuMonitoring
+		selectorName := "whatap-node-agent"
+		hasNodeSelector := len(gpuSpec.NodeSelector) > 0
+		hasAffinity := gpuSpec.Affinity != nil && gpuSpec.Affinity.NodeAffinity != nil && gpuSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
+		if hasNodeSelector || hasAffinity {
+			selectorName = "whatap-node-agent-gpu"
+		}
+
 		// Backup existing ClusterIP
 		clusterIP := svc.Spec.ClusterIP
 
 		svc.Spec = corev1.ServiceSpec{
 			Selector: map[string]string{
-				"name": "whatap-node-agent",
+				"name": selectorName,
 			},
 			Type: serviceType,
 			Ports: []corev1.ServicePort{{
