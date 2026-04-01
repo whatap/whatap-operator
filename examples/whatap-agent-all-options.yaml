@@ -213,6 +213,15 @@ spec:
       gpuMonitoring:
         enabled: true                          # GPU 모니터링 활성화
 
+        # dcgm-exporter 컨테이너 리소스 설정 (옵션)
+        # resources:
+        #   requests:
+        #     cpu: "100m"
+        #     memory: "128Mi"
+        #   limits:
+        #     cpu: "500m"
+        #     memory: "256Mi"
+
         # GPU 메트릭 스크래핑 간격 (기본값: 30s)
         # interval: "15s"
 

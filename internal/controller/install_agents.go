@@ -938,6 +938,7 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Env:             envVars,
 		Ports:           []corev1.ContainerPort{{Name: "metrics", ContainerPort: 9400, Protocol: corev1.ProtocolTCP}},
+		Resources:       gpuSpec.Resources,
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot: boolPtr(false),
 			RunAsUser:    int64Ptr(0),

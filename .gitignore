@@ -33,3 +33,4 @@ install
 whatap-*
 auto-instrumentation
 question
+.claude/worktrees
