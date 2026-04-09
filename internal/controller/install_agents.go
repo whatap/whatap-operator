@@ -563,7 +563,7 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 	return nil
 }
 
-func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, cr *monitoringv2alpha1.WhatapAgent, dsName string) appsv1.DaemonSetSpec {
+func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, cr *monitoringv2alpha1.WhatapAgent, dsName string, includeDcgm bool) appsv1.DaemonSetSpec {
 	// Get the node agent component spec for easier access
 	nodeSpec := cr.Spec.Features.K8sAgent.NodeAgent
 
@@ -578,7 +578,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 
 	// Create base labels and merge with custom labels if provided
 	labels := map[string]string{"name": dsName}
-	if cr.Spec.Features.K8sAgent.GpuMonitoring.Enabled {
+	if includeDcgm {
 		labels["whatap-gpu"] = "true"
 	}
 	if nodeSpec.PodLabels != nil {
@@ -1029,21 +1029,12 @@ func ensureDcgmExporterService(ctx context.Context, r *WhatapAgentReconciler, lo
 			}
 		}
 
-		// Determine the correct selector based on GPU deployment mode
-		gpuSpec := cr.Spec.Features.K8sAgent.GpuMonitoring
-		selectorName := "whatap-node-agent"
-		hasNodeSelector := len(gpuSpec.NodeSelector) > 0
-		hasAffinity := gpuSpec.Affinity != nil && gpuSpec.Affinity.NodeAffinity != nil && gpuSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
-		if hasNodeSelector || hasAffinity {
-			selectorName = "whatap-node-agent-gpu"
-		}
-
 		// Backup existing ClusterIP
 		clusterIP := svc.Spec.ClusterIP
 
 		svc.Spec = corev1.ServiceSpec{
 			Selector: map[string]string{
-				"name": selectorName,
+				"whatap-gpu": "true",
 			},
 			Type: serviceType,
 			Ports: []corev1.ServicePort{{
@@ -2508,7 +2499,7 @@ func reconcileNodeAgentDaemonSet(ctx context.Context, r *WhatapAgentReconciler, 
 			return err
 		}
 
-		newSpec := getNodeAgentDaemonSetSpec(img, resources, cr, name)
+		newSpec := getNodeAgentDaemonSetSpec(img, resources, cr, name, includeDcgm)
 
 		// Apply NodeSelector override
 		if nodeSelector != nil {
