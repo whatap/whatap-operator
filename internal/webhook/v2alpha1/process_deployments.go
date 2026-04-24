@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitoringv2alpha1.WhatapAgent, lang, version string, logger logr.Logger) []corev1.Container {
@@ -50,6 +51,21 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 		}
 	}
 
+	// Resolve resource requirements: Target > Instrumentation > default
+	// 기본값으로 limits만 설정하여 ResourceQuota가 걸린 namespace에서도 Pod 생성이 가능하도록 함
+	defaultResources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("200m"),
+			corev1.ResourceMemory: resource.MustParse("256Mi"),
+		},
+	}
+	resources := defaultResources
+	if target.InitContainerResources != nil {
+		resources = *target.InitContainerResources
+	} else if cr.Spec.Features.Apm.Instrumentation.InitContainerResources != nil {
+		resources = *cr.Spec.Features.Apm.Instrumentation.InitContainerResources
+	}
+
 	if lang == "python" {
 		logger.Info("Using Python APM bootstrap init container with new structure", "version", version)
 
@@ -74,6 +90,7 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 				Env:             envVars,
 				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 				SecurityContext: securityContext,
+				Resources:       resources,
 			},
 		}
 	}
@@ -96,6 +113,7 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 				Env:             envVars,
 				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 				SecurityContext: securityContext,
+				Resources:       resources,
 			},
 		}
 	}
@@ -108,6 +126,7 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 			ImagePullPolicy: corev1.PullAlways,
 			VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 			SecurityContext: securityContext,
+			Resources:       resources,
 		},
 	}
 }

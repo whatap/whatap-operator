@@ -496,6 +496,10 @@ type InstrumentationSpec struct {
 	// Controls security context of injected initContainers. If unset, defaults apply.
 	// +optional
 	InitContainerSecurity *InitContainerSecuritySpec `json:"initContainerSecurity,omitempty"`
+	// Controls resource requirements (requests/limits) of injected initContainers.
+	// Can be overridden per-target. If unset, no resource requirements are applied.
+	// +optional
+	InitContainerResources *corev1.ResourceRequirements `json:"initContainerResources,omitempty"`
 	// +optional
 	Targets []TargetSpec `json:"targets,omitempty"`
 }
@@ -527,6 +531,9 @@ type TargetSpec struct {
 	// Controls security context of the injected initContainer for this target (overrides instrumentation-level settings)
 	// +optional
 	InitContainerSecurity *InitContainerSecuritySpec `json:"initContainerSecurity,omitempty"`
+	// Controls resource requirements (requests/limits) of the injected initContainer for this target (overrides instrumentation-level settings)
+	// +optional
+	InitContainerResources *corev1.ResourceRequirements `json:"initContainerResources,omitempty"`
 	// ImagePullSecrets defines image pull secrets to use for pulling the target's APM initContainer image (overrides/extends global)
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`

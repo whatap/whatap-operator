@@ -186,6 +186,7 @@ func (in *GpuMonitoringSpec) DeepCopyInto(out *GpuMonitoringSpec) {
 		*out = new(GpuMonitoringServiceSpec)
 		**out = **in
 	}
+	in.Resources.DeepCopyInto(&out.Resources)
 	if in.Envs != nil {
 		in, out := &in.Envs, &out.Envs
 		*out = make([]v1.EnvVar, len(*in))
@@ -262,6 +263,11 @@ func (in *InstrumentationSpec) DeepCopyInto(out *InstrumentationSpec) {
 	if in.InitContainerSecurity != nil {
 		in, out := &in.InitContainerSecurity, &out.InitContainerSecurity
 		*out = new(InitContainerSecuritySpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.InitContainerResources != nil {
+		in, out := &in.InitContainerResources, &out.InitContainerResources
+		*out = new(v1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.Targets != nil {
@@ -832,6 +838,11 @@ func (in *TargetSpec) DeepCopyInto(out *TargetSpec) {
 	if in.InitContainerSecurity != nil {
 		in, out := &in.InitContainerSecurity, &out.InitContainerSecurity
 		*out = new(InitContainerSecuritySpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.InitContainerResources != nil {
+		in, out := &in.InitContainerResources, &out.InitContainerResources
+		*out = new(v1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.ImagePullSecrets != nil {
