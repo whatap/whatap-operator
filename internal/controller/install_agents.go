@@ -912,6 +912,20 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 		)
 	}
 
+	// If Devices is set, configure which GPU entities to monitor (f=flex, g=physical GPU, i=MIG instance)
+	if gpuSpec.Devices != "" && gpuSpec.Devices != "f" {
+		defaultEnvVars = append(defaultEnvVars,
+			corev1.EnvVar{Name: "DCGM_EXPORTER_DEVICES_STR", Value: gpuSpec.Devices},
+		)
+	}
+
+	// If RemoteHostEngineInfo is set, connect to a remote DCGM host engine
+	if gpuSpec.RemoteHostEngineInfo != "" {
+		defaultEnvVars = append(defaultEnvVars,
+			corev1.EnvVar{Name: "DCGM_REMOTE_HOSTENGINE_INFO", Value: gpuSpec.RemoteHostEngineInfo},
+		)
+	}
+
 	envVars := make([]corev1.EnvVar, len(defaultEnvVars))
 	copy(envVars, defaultEnvVars)
 

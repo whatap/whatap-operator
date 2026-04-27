@@ -257,6 +257,16 @@ spec:
         # (옵션) GPU 메트릭에 'cluster' 라벨 추가 (값: 클러스터 이름)
         # clusterName: "my-k8s-cluster"
 
+        # (옵션) 모니터링할 GPU 엔티티 유형 선택
+        # "f" (기본값) = MIG 비활성화 시 물리 GPU, MIG 활성화 시 GPU Instance 자동 선택
+        # "g" = 물리 GPU만 모니터링
+        # "i" = MIG GPU Instance만 모니터링
+        # devices: "f"
+
+        # (옵션) 원격 DCGM 호스트 엔진 주소 (<HOST>:<PORT> 형식)
+        # 설정 시 내장 호스트 엔진 대신 원격 호스트 엔진에 연결
+        # remoteHostEngineInfo: "localhost:5555"
+
         # GPU 메트릭에 대한 MetricRelabelConfigs (옵션)
         # metricRelabelConfigs:
         #   - source_labels: ["__name__"]

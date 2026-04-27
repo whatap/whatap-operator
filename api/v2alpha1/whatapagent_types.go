@@ -450,6 +450,17 @@ type GpuMonitoringSpec struct {
 	// ClusterName specifies the cluster name to be added as a label to the GPU metrics.
 	// +optional
 	ClusterName string `json:"clusterName,omitempty"`
+	// Devices specifies which GPU entities to monitor.
+	// Possible values: "f" (flex, default), "g" (physical GPU only), "i" (MIG GPU Instance only)
+	// +kubebuilder:validation:Enum=f;g;i
+	// +kubebuilder:default="f"
+	// +optional
+	Devices string `json:"devices,omitempty"`
+	// RemoteHostEngineInfo specifies the remote DCGM host engine address in <HOST>:<PORT> format.
+	// When set, dcgm-exporter connects to a remote host engine instead of using the embedded one.
+	// Example: "localhost:5555"
+	// +optional
+	RemoteHostEngineInfo string `json:"remoteHostEngineInfo,omitempty"`
 }
 
 // GpuMonitoringServiceSpec defines service configuration for GPU monitoring
