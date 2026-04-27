@@ -919,8 +919,17 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 		)
 	}
 
-	// If RemoteHostEngineInfo is set, connect to a remote DCGM host engine
-	if gpuSpec.RemoteHostEngineInfo != "" {
+	// If HostEngine is enabled, auto-set remoteHostEngineInfo to connect to the sidecar
+	hostEnginePort := int32(5555)
+	if gpuSpec.HostEngine != nil && gpuSpec.HostEngine.Enabled {
+		if gpuSpec.HostEngine.Port != 0 {
+			hostEnginePort = gpuSpec.HostEngine.Port
+		}
+		defaultEnvVars = append(defaultEnvVars,
+			corev1.EnvVar{Name: "DCGM_REMOTE_HOSTENGINE_INFO", Value: fmt.Sprintf("localhost:%d", hostEnginePort)},
+		)
+	} else if gpuSpec.RemoteHostEngineInfo != "" {
+		// If RemoteHostEngineInfo is set manually, connect to a remote DCGM host engine
 		defaultEnvVars = append(defaultEnvVars,
 			corev1.EnvVar{Name: "DCGM_REMOTE_HOSTENGINE_INFO", Value: gpuSpec.RemoteHostEngineInfo},
 		)
@@ -966,6 +975,42 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 		},
 	}
 	podSpec.Containers = append(podSpec.Containers, dcgmContainer)
+
+	// Add DCGM host engine sidecar container if enabled
+	if gpuSpec.HostEngine != nil && gpuSpec.HostEngine.Enabled {
+		hostEngineImage := "nvidia/dcgm:4.4.1-2-ubuntu22.04"
+		if gpuSpec.HostEngine.CustomImageFullName != "" {
+			hostEngineImage = gpuSpec.HostEngine.CustomImageFullName
+		}
+
+		hostEngineContainer := corev1.Container{
+			Name:            "dcgm-hostengine",
+			Image:           hostEngineImage,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Ports:           []corev1.ContainerPort{{Name: "he", ContainerPort: hostEnginePort, HostPort: hostEnginePort, Protocol: corev1.ProtocolTCP}},
+			Resources:       gpuSpec.HostEngine.Resources,
+			SecurityContext: &corev1.SecurityContext{
+				RunAsNonRoot:             boolPtr(false),
+				RunAsUser:                int64Ptr(0),
+				AllowPrivilegeEscalation: boolPtr(true),
+				Capabilities: &corev1.Capabilities{
+					Add: []corev1.Capability{"SYS_ADMIN"},
+				},
+			},
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler:        corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(hostEnginePort)}},
+				InitialDelaySeconds: 5,
+				PeriodSeconds:       10,
+			},
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler:        corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(hostEnginePort)}},
+				InitialDelaySeconds: 3,
+				PeriodSeconds:       5,
+			},
+		}
+		podSpec.Containers = append(podSpec.Containers, hostEngineContainer)
+	}
+
 	podSpec.Volumes = append(podSpec.Volumes,
 		corev1.Volume{
 			Name: "pod-gpu-resources",

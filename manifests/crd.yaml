@@ -1602,6 +1602,83 @@ spec:
                               When set, dcgm-exporter connects to a remote host engine instead of using the embedded one.
                               Example: "localhost:5555"
                             type: string
+                          hostEngine:
+                            description: |-
+                              HostEngine configures a standalone DCGM host engine sidecar container.
+                              When enabled, a separate nv-hostengine container is deployed alongside dcgm-exporter,
+                              and dcgm-exporter automatically connects to it via remoteHostEngineInfo.
+                              This is required when running multiple dcgm-exporter instances (e.g., -d g and -d i simultaneously).
+                            properties:
+                              enabled:
+                                default: false
+                                description: Enabled controls whether to deploy a
+                                  standalone DCGM host engine container
+                                type: boolean
+                              customImageFullName:
+                                description: |-
+                                  CustomImageFullName allows specifying a custom DCGM host engine image
+                                  If not provided, the default nvcr.io/nvidia/cloud-native/dcgm image will be used
+                                type: string
+                              port:
+                                default: 5555
+                                description: Port specifies the port for the host
+                                  engine to listen on
+                                format: int32
+                                type: integer
+                              resources:
+                                description: Resources defines the resource requirements
+                                  for the host engine container
+                                properties:
+                                  claims:
+                                    description: |-
+                                      Claims lists the names of resources, defined in spec.resourceClaims,
+                                      that are used by this container.
+                                    items:
+                                      description: ResourceClaim references one entry
+                                        in PodSpec.ResourceClaims.
+                                      properties:
+                                        name:
+                                          description: Name must match the name of
+                                            one entry in pod.spec.resourceClaims of
+                                            the Pod where this field is used.
+                                          type: string
+                                        request:
+                                          description: Request is the name chosen for
+                                            a request in the referenced claim.
+                                          type: string
+                                      required:
+                                      - name
+                                      type: object
+                                    type: array
+                                    x-kubernetes-list-map-keys:
+                                    - name
+                                    x-kubernetes-list-type: map
+                                  limits:
+                                    additionalProperties:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    description: |-
+                                      Limits describes the maximum amount of compute resources allowed.
+                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                    type: object
+                                  requests:
+                                    additionalProperties:
+                                      anyOf:
+                                      - type: integer
+                                      - type: string
+                                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                      x-kubernetes-int-or-string: true
+                                    description: |-
+                                      Requests describes the minimum amount of compute resources required.
+                                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                    type: object
+                                type: object
+                            required:
+                            - enabled
+                            type: object
                           resources:
                             description: Resources defines the resource requirements
                               (requests/limits) for the dcgm-exporter container

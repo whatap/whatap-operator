@@ -461,6 +461,30 @@ type GpuMonitoringSpec struct {
 	// Example: "localhost:5555"
 	// +optional
 	RemoteHostEngineInfo string `json:"remoteHostEngineInfo,omitempty"`
+	// HostEngine configures a standalone DCGM host engine sidecar container.
+	// When enabled, a separate nv-hostengine container is deployed alongside dcgm-exporter,
+	// and dcgm-exporter automatically connects to it via remoteHostEngineInfo.
+	// This is required when running multiple dcgm-exporter instances (e.g., -d g and -d i simultaneously).
+	// +optional
+	HostEngine *DcgmHostEngineSpec `json:"hostEngine,omitempty"`
+}
+
+// DcgmHostEngineSpec defines the configuration for a standalone DCGM host engine sidecar
+type DcgmHostEngineSpec struct {
+	// Enabled controls whether to deploy a standalone DCGM host engine container
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled"`
+	// CustomImageFullName allows specifying a custom DCGM host engine image
+	// If not provided, the default nvcr.io/nvidia/cloud-native/dcgm image will be used
+	// +optional
+	CustomImageFullName string `json:"customImageFullName,omitempty"`
+	// Port specifies the port for the host engine to listen on
+	// +kubebuilder:default=5555
+	// +optional
+	Port int32 `json:"port,omitempty"`
+	// Resources defines the resource requirements for the host engine container
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // GpuMonitoringServiceSpec defines service configuration for GPU monitoring

@@ -267,6 +267,15 @@ spec:
         # 설정 시 내장 호스트 엔진 대신 원격 호스트 엔진에 연결
         # remoteHostEngineInfo: "localhost:5555"
 
+        # (옵션) 독립 DCGM 호스트 엔진 사이드카 컨테이너 설정
+        # 활성화 시 nv-hostengine 컨테이너가 dcgm-exporter와 함께 배포되며,
+        # dcgm-exporter는 자동으로 이 호스트 엔진에 연결됩니다.
+        # 물리 GPU + MIG GPU Instance 메트릭을 동시에 수집할 때 필요합니다.
+        # hostEngine:
+        #   enabled: true
+        #   # customImageFullName: "nvidia/dcgm:4.4.1-2-ubuntu22.04"
+        #   # port: 5555
+
         # GPU 메트릭에 대한 MetricRelabelConfigs (옵션)
         # metricRelabelConfigs:
         #   - source_labels: ["__name__"]
