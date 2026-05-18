@@ -40,7 +40,7 @@ func TestGetNodeAgentDaemonSetSpec_GpuLabel(t *testing.T) {
 			}
 
 			res := &corev1.ResourceRequirements{}
-			dsSpec := getNodeAgentDaemonSetSpec("test-image", res, cr, "whatap-node-agent")
+			dsSpec := getNodeAgentDaemonSetSpec("test-image", res, cr, "whatap-node-agent", tt.gpuEnabled)
 
 			labels := dsSpec.Template.ObjectMeta.Labels
 			val, ok := labels["whatap-gpu"]

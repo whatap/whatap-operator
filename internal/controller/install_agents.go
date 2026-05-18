@@ -2626,6 +2626,14 @@ func reconcileNodeAgentDaemonSet(ctx context.Context, r *WhatapAgentReconciler, 
 				newContainersMap[c.Name] = c
 			}
 
+			// Operator-managed container names: these should be removed when not in newSpec
+			// (as opposed to user-added sidecars which should always be preserved)
+			operatorManagedContainers := map[string]struct{}{
+				"dcgm-exporter":     {},
+				"dcgm-hostengine":   {},
+				"whatap-node-agent": {},
+			}
+
 			// Iterate over existing containers to preserve order and sidecars
 			for _, existingC := range ds.Spec.Template.Spec.Containers {
 				if newC, ok := newContainersMap[existingC.Name]; ok {
@@ -2637,8 +2645,11 @@ func reconcileNodeAgentDaemonSet(ctx context.Context, r *WhatapAgentReconciler, 
 					}
 					finalContainers = append(finalContainers, newC)
 					delete(newContainersMap, existingC.Name)
+				} else if _, managed := operatorManagedContainers[existingC.Name]; managed {
+					// Operator-managed container no longer in newSpec → remove it
+					logger.Info("Removing operator-managed container no longer in desired spec", "container", existingC.Name)
 				} else {
-					// Preserve sidecars
+					// Preserve user-added sidecars
 					finalContainers = append(finalContainers, existingC)
 				}
 			}

@@ -76,12 +76,15 @@ func (r *WhatapAgentReconciler) ensureWebhookTLSSecret(ctx context.Context, what
 
 func (r *WhatapAgentReconciler) cleanupMasterAgent(ctx context.Context) error {
 	logger := log.FromContext(ctx)
-	if err := r.Delete(ctx, &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-master-agent", Namespace: r.DefaultNamespace},
-	}); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to delete Master Agent Deployment")
-			return err
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment); err == nil {
+		if err := r.Delete(ctx, deployment); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "Failed to delete Master Agent Deployment")
+				return err
+			}
 		}
 	}
 	return nil
@@ -89,12 +92,15 @@ func (r *WhatapAgentReconciler) cleanupMasterAgent(ctx context.Context) error {
 
 func (r *WhatapAgentReconciler) cleanupNodeAgent(ctx context.Context) error {
 	logger := log.FromContext(ctx)
-	if err := r.Delete(ctx, &appsv1.DaemonSet{
+	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-node-agent", Namespace: r.DefaultNamespace},
-	}); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to delete Node Agent DaemonSet")
-			return err
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: ds.Name, Namespace: ds.Namespace}, ds); err == nil {
+		if err := r.Delete(ctx, ds); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "Failed to delete Node Agent DaemonSet")
+				return err
+			}
 		}
 	}
 	return nil
@@ -103,52 +109,67 @@ func (r *WhatapAgentReconciler) cleanupNodeAgent(ctx context.Context) error {
 func (r *WhatapAgentReconciler) cleanupOpenAgent(ctx context.Context) error {
 	logger := log.FromContext(ctx)
 	// Delete OpenAgent Deployment
-	if err := r.Delete(ctx, &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent", Namespace: r.DefaultNamespace},
-	}); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to delete OpenAgent Deployment")
-			return err
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment); err == nil {
+		if err := r.Delete(ctx, deployment); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "Failed to delete OpenAgent Deployment")
+				return err
+			}
 		}
 	}
 
 	// Delete OpenAgent ConfigMap
-	if err := r.Delete(ctx, &corev1.ConfigMap{
+	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-config", Namespace: r.DefaultNamespace},
-	}); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to delete OpenAgent ConfigMap")
-			return err
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, cm); err == nil {
+		if err := r.Delete(ctx, cm); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "Failed to delete OpenAgent ConfigMap")
+				return err
+			}
 		}
 	}
 
 	// Delete OpenAgent ServiceAccount
-	if err := r.Delete(ctx, &corev1.ServiceAccount{
+	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-sa", Namespace: r.DefaultNamespace},
-	}); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to delete OpenAgent ServiceAccount")
-			return err
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: sa.Name, Namespace: sa.Namespace}, sa); err == nil {
+		if err := r.Delete(ctx, sa); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "Failed to delete OpenAgent ServiceAccount")
+				return err
+			}
 		}
 	}
 
 	// Delete OpenAgent ClusterRole
-	if err := r.Delete(ctx, &rbacv1.ClusterRole{
+	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-role"},
-	}); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to delete OpenAgent ClusterRole")
-			return err
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: clusterRole.Name}, clusterRole); err == nil {
+		if err := r.Delete(ctx, clusterRole); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "Failed to delete OpenAgent ClusterRole")
+				return err
+			}
 		}
 	}
 
 	// Delete OpenAgent ClusterRoleBinding
-	if err := r.Delete(ctx, &rbacv1.ClusterRoleBinding{
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: "whatap-open-agent-role-binding"},
-	}); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			logger.Error(err, "Failed to delete OpenAgent ClusterRoleBinding")
-			return err
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: clusterRoleBinding.Name}, clusterRoleBinding); err == nil {
+		if err := r.Delete(ctx, clusterRoleBinding); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				logger.Error(err, "Failed to delete OpenAgent ClusterRoleBinding")
+				return err
+			}
 		}
 	}
 	return nil
