@@ -152,6 +152,13 @@ spec:
                                       - default
                                       - custom
                                       type: string
+                                    mountPath:
+                                      description: |-
+                                        MountPath overrides the directory where the custom config ConfigMap is
+                                        mounted inside the APM init container. Default: "/config-volume".
+                                        The referenced ConfigMap must contain a key "whatap.conf"; the init
+                                        container will copy "<mountPath>/whatap.conf" into the agent directory.
+                                      type: string
                                     pluginConfigMapRef:
                                       description: |-
                                         PluginConfigMapRef references a ConfigMap whose entries are agent plugin files.
@@ -166,6 +173,14 @@ spec:
                                       required:
                                       - name
                                       type: object
+                                    volumeName:
+                                      description: |-
+                                        VolumeName overrides the volume name used by the APM init container to mount
+                                        the custom config ConfigMap into the target Pod. Default: "config-volume".
+                                        Set this to a unique value if your Pod already defines a volume named
+                                        "config-volume" (which would otherwise cause a name collision and lead to
+                                        "cp: cannot stat '/config-volume/whatap.conf'" in the init container).
+                                      type: string
                                   type: object
                                 customImageFullName:
                                   description: |-

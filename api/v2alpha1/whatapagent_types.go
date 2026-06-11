@@ -621,6 +621,19 @@ type ConfigSpec struct {
 	// +kubebuilder:validation:Enum=default;custom
 	Mode         string        `json:"mode,omitempty"`         // "default" or "custom"
 	ConfigMapRef *ConfigMapRef `json:"configMapRef,omitempty"` // custom 모드일 때만 사용
+	// VolumeName overrides the volume name used by the APM init container to mount
+	// the custom config ConfigMap into the target Pod. Default: "config-volume".
+	// Set this to a unique value if your Pod already defines a volume named
+	// "config-volume" (which would otherwise cause a name collision and lead to
+	// "cp: cannot stat '/config-volume/whatap.conf'" in the init container).
+	// +optional
+	VolumeName string `json:"volumeName,omitempty"`
+	// MountPath overrides the directory where the custom config ConfigMap is
+	// mounted inside the APM init container. Default: "/config-volume".
+	// The referenced ConfigMap must contain a key "whatap.conf"; the init
+	// container will copy "<mountPath>/whatap.conf" into the agent directory.
+	// +optional
+	MountPath string `json:"mountPath,omitempty"`
 	// PluginConfigMapRef references a ConfigMap whose entries are agent plugin files.
 	// Each entry (key=filename, value=file content) is copied into
 	// "$WHATAP_HOME/plugin/" by the APM init container (e.g. TraceHelperEnd.x).
