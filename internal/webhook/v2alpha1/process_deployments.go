@@ -2,6 +2,7 @@ package v2alpha1
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
@@ -198,27 +199,128 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 	// 1️⃣ InitContainer - 에이전트 복사
 	initContainers := createAgentInitContainers(target, cr, lang, version, logger)
 
-	//Merge ConfigMap copy into agent init container (avoid separate alpine init)
-	if target.Config.Mode == "custom" && target.Config.ConfigMapRef != nil {
-		// Add ConfigMap volume to PodSpec
-		podSpec.Volumes = appendIfNotExists(podSpec.Volumes, corev1.Volume{
-			Name: "config-volume",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: target.Config.ConfigMapRef.Name,
+	// Merge custom-config and/or plugin file copies into the agent init container
+	// (avoids spawning a separate alpine init container). Both inputs are optional and
+	// may be combined. The init command runs in order:
+	//   1) copy custom whatap.conf into $WHATAP_HOME   (pre-init)
+	//   2) the agent image's own /init.sh              (lays down the agent files)
+	//   3) copy plugin files into $WHATAP_HOME/plugin/ (post-init, so they are not
+	//      clobbered by the agent layout produced in step 2)
+	if (target.Config.Mode == "custom" && target.Config.ConfigMapRef != nil) || target.Config.PluginConfigMapRef != nil {
+		var preInitSteps, postInitSteps []string
+
+		// volumeExists reports whether the Pod already defines a volume with the
+		// given name. We use this to avoid colliding with a user-defined volume:
+		// silently reusing the name would mount the wrong source and make
+		// whatap.conf / plugin files missing in the init container.
+		volumeExists := func(name string) bool {
+			for _, v := range podSpec.Volumes {
+				if v.Name == name {
+					return true
+				}
+			}
+			return false
+		}
+
+		// 1) Custom whatap.conf via ConfigMap (expects key "whatap.conf").
+		//    Volume name / mount path default to "config-volume" / "/config-volume"
+		//    but can be overridden via the CR to avoid collisions with a Pod that
+		//    already defines a volume of the same name.
+		if target.Config.Mode == "custom" && target.Config.ConfigMapRef != nil {
+			volName := target.Config.VolumeName
+			if volName == "" {
+				volName = "config-volume"
+			}
+			mountPath := target.Config.MountPath
+			if mountPath == "" {
+				mountPath = "/config-volume"
+			}
+			if volumeExists(volName) {
+				// Do NOT silently skip-and-reuse: log a clear error so operators can
+				// rename their volume or set config.volumeName to a unique value.
+				logger.Error(nil,
+					"APM custom-config volume name collides with an existing Pod volume; "+
+						"set spec.features.apm.instrumentation.targets[].config.volumeName "+
+						"(and optionally mountPath) to a unique value to enable custom config injection",
+					"volumeName", volName,
+					"target", target.Name,
+					"configMap", target.Config.ConfigMapRef.Name,
+				)
+			} else {
+				podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+					Name: volName,
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: target.Config.ConfigMapRef.Name,
+							},
+						},
 					},
-				},
-			},
-		})
-		// Ensure the first init container copies the config then runs its default init script
-		if len(initContainers) > 0 {
-			initContainers[0].VolumeMounts = append(initContainers[0].VolumeMounts, corev1.VolumeMount{
-				Name:      "config-volume",
-				MountPath: "/config-volume",
-			})
+				})
+				if len(initContainers) > 0 {
+					initContainers[0].VolumeMounts = append(initContainers[0].VolumeMounts, corev1.VolumeMount{
+						Name:      volName,
+						MountPath: mountPath,
+					})
+				}
+				preInitSteps = append(preInitSteps,
+					fmt.Sprintf("cp %s/whatap.conf %s/", mountPath, MountPathWhatapAgent),
+					fmt.Sprintf("chmod 644 %s/whatap.conf", MountPathWhatapAgent),
+				)
+			}
+		}
+
+		// 2) Agent plugin files via ConfigMap. Every entry is copied into
+		//    $WHATAP_HOME/plugin/ (e.g. TraceHelperEnd.x).
+		if target.Config.PluginConfigMapRef != nil {
+			const pluginVolume = "whatap-plugin-volume"
+			const pluginMountPath = "/whatap-plugin"
+			pluginDir := MountPathWhatapAgent + "/plugin"
+			if volumeExists(pluginVolume) {
+				logger.Error(nil,
+					"APM plugin volume name collides with an existing Pod volume; "+
+						"rename the conflicting volume to enable plugin injection",
+					"volumeName", pluginVolume,
+					"target", target.Name,
+					"configMap", target.Config.PluginConfigMapRef.Name,
+				)
+			} else {
+				podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+					Name: pluginVolume,
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: target.Config.PluginConfigMapRef.Name,
+							},
+						},
+					},
+				})
+				if len(initContainers) > 0 {
+					initContainers[0].VolumeMounts = append(initContainers[0].VolumeMounts, corev1.VolumeMount{
+						Name:      pluginVolume,
+						MountPath: pluginMountPath,
+					})
+				}
+				postInitSteps = append(postInitSteps,
+					fmt.Sprintf("mkdir -p %s", pluginDir),
+					// -L dereferences the ConfigMap mount's ..data symlinks so real file
+					// content is copied. Guarded with "|| true" so an empty/partial
+					// ConfigMap does not block the Pod from starting.
+					fmt.Sprintf("cp -L %s/* %s/ 2>/dev/null || true", pluginMountPath, pluginDir),
+					fmt.Sprintf("chmod 644 %s/* 2>/dev/null || true", pluginDir),
+				)
+			}
+		}
+
+		// Assemble the init container command: pre-init copies → agent /init.sh → post-init copies.
+		// Only override the init command when we actually have copy steps; on a pure
+		// collision (nothing injected) the init container keeps its default command.
+		if len(initContainers) > 0 && (len(preInitSteps) > 0 || len(postInitSteps) > 0) {
+			steps := append([]string{}, preInitSteps...)
+			steps = append(steps, "if [ -x /init.sh ]; then /init.sh; fi")
+			steps = append(steps, postInitSteps...)
 			initContainers[0].Command = []string{"sh", "-c"}
-			initContainers[0].Args = []string{fmt.Sprintf("cp /config-volume/whatap.conf %s/ && chmod 644 %s/whatap.conf && if [ -x /init.sh ]; then /init.sh; fi", MountPathWhatapAgent, MountPathWhatapAgent)}
+			initContainers[0].Args = []string{strings.Join(steps, " && ")}
 		}
 	}
 
