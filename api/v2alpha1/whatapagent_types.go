@@ -621,6 +621,14 @@ type ConfigSpec struct {
 	// +kubebuilder:validation:Enum=default;custom
 	Mode         string        `json:"mode,omitempty"`         // "default" or "custom"
 	ConfigMapRef *ConfigMapRef `json:"configMapRef,omitempty"` // custom 모드일 때만 사용
+	// PluginConfigMapRef references a ConfigMap whose entries are agent plugin files.
+	// Each entry (key=filename, value=file content) is copied into
+	// "$WHATAP_HOME/plugin/" by the APM init container (e.g. TraceHelperEnd.x).
+	// This is independent of Mode: it can be combined with a custom whatap.conf or
+	// used on its own. Plugin files are typically small text/script files; binary
+	// plugins can be supplied via the ConfigMap's binaryData.
+	// +optional
+	PluginConfigMapRef *ConfigMapRef `json:"pluginConfigMapRef,omitempty"`
 }
 
 type ConfigMapRef struct {

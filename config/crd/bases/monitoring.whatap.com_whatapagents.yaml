@@ -152,6 +152,20 @@ spec:
                                       - default
                                       - custom
                                       type: string
+                                    pluginConfigMapRef:
+                                      description: |-
+                                        PluginConfigMapRef references a ConfigMap whose entries are agent plugin files.
+                                        Each entry (key=filename, value=file content) is copied into
+                                        "$WHATAP_HOME/plugin/" by the APM init container (e.g. TraceHelperEnd.x).
+                                        This is independent of Mode: it can be combined with a custom whatap.conf or
+                                        used on its own. Plugin files are typically small text/script files; binary
+                                        plugins can be supplied via the ConfigMap's binaryData.
+                                      properties:
+                                        name:
+                                          type: string
+                                      required:
+                                      - name
+                                      type: object
                                   type: object
                                 customImageFullName:
                                   description: |-
