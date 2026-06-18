@@ -46,8 +46,21 @@ esac
 export IMG="${REGISTRY}/whatap-operator:${VERSION}"
 export IMG_LATEST="${REGISTRY}/whatap-operator:latest"
 
+# Decide whether to also tag/push 'latest'.
+# Dev/pre-release builds (e.g. 3.0.7-dev, 1.7.15-rc1) must NOT overwrite 'latest'.
+TAG_LATEST=true
+case $VERSION in
+  *-dev*|*-rc*|*-alpha*|*-beta*|*-snapshot*|*-SNAPSHOT*)
+    TAG_LATEST=false
+    ;;
+esac
+
 echo "🚀 Building for $ARCH_MSG"
-echo "🚀 Building and pushing both tags: ${IMG} and ${IMG_LATEST}"
+if [ "$TAG_LATEST" = true ]; then
+  echo "🚀 Building and pushing both tags: ${IMG} and ${IMG_LATEST}"
+else
+  echo "🚀 Dev/pre-release build detected — pushing only: ${IMG} (skipping 'latest')"
+fi
 
 # Create a temporary Dockerfile.cross for multi-platform build
 cat > Dockerfile.cross << 'EOF'
@@ -96,13 +109,18 @@ if ! docker buildx inspect whatap-operator-builder &>/dev/null; then
 fi
 docker buildx use whatap-operator-builder
 
-# Build with both tags in a single command
+# Assemble tag arguments (always version; 'latest' only for release builds)
+TAG_ARGS=(--tag "${IMG}")
+if [ "$TAG_LATEST" = true ]; then
+  TAG_ARGS+=(--tag "${IMG_LATEST}")
+fi
+
+# Build with the selected tags in a single command
 docker buildx build --push \
   --platform=${PLATFORMS} \
   --build-arg VERSION=${VERSION} \
   --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  --tag ${IMG} \
-  --tag ${IMG_LATEST} \
+  "${TAG_ARGS[@]}" \
   -f Dockerfile.cross .
 
 # Clean up
