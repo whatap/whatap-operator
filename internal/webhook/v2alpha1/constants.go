@@ -46,7 +46,7 @@ const (
 	EnvNodejsAgentPath  = "WHATAP_NODEJS_AGENT_PATH"
 	EnvNodejsOptions    = "NODE_OPTIONS"
 	EnvNodejsPath       = "NODE_PATH"
-	ValNodejsAgentPath  = "/whatap-agent/node_modules/whatap"
+	ValNodejsAgentPath  = "/whatap-agent/node_modules/whatap/agent/whatap_nodejs"
 	ValNodejsModules    = "/whatap-agent/node_modules"
 	ValNodejsRequire    = "-r whatap"
 
