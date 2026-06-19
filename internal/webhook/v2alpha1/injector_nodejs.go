@@ -78,7 +78,12 @@ func injectNodejsEnvVars(container corev1.Container, target monitoringv2alpha1.T
 		}
 	}
 
-	return append(container.Env, envVars...)
+	// 와탭 소유 연결/설정 ENV는 기존 동일 키가 있어도 operator 값으로 강제 override (KAZAA-641, Java/Python과 동일 패턴).
+	// app_name/NODE_PATH/NODE_OPTIONS/agent path 등은 기존/사용자 값을 보존한다.
+	return combineEnvVars(container.Env, envVars, func(name string) bool {
+		_, ok := nodejsForceEnvNames[name]
+		return ok
+	})
 }
 
 // NODEJS_PATH 안전하게 주입 (Python의 injectPythonPath와 동일 패턴)
