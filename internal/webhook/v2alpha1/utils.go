@@ -78,6 +78,103 @@ func mergeEnvVars(base []corev1.EnvVar, extras []corev1.EnvVar) []corev1.EnvVar 
 	return base
 }
 
+// upsertEnvVars overlays overrides onto base BY NAME, forcing the override value to win.
+//
+// For every override entry, ALL pre-existing entries in base with the same name are
+// dropped and the override is appended once. This matters because Kubernetes resolves a
+// duplicated env name to its FIRST occurrence: if another mutating webhook / 3rd-party APM
+// injected e.g. "whatap.server.host" earlier in container.Env, a plain append (operator
+// value last) would be shadowed and the agent would fall back to 127.0.0.1. mergeEnvVars
+// (existing-wins) is therefore insufficient for whatap-owned keys — use this instead.
+//
+// A new slice is returned; base is not mutated. Use only for keys the operator owns and
+// must control (license / server host+port / micro / downward-API metadata). Keys where a
+// user value should be preserved (e.g. PYTHONPATH, agent paths, app name) must keep
+// mergeEnvVars / append semantics.
+func upsertEnvVars(base []corev1.EnvVar, overrides []corev1.EnvVar) []corev1.EnvVar {
+	overrideNames := make(map[string]struct{}, len(overrides))
+	for _, o := range overrides {
+		if o.Name != "" {
+			overrideNames[o.Name] = struct{}{}
+		}
+	}
+	result := make([]corev1.EnvVar, 0, len(base)+len(overrides))
+	for _, e := range base {
+		if _, ok := overrideNames[e.Name]; ok {
+			continue // drop stale duplicate; operator value re-appended below
+		}
+		result = append(result, e)
+	}
+	for _, o := range overrides {
+		if o.Name == "" {
+			continue
+		}
+		result = append(result, o)
+	}
+	return result
+}
+
+// combineEnvVars merges incoming env vars onto base with a per-name policy:
+//   - if force(name) is true  -> upsert semantics: incoming value REPLACES any pre-existing
+//     duplicate in base (operator/CR value wins).
+//   - if force(name) is false -> merge semantics: incoming value is added only if the name is
+//     not already present (a pre-existing/user value is preserved).
+//
+// This lets a single pass force whatap-owned connection keys while preserving keys the
+// operator only augments (PYTHONPATH/NODE_PATH/NODE_OPTIONS) or that the user owns (app name).
+func combineEnvVars(base []corev1.EnvVar, incoming []corev1.EnvVar, force func(name string) bool) []corev1.EnvVar {
+	var forced, additive []corev1.EnvVar
+	for _, e := range incoming {
+		if e.Name != "" && force(e.Name) {
+			forced = append(forced, e)
+		} else {
+			additive = append(additive, e)
+		}
+	}
+	return mergeEnvVars(upsertEnvVars(base, forced), additive)
+}
+
+// toNameSet builds a set from the given names, deduping aliases (e.g. EnvJavaLicense and
+// EnvPythonLicense both resolve to "license").
+func toNameSet(names ...string) map[string]struct{} {
+	set := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		set[n] = struct{}{}
+	}
+	return set
+}
+
+// pythonForceEnvNames / nodejsForceEnvNames are the whatap-owned connection/config keys that
+// the operator must force onto the pod even if another webhook injected a duplicate earlier.
+// App-info keys (app_name/app_process_name/OKIND), search-path keys (PYTHONPATH/NODE_PATH/
+// NODE_OPTIONS) and the agent-path keys are intentionally NOT here: those preserve an
+// existing/user value (the operator only adds or prepends them).
+var (
+	pythonForceEnvNames = toNameSet(
+		EnvPythonLicense, EnvPythonWhatapHost, EnvPythonWhatapPort,
+		EnvWhatapHome, EnvWhatapMicroEnabled,
+		EnvNodeIP, EnvNodeName, EnvPodName,
+	)
+	nodejsForceEnvNames = toNameSet(
+		EnvNodejsLicense, EnvNodejsWhatapHost, EnvNodejsWhatapPort,
+		EnvWhatapHome, EnvWhatapMicroEnabled,
+		EnvNodeIP, EnvNodeName, EnvPodName,
+	)
+)
+
+// operatorManagedEnvNames is every env name the operator itself produces. User CR target.Envs
+// values are allowed to override pre-existing pod duplicates for any OTHER name (e.g. a stale
+// whatap.name another webhook left behind), but for these managed names the operator's own
+// value is authoritative — the supported override path for them is getWhatap*EnvVar.
+var operatorManagedEnvNames = toNameSet(
+	EnvWhatapLicense, EnvWhatapHost, EnvWhatapPort,
+	EnvNodeIP, EnvNodeName, EnvPodName, EnvWhatapMicroEnabled,
+	EnvJavaLicense, EnvJavaWhatapHost, EnvJavaWhatapPort, EnvJavaAgentPath, EnvJavaToolOptions,
+	EnvPythonLicense, EnvPythonWhatapHost, EnvPythonWhatapPort, EnvPythonAgentPath, EnvWhatapHome, EnvPythonPath,
+	EnvAppName, EnvAppProcessName, EnvOkind,
+	EnvNodejsLicense, EnvNodejsWhatapHost, EnvNodejsWhatapPort, EnvNodejsAgentPath, EnvNodejsOptions, EnvNodejsPath,
+)
+
 // matchesSelector checks if the given labels match the selector
 func matchesSelector(labels map[string]string, selector monitoringv2alpha1.PodSelector) bool {
 	// Check matchLabels

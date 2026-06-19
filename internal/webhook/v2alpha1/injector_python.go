@@ -78,7 +78,13 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 		}
 	}
 
-	return append(container.Env, envVars...)
+	// 와탭 소유 연결/설정 ENV(license, whatap_server_host/port, WHATAP_HOME, micro, downward-API)는
+	// 기존 container.Env에 동일 키가 있어도 operator 값으로 강제 override (KAZAA-641, 단순 append는 k8s
+	// 중복 첫-값-우선 규칙에 무시됨). app_name/PYTHONPATH/agent path 등은 기존/사용자 값을 보존한다.
+	return combineEnvVars(container.Env, envVars, func(name string) bool {
+		_, ok := pythonForceEnvNames[name]
+		return ok
+	})
 }
 
 // PYTHONPATH 안전하게 주입 (OpenTelemetry 방식)

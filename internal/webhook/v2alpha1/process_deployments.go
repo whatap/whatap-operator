@@ -176,9 +176,14 @@ func injectLanguageSpecificEnvVars(container corev1.Container, target monitoring
 		// For now, if not specialized, just return original + basic
 		envs = container.Env
 	}
-	// Merge user-specified target envs without overriding existing ones
+	// 사용자가 CR(target.Envs)로 명시한 값은 파드에 이미 있던 충돌 값(예: 타 솔루션이 남긴 whatap.name)을
+	// override 한다(KAZAA-641). 단 operator가 직접 관리하는 키(연결정보/agent path/*_OPTIONS 등)는 operator
+	// 값이 우선이며, 그 키들의 정식 override 경로는 getWhatap*EnvVar(WHATAP_HOST 등)이다.
 	if len(target.Envs) > 0 {
-		envs = mergeEnvVars(envs, target.Envs)
+		envs = combineEnvVars(envs, target.Envs, func(name string) bool {
+			_, managed := operatorManagedEnvNames[name]
+			return !managed
+		})
 	}
 	return envs
 }

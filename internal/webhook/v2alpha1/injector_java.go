@@ -53,7 +53,11 @@ func injectJavaEnvVars(container corev1.Container, target monitoringv2alpha1.Tar
 		{Name: EnvPodName, ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
 	}
 
-	return append(envVars, javaEnvVars...)
+	// 와탭이 소유하는 연결/설정 ENV(license, whatap.server.host/port, micro, downward-API)는
+	// 기존 container.Env에 같은 키가 있어도(예: 타 솔루션 webhook이 먼저 주입한 값) operator 값으로 강제 override.
+	// 단순 append는 k8s 중복 규칙(첫 번째 값 우선)에 의해 무시되어 whatap.server.host가 127.0.0.1로 폴백한다(KAZAA-641).
+	// JAVA_TOOL_OPTIONS / WHATAP_JAVA_AGENT_PATH는 override 대상이 아니므로(append/preserve) envVars에 그대로 둔다.
+	return upsertEnvVars(envVars, javaEnvVars)
 }
 
 func injectJavaToolOptions(envVars []corev1.EnvVar, agentOption string, logger logr.Logger) []corev1.EnvVar {
