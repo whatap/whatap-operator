@@ -119,6 +119,35 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 		}
 	}
 
+	if lang == "nodejs" {
+		logger.Info("Using Node.js APM init container", "version", version)
+
+		// Get Node.js app configuration
+		appName, appProcessName, OKIND := getNodejsAppConfig(target.Envs)
+
+		// Prepare environment variables for Node.js InitContainer
+		envVars := []corev1.EnvVar{
+			getWhatapLicenseEnvVar(cr, target),
+			getWhatapHostEnvVar(cr, target),
+			getWhatapPortEnvVar(cr, target),
+			{Name: EnvAppName, Value: appName},
+			{Name: EnvAppProcessName, Value: appProcessName},
+			{Name: EnvOkind, Value: OKIND},
+		}
+
+		return []corev1.Container{
+			{
+				Name:            InitContainerName,
+				Image:           getAgentImage(target, lang, version),
+				ImagePullPolicy: corev1.PullAlways,
+				Env:             envVars,
+				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
+				SecurityContext: securityContext,
+				Resources:       resources,
+			},
+		}
+	}
+
 	// 기존 기타 언어용 InitContainer
 	return []corev1.Container{
 		{
@@ -141,7 +170,7 @@ func injectLanguageSpecificEnvVars(container corev1.Container, target monitoring
 	case "python":
 		envs = injectPythonEnvVars(container, target, cr, version, logger)
 	case "nodejs":
-		envs = injectNodejsEnvVars(container, target, cr)
+		envs = injectNodejsEnvVars(container, target, cr, version, logger)
 	default:
 		// Other languages might just need basic Kubernetes envs + standard whatap envs if implemented
 		// For now, if not specialized, just return original + basic

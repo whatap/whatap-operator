@@ -40,9 +40,15 @@ const (
 	ValPythonAgentPath = "/whatap-agent/whatap_python"
 
 	// Node.js Agent Constants
-	EnvNodeLicense    = "WHATAP_LICENSE"
-	EnvNodeWhatapHost = "WHATAP_SERVER_HOST"
-	EnvNodeWhatapPort = "WHATAP_SERVER_PORT"
+	EnvNodejsLicense    = "WHATAP_LICENSE"
+	EnvNodejsWhatapHost = "WHATAP_SERVER_HOST"
+	EnvNodejsWhatapPort = "WHATAP_SERVER_PORT"
+	EnvNodejsAgentPath  = "WHATAP_NODEJS_AGENT_PATH"
+	EnvNodejsOptions    = "NODE_OPTIONS"
+	EnvNodejsPath       = "NODE_PATH"
+	ValNodejsAgentPath  = "/whatap-agent/node_modules/whatap/agent/whatap_nodejs"
+	ValNodejsModules    = "/whatap-agent/node_modules"
+	ValNodejsRequire    = "-r whatap"
 
 	// Init Container
 	InitContainerName     = "whatap-agent-init"

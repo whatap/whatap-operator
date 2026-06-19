@@ -34,7 +34,7 @@ func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoring
 
 func getWhatapHostEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec) corev1.EnvVar {
 	// target envs에서 host 오버라이드 검색: WHATAP_HOST, whatap.server.host, whatap_server_host, WHATAP_SERVER_HOST
-	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapHost, EnvJavaWhatapHost, EnvPythonWhatapHost, EnvNodeWhatapHost); ok {
+	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapHost, EnvJavaWhatapHost, EnvPythonWhatapHost, EnvNodejsWhatapHost); ok {
 		return corev1.EnvVar{Name: EnvWhatapHost, Value: val}
 	}
 	return corev1.EnvVar{Name: EnvWhatapHost, Value: config.GetWhatapHost()}
@@ -42,7 +42,7 @@ func getWhatapHostEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoringv2a
 
 func getWhatapPortEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec) corev1.EnvVar {
 	// target envs에서 port 오버라이드 검색: WHATAP_PORT, whatap.server.port, whatap_server_port, WHATAP_SERVER_PORT
-	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapPort, EnvJavaWhatapPort, EnvPythonWhatapPort, EnvNodeWhatapPort); ok {
+	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapPort, EnvJavaWhatapPort, EnvPythonWhatapPort, EnvNodejsWhatapPort); ok {
 		return corev1.EnvVar{Name: EnvWhatapPort, Value: val}
 	}
 	return corev1.EnvVar{Name: EnvWhatapPort, Value: config.GetWhatapPort()}
