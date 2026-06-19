@@ -87,7 +87,7 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 			{
 				Name:            InitContainerName,
 				Image:           getAgentImage(target, lang, version),
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				ImagePullPolicy: corev1.PullAlways,
 				Env:             envVars,
 				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 				SecurityContext: securityContext,
@@ -110,10 +110,11 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 			{
 				Name:            InitContainerName,
 				Image:           getAgentImage(target, lang, version),
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				ImagePullPolicy: corev1.PullAlways,
 				Env:             envVars,
 				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 				SecurityContext: securityContext,
+				Resources:       resources,
 			},
 		}
 	}
@@ -138,7 +139,7 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 			{
 				Name:            InitContainerName,
 				Image:           getAgentImage(target, lang, version),
-				ImagePullPolicy: corev1.PullIfNotPresent,
+				ImagePullPolicy: corev1.PullAlways,
 				Env:             envVars,
 				VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 				SecurityContext: securityContext,
@@ -152,7 +153,7 @@ func createAgentInitContainers(target monitoringv2alpha1.TargetSpec, cr monitori
 		{
 			Name:            InitContainerName,
 			Image:           getAgentImage(target, lang, version),
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullPolicy: corev1.PullAlways,
 			VolumeMounts:    []corev1.VolumeMount{baseVolumeMount},
 			SecurityContext: securityContext,
 			Resources:       resources,
