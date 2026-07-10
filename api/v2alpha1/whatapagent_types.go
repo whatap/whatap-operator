@@ -148,6 +148,9 @@ type OpenAgentEndpoint struct {
 	// BasicAuth defines the HTTP Basic Auth configuration for the endpoint
 	// +optional
 	BasicAuth *BasicAuthConfig `json:"basicAuth,omitempty"`
+	// Authorization defines the Authorization header (e.g. Bearer token) sent with scrape requests
+	// +optional
+	Authorization *AuthorizationConfig `json:"authorization,omitempty"`
 	// MetricRelabelConfigs defines the metric relabeling configurations for this endpoint
 	// +optional
 	MetricRelabelConfigs []MetricRelabelConfig `json:"metricRelabelConfigs,omitempty"`
@@ -179,6 +182,30 @@ type BasicAuthConfig struct {
 	// Password configuration via Kubernetes Secret
 	// +optional
 	Password *SecretKeySelector `json:"password,omitempty"`
+}
+
+// AuthorizationConfig configures the Authorization header sent with scrape
+// requests, e.g. a Bearer token required by the target exporter. The credential
+// sources are mutually exclusive; the agent uses the first non-empty of
+// Credentials, CredentialsEnv, CredentialsFile, CredentialsSecret.
+type AuthorizationConfig struct {
+	// Type is the Authorization scheme (default "Bearer")
+	// +optional
+	Type string `json:"type,omitempty"`
+	// Credentials is the inline credential value. Prefer CredentialsEnv,
+	// CredentialsFile or CredentialsSecret to keep secrets out of the CR.
+	// +optional
+	Credentials string `json:"credentials,omitempty"`
+	// CredentialsEnv reads the credential from the named environment variable
+	// present in the OpenAgent container (e.g. "OPENAGENT_SCRAPE_TOKEN")
+	// +optional
+	CredentialsEnv string `json:"credentialsEnv,omitempty"`
+	// CredentialsFile reads the credential from a file path inside the container
+	// +optional
+	CredentialsFile string `json:"credentialsFile,omitempty"`
+	// CredentialsSecret reads the credential from a Kubernetes Secret
+	// +optional
+	CredentialsSecret *SecretKeySelector `json:"credentialsSecret,omitempty"`
 }
 
 // TLSConfig defines the TLS configuration for an endpoint

@@ -70,6 +70,51 @@ func TestGenerateScrapeConfig_MultiCRD(t *testing.T) {
 	}
 }
 
+func TestGenerateScrapeConfig_Authorization(t *testing.T) {
+	cr := &monitoringv2alpha1.WhatapAgent{
+		Spec: monitoringv2alpha1.WhatapAgentSpec{
+			Features: monitoringv2alpha1.FeaturesSpec{
+				OpenAgent: monitoringv2alpha1.OpenAgentSpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	podMonitors := &monitoringv2alpha1.WhatapPodMonitorList{
+		Items: []monitoringv2alpha1.WhatapPodMonitor{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "auth-mon", Namespace: "ns-auth"},
+				Spec: monitoringv2alpha1.WhatapPodMonitorSpec{
+					Endpoints: []monitoringv2alpha1.OpenAgentEndpoint{
+						{
+							Port: "8080",
+							Path: "/metrics",
+							Authorization: &monitoringv2alpha1.AuthorizationConfig{
+								Type: "Bearer",
+								CredentialsSecret: &monitoringv2alpha1.SecretKeySelector{
+									Name:      "scrape-token",
+									Key:       "token",
+									Namespace: "ns-auth",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	serviceMonitors := &monitoringv2alpha1.WhatapServiceMonitorList{}
+
+	config := generateScrapeConfig(cr, "default", podMonitors, serviceMonitors)
+
+	for _, want := range []string{"authorization:", "type: Bearer", "credentialsSecret:", "name: scrape-token", "key: token"} {
+		if !strings.Contains(config, want) {
+			t.Errorf("Expected config to contain %q, got:\n%s", want, config)
+		}
+	}
+}
+
 func TestGenerateScrapeConfig_JobLabel(t *testing.T) {
 	cr := &monitoringv2alpha1.WhatapAgent{
 		Spec: monitoringv2alpha1.WhatapAgentSpec{
