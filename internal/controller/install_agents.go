@@ -1194,6 +1194,37 @@ func convertRelabelConfigs(configs []monitoringv2alpha1.MetricRelabelConfig) []i
 	return relabelConfigs
 }
 
+// buildAuthorizationMap renders an AuthorizationConfig into the map form used
+// in scrape_config.yaml. Returns nil when auth is nil. The credentialsSecret is
+// rendered as a reference ({name,key,namespace}); OpenAgent reads it at runtime
+// via the Kubernetes API, so no volume mount is required (same as basicAuth).
+func buildAuthorizationMap(auth *monitoringv2alpha1.AuthorizationConfig) map[string]interface{} {
+	if auth == nil {
+		return nil
+	}
+	m := make(map[string]interface{})
+	if auth.Type != "" {
+		m["type"] = auth.Type
+	}
+	if auth.Credentials != "" {
+		m["credentials"] = auth.Credentials
+	}
+	if auth.CredentialsEnv != "" {
+		m["credentialsEnv"] = auth.CredentialsEnv
+	}
+	if auth.CredentialsFile != "" {
+		m["credentialsFile"] = auth.CredentialsFile
+	}
+	if auth.CredentialsSecret != nil {
+		m["credentialsSecret"] = map[string]interface{}{
+			"name":      auth.CredentialsSecret.Name,
+			"key":       auth.CredentialsSecret.Key,
+			"namespace": auth.CredentialsSecret.Namespace,
+		}
+	}
+	return m
+}
+
 // Helper to convert Endpoints to interface{}
 func convertEndpoints(endpoints []monitoringv2alpha1.OpenAgentEndpoint) []interface{} {
 	result := make([]interface{}, 0)
@@ -1232,6 +1263,9 @@ func convertEndpoints(endpoints []monitoringv2alpha1.OpenAgentEndpoint) []interf
 				}
 			}
 			endpointMap["basicAuth"] = basicAuth
+		}
+		if auth := buildAuthorizationMap(endpoint.Authorization); auth != nil {
+			endpointMap["authorization"] = auth
 		}
 		if endpoint.TLSConfig != nil {
 			tlsConfig := make(map[string]interface{})
@@ -1425,6 +1459,11 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 						}
 					}
 					endpointMap["basicAuth"] = basicAuth
+				}
+
+				// Add Authorization (e.g. Bearer token) if present
+				if auth := buildAuthorizationMap(endpoint.Authorization); auth != nil {
+					endpointMap["authorization"] = auth
 				}
 
 				// Add TLS config if present

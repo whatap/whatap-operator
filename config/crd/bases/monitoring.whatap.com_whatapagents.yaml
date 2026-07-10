@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.1
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: whatapagents.monitoring.whatap.com
 spec:
   group: monitoring.whatap.com
@@ -7449,6 +7449,48 @@ spec:
                                     description: Address is the address to scrape
                                       metrics from (for StaticEndpoints)
                                     type: string
+                                  authorization:
+                                    description: Authorization defines the Authorization
+                                      header (e.g. Bearer token) sent with scrape
+                                      requests
+                                    properties:
+                                      credentials:
+                                        description: |-
+                                          Credentials is the inline credential value. Prefer CredentialsEnv,
+                                          CredentialsFile or CredentialsSecret to keep secrets out of the CR.
+                                        type: string
+                                      credentialsEnv:
+                                        description: |-
+                                          CredentialsEnv reads the credential from the named environment variable
+                                          present in the OpenAgent container (e.g. "OPENAGENT_SCRAPE_TOKEN")
+                                        type: string
+                                      credentialsFile:
+                                        description: CredentialsFile reads the credential
+                                          from a file path inside the container
+                                        type: string
+                                      credentialsSecret:
+                                        description: CredentialsSecret reads the credential
+                                          from a Kubernetes Secret
+                                        properties:
+                                          key:
+                                            description: Key within the secret
+                                            type: string
+                                          name:
+                                            description: Name of the secret
+                                            type: string
+                                          namespace:
+                                            description: Namespace of the secret (optional,
+                                              defaults to agent's namespace)
+                                            type: string
+                                        required:
+                                        - key
+                                        - name
+                                        type: object
+                                      type:
+                                        description: Type is the Authorization scheme
+                                          (default "Bearer")
+                                        type: string
+                                    type: object
                                   basicAuth:
                                     description: BasicAuth defines the HTTP Basic
                                       Auth configuration for the endpoint
