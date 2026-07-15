@@ -248,6 +248,10 @@ type MetricRelabelConfig struct {
 	// SourceLabels is the list of source labels to use in the relabeling
 	// +optional
 	SourceLabels []string `json:"source_labels,omitempty"`
+	// SourceLabelsCamel is the Prometheus Operator style key (sourceLabels).
+	// Accepted as a fallback when source_labels is not set.
+	// +optional
+	SourceLabelsCamel []string `json:"sourceLabels,omitempty"`
 	// Separator is the string between concatenated source labels (default: ";")
 	// +optional
 	Separator string `json:"separator,omitempty"`
@@ -260,12 +264,34 @@ type MetricRelabelConfig struct {
 	// TargetLabel is the label to set in the relabeling
 	// +optional
 	TargetLabel string `json:"target_label,omitempty"`
+	// TargetLabelCamel is the Prometheus Operator style key (targetLabel).
+	// Accepted as a fallback when target_label is not set.
+	// +optional
+	TargetLabelCamel string `json:"targetLabel,omitempty"`
 	// Replacement is the replacement value for the target label
 	// +optional
 	Replacement string `json:"replacement,omitempty"`
 	// Action is the relabeling action to perform
 	// +optional
 	Action string `json:"action,omitempty"`
+}
+
+// EffectiveSourceLabels returns source_labels, falling back to the
+// Prometheus Operator style sourceLabels key when source_labels is not set.
+func (rc *MetricRelabelConfig) EffectiveSourceLabels() []string {
+	if len(rc.SourceLabels) > 0 {
+		return rc.SourceLabels
+	}
+	return rc.SourceLabelsCamel
+}
+
+// EffectiveTargetLabel returns target_label, falling back to the
+// Prometheus Operator style targetLabel key when target_label is not set.
+func (rc *MetricRelabelConfig) EffectiveTargetLabel() string {
+	if rc.TargetLabel != "" {
+		return rc.TargetLabel
+	}
+	return rc.TargetLabelCamel
 }
 
 type K8sAgentSpec struct {

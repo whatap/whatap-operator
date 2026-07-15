@@ -1164,12 +1164,15 @@ func convertLabelSelector(selector metav1.LabelSelector) map[string]interface{} 
 }
 
 // Helper to convert RelabelConfigs to interface{}
+// Always renders snake_case keys (source_labels/target_label); camelCase CR
+// input (sourceLabels/targetLabel, Prometheus Operator style) is absorbed here
+// via the Effective* accessors.
 func convertRelabelConfigs(configs []monitoringv2alpha1.MetricRelabelConfig) []interface{} {
 	relabelConfigs := make([]interface{}, 0)
 	for _, rc := range configs {
 		rcMap := make(map[string]interface{})
-		if len(rc.SourceLabels) > 0 {
-			rcMap["source_labels"] = rc.SourceLabels
+		if sourceLabels := rc.EffectiveSourceLabels(); len(sourceLabels) > 0 {
+			rcMap["source_labels"] = sourceLabels
 		}
 		if rc.Separator != "" {
 			rcMap["separator"] = rc.Separator
@@ -1180,8 +1183,8 @@ func convertRelabelConfigs(configs []monitoringv2alpha1.MetricRelabelConfig) []i
 		if rc.Modulus != 0 {
 			rcMap["modulus"] = rc.Modulus
 		}
-		if rc.TargetLabel != "" {
-			rcMap["target_label"] = rc.TargetLabel
+		if targetLabel := rc.EffectiveTargetLabel(); targetLabel != "" {
+			rcMap["target_label"] = targetLabel
 		}
 		if rc.Replacement != "" {
 			rcMap["replacement"] = rc.Replacement
@@ -1389,33 +1392,7 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 
 		// Add RelabelConfigs if present
 		if len(target.RelabelConfigs) > 0 {
-			relabelConfigs := make([]interface{}, 0)
-			for _, rc := range target.RelabelConfigs {
-				rcMap := make(map[string]interface{})
-				if len(rc.SourceLabels) > 0 {
-					rcMap["source_labels"] = rc.SourceLabels
-				}
-				if rc.Separator != "" {
-					rcMap["separator"] = rc.Separator
-				}
-				if rc.Regex != "" {
-					rcMap["regex"] = rc.Regex
-				}
-				if rc.Modulus != 0 {
-					rcMap["modulus"] = rc.Modulus
-				}
-				if rc.TargetLabel != "" {
-					rcMap["target_label"] = rc.TargetLabel
-				}
-				if rc.Replacement != "" {
-					rcMap["replacement"] = rc.Replacement
-				}
-				if rc.Action != "" {
-					rcMap["action"] = rc.Action
-				}
-				relabelConfigs = append(relabelConfigs, rcMap)
-			}
-			targetMap["relabelConfigs"] = relabelConfigs
+			targetMap["relabelConfigs"] = convertRelabelConfigs(target.RelabelConfigs)
 		}
 
 		// Add endpoints if present
@@ -1518,33 +1495,7 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 
 				// Add metricRelabelConfigs if present at endpoint level
 				if len(endpoint.MetricRelabelConfigs) > 0 {
-					relabelConfigs := make([]interface{}, 0)
-					for _, relabelConfig := range endpoint.MetricRelabelConfigs {
-						relabelMap := make(map[string]interface{})
-						if len(relabelConfig.SourceLabels) > 0 {
-							relabelMap["source_labels"] = relabelConfig.SourceLabels
-						}
-						if relabelConfig.Separator != "" {
-							relabelMap["separator"] = relabelConfig.Separator
-						}
-						if relabelConfig.Regex != "" {
-							relabelMap["regex"] = relabelConfig.Regex
-						}
-						if relabelConfig.Modulus != 0 {
-							relabelMap["modulus"] = relabelConfig.Modulus
-						}
-						if relabelConfig.TargetLabel != "" {
-							relabelMap["target_label"] = relabelConfig.TargetLabel
-						}
-						if relabelConfig.Replacement != "" {
-							relabelMap["replacement"] = relabelConfig.Replacement
-						}
-						if relabelConfig.Action != "" {
-							relabelMap["action"] = relabelConfig.Action
-						}
-						relabelConfigs = append(relabelConfigs, relabelMap)
-					}
-					endpointMap["metricRelabelConfigs"] = relabelConfigs
+					endpointMap["metricRelabelConfigs"] = convertRelabelConfigs(endpoint.MetricRelabelConfigs)
 				}
 
 				endpoints = append(endpoints, endpointMap)
