@@ -163,6 +163,78 @@ func TestGenerateScrapeConfig_JobLabel(t *testing.T) {
 	}
 }
 
+func TestGenerateScrapeConfig_RelabelCamelCaseFallback(t *testing.T) {
+	cr := &monitoringv2alpha1.WhatapAgent{
+		Spec: monitoringv2alpha1.WhatapAgentSpec{
+			Features: monitoringv2alpha1.FeaturesSpec{
+				OpenAgent: monitoringv2alpha1.OpenAgentSpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	podMonitors := &monitoringv2alpha1.WhatapPodMonitorList{
+		Items: []monitoringv2alpha1.WhatapPodMonitor{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "camel-mon", Namespace: "ns-camel"},
+				Spec: monitoringv2alpha1.WhatapPodMonitorSpec{
+					// Prometheus Operator style keys only (sourceLabels/targetLabel)
+					RelabelConfigs: []monitoringv2alpha1.MetricRelabelConfig{
+						{
+							SourceLabelsCamel: []string{"__meta_kubernetes_pod_label_team"},
+							TargetLabelCamel:  "team",
+							Action:            "replace",
+						},
+					},
+					Endpoints: []monitoringv2alpha1.OpenAgentEndpoint{
+						{
+							Port: "8080",
+							// Both styles set: snake_case must win
+							MetricRelabelConfigs: []monitoringv2alpha1.MetricRelabelConfig{
+								{
+									SourceLabels:      []string{"snake_source_wins"},
+									SourceLabelsCamel: []string{"camel_source_loses"},
+									TargetLabel:       "snake_target_wins",
+									TargetLabelCamel:  "camel_target_loses",
+									Action:            "replace",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	config := generateScrapeConfig(cr, "default", podMonitors, nil)
+
+	// camelCase-only input must be rendered with snake_case keys
+	if !strings.Contains(config, "target_label: team") {
+		t.Errorf("Expected camelCase targetLabel to render as 'target_label: team', got: \n%s", config)
+	}
+	if !strings.Contains(config, "__meta_kubernetes_pod_label_team") {
+		t.Errorf("Expected camelCase sourceLabels value to be rendered, got: \n%s", config)
+	}
+	// snake_case must take precedence when both styles are set
+	if !strings.Contains(config, "target_label: snake_target_wins") {
+		t.Errorf("Expected snake_case target_label to win, got: \n%s", config)
+	}
+	if strings.Contains(config, "camel_target_loses") {
+		t.Errorf("Expected camelCase targetLabel to be ignored when target_label is set, got: \n%s", config)
+	}
+	if !strings.Contains(config, "snake_source_wins") {
+		t.Errorf("Expected snake_case source_labels to win, got: \n%s", config)
+	}
+	if strings.Contains(config, "camel_source_loses") {
+		t.Errorf("Expected camelCase sourceLabels to be ignored when source_labels is set, got: \n%s", config)
+	}
+	// rendered scrape config must never contain camelCase relabel keys
+	if strings.Contains(config, "sourceLabels:") || strings.Contains(config, "targetLabel:") {
+		t.Errorf("Rendered config must only contain snake_case relabel keys, got: \n%s", config)
+	}
+}
+
 func TestGenerateScrapeConfig_GpuMonitoringGroupLabel(t *testing.T) {
 	cr := &monitoringv2alpha1.WhatapAgent{
 		Spec: monitoringv2alpha1.WhatapAgentSpec{
