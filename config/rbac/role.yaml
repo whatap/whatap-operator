@@ -35,6 +35,7 @@ rules:
   resources:
   - whatappodmonitors
   - whatapservicemonitors
+  - whatapstaticendpoints
   verbs:
   - get
   - list

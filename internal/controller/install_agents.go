@@ -1311,7 +1311,7 @@ func convertEndpoints(endpoints []monitoringv2alpha1.OpenAgentEndpoint) []interf
 }
 
 // generateScrapeConfig generates the scrape_config.yaml content from the CR
-func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace string, podMonitors *monitoringv2alpha1.WhatapPodMonitorList, serviceMonitors *monitoringv2alpha1.WhatapServiceMonitorList) string {
+func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace string, podMonitors *monitoringv2alpha1.WhatapPodMonitorList, serviceMonitors *monitoringv2alpha1.WhatapServiceMonitorList, staticEndpoints *monitoringv2alpha1.WhatapStaticEndpointList) string {
 	// Define the structure for the scrape config
 	type ScrapeConfig struct {
 		Features struct {
@@ -1684,6 +1684,46 @@ func generateScrapeConfig(cr *monitoringv2alpha1.WhatapAgent, defaultNamespace s
 
 			if len(monitor.Spec.Endpoints) > 0 {
 				targetMap["endpoints"] = convertEndpoints(monitor.Spec.Endpoints)
+			}
+
+			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, toOrderedYAML(targetMap))
+		}
+	}
+
+	// Process WhatapStaticEndpoints
+	// StaticEndpoints target fixed addresses directly, so no selector/namespaceSelector is emitted.
+	if staticEndpoints != nil {
+		for _, se := range staticEndpoints.Items {
+			targetMap := make(map[string]interface{})
+
+			// Generate target name: <Namespace>/<Name>
+			targetName := fmt.Sprintf("%s/%s", se.Namespace, se.Name)
+			targetMap["targetName"] = targetName
+			targetMap["type"] = "StaticEndpoints"
+			targetMap["enabled"] = true
+
+			// RelabelConfigs
+			var relabelConfigs []interface{}
+			if len(se.Spec.RelabelConfigs) > 0 {
+				relabelConfigs = convertRelabelConfigs(se.Spec.RelabelConfigs)
+			}
+
+			// JobLabel
+			if se.Spec.JobLabel != "" {
+				jobRelabel := make(map[string]interface{})
+				jobRelabel["source_labels"] = []string{se.Spec.JobLabel}
+				jobRelabel["target_label"] = "job"
+				jobRelabel["action"] = "replace"
+				relabelConfigs = append(relabelConfigs, jobRelabel)
+			}
+
+			if len(relabelConfigs) > 0 {
+				targetMap["relabelConfigs"] = relabelConfigs
+			}
+
+			// Endpoints (convertEndpoints already handles the address field for StaticEndpoints)
+			if len(se.Spec.Endpoints) > 0 {
+				targetMap["endpoints"] = convertEndpoints(se.Spec.Endpoints)
 			}
 
 			config.Features.OpenAgent.Targets = append(config.Features.OpenAgent.Targets, toOrderedYAML(targetMap))
@@ -2115,6 +2155,13 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 		return err
 	}
 
+	// Fetch WhatapStaticEndpoints
+	staticEndpoints := &monitoringv2alpha1.WhatapStaticEndpointList{}
+	if err := r.Client.List(ctx, staticEndpoints); err != nil {
+		logger.Error(err, "Failed to list WhatapStaticEndpoints")
+		return err
+	}
+
 	// Create ConfigMap
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2127,7 +2174,7 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 			return err
 		}
 		// Generate scrape_config.yaml content from CR
-		scrapeConfig := generateScrapeConfig(cr, r.DefaultNamespace, podMonitors, serviceMonitors)
+		scrapeConfig := generateScrapeConfig(cr, r.DefaultNamespace, podMonitors, serviceMonitors, staticEndpoints)
 		cm.Data = map[string]string{
 			"scrape_config.yaml": scrapeConfig,
 		}

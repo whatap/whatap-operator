@@ -51,7 +51,23 @@ func TestGenerateScrapeConfig_MultiCRD(t *testing.T) {
 		},
 	}
 
-	config := generateScrapeConfig(cr, "default", podMonitors, serviceMonitors)
+	staticEndpoints := &monitoringv2alpha1.WhatapStaticEndpointList{
+		Items: []monitoringv2alpha1.WhatapStaticEndpoint{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "static-1",
+					Namespace: "ns-3",
+				},
+				Spec: monitoringv2alpha1.WhatapStaticEndpointSpec{
+					Endpoints: []monitoringv2alpha1.OpenAgentEndpoint{
+						{Address: "10.0.0.5:9100", Path: "/metrics"},
+					},
+				},
+			},
+		},
+	}
+
+	config := generateScrapeConfig(cr, "default", podMonitors, serviceMonitors, staticEndpoints)
 
 	// Verify PodMonitor
 	if !strings.Contains(config, "targetName: ns-1/pod-mon-1") {
@@ -67,6 +83,17 @@ func TestGenerateScrapeConfig_MultiCRD(t *testing.T) {
 	}
 	if !strings.Contains(config, "type: ServiceMonitor") {
 		t.Errorf("Expected config to contain 'type: ServiceMonitor'")
+	}
+
+	// Verify StaticEndpoint
+	if !strings.Contains(config, "targetName: ns-3/static-1") {
+		t.Errorf("Expected config to contain 'targetName: ns-3/static-1', got: \n%s", config)
+	}
+	if !strings.Contains(config, "type: StaticEndpoints") {
+		t.Errorf("Expected config to contain 'type: StaticEndpoints'")
+	}
+	if !strings.Contains(config, "address: 10.0.0.5:9100") {
+		t.Errorf("Expected config to contain 'address: 10.0.0.5:9100', got: \n%s", config)
 	}
 }
 
@@ -106,7 +133,7 @@ func TestGenerateScrapeConfig_Authorization(t *testing.T) {
 	}
 	serviceMonitors := &monitoringv2alpha1.WhatapServiceMonitorList{}
 
-	config := generateScrapeConfig(cr, "default", podMonitors, serviceMonitors)
+	config := generateScrapeConfig(cr, "default", podMonitors, serviceMonitors, nil)
 
 	for _, want := range []string{"authorization:", "type: Bearer", "credentialsSecret:", "name: scrape-token", "key: token"} {
 		if !strings.Contains(config, want) {
@@ -143,7 +170,7 @@ func TestGenerateScrapeConfig_JobLabel(t *testing.T) {
 		},
 	}
 
-	config := generateScrapeConfig(cr, "default", podMonitors, nil)
+	config := generateScrapeConfig(cr, "default", podMonitors, nil, nil)
 
 	// Check if relabelConfigs section exists
 	if !strings.Contains(config, "relabelConfigs:") {
@@ -181,7 +208,7 @@ func TestGenerateScrapeConfig_GpuMonitoringGroupLabel(t *testing.T) {
 		},
 	}
 
-	config := generateScrapeConfig(cr, "default", nil, nil)
+	config := generateScrapeConfig(cr, "default", nil, nil, nil)
 
 	if !strings.Contains(config, "targetName: dcgm-exporter-auto") {
 		t.Errorf("Expected config to contain GPU auto target, got: \n%s", config)
@@ -211,7 +238,7 @@ func TestGenerateScrapeConfig_GpuMonitoringClusterName(t *testing.T) {
 		},
 	}
 
-	config := generateScrapeConfig(cr, "default", nil, nil)
+	config := generateScrapeConfig(cr, "default", nil, nil, nil)
 
 	if !strings.Contains(config, "targetName: dcgm-exporter-auto") {
 		t.Errorf("Expected config to contain GPU auto target")
