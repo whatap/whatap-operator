@@ -378,7 +378,7 @@ func (r *WhatapAgentReconciler) populateCredentialsFromEnv(ctx context.Context, 
 //+kubebuilder:rbac:groups=monitoring.whatap.com,resources=whatapagents,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=monitoring.whatap.com,resources=whatapagents/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=monitoring.whatap.com,resources=whatapagents/finalizers,verbs=update
-//+kubebuilder:rbac:groups=monitoring.whatap.com,resources=whatappodmonitors;whatapservicemonitors,verbs=get;list;watch
+//+kubebuilder:rbac:groups=monitoring.whatap.com,resources=whatappodmonitors;whatapservicemonitors;whatapstaticendpoints,verbs=get;list;watch
 
 // Reconcile
 func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -669,6 +669,12 @@ func (r *WhatapAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Watch for WhatapServiceMonitor
 		Watches(
 			&monitoringv2alpha1.WhatapServiceMonitor{},
+			handler.EnqueueRequestsFromMapFunc(r.findWhatapAgents),
+			builder.WithPredicates(lp),
+		).
+		// Watch for WhatapStaticEndpoint
+		Watches(
+			&monitoringv2alpha1.WhatapStaticEndpoint{},
 			handler.EnqueueRequestsFromMapFunc(r.findWhatapAgents),
 			builder.WithPredicates(lp),
 		).
