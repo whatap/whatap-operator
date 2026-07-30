@@ -194,3 +194,59 @@ func TestAddDcgmExporterToNodeAgent_ClusterNameEnv(t *testing.T) {
 		t.Fatalf("expected DCGM_EXPORTER_KUBERNETES_CLUSTER_NAME env var to be present")
 	}
 }
+
+func TestAddDcgmExporterToNodeAgent_DefaultImagesWithHostEngine(t *testing.T) {
+	cr := &monitoringv2alpha1.WhatapAgent{
+		Spec: monitoringv2alpha1.WhatapAgentSpec{
+			Features: monitoringv2alpha1.FeaturesSpec{
+				K8sAgent: monitoringv2alpha1.K8sAgentSpec{
+					GpuMonitoring: monitoringv2alpha1.GpuMonitoringSpec{
+						Enabled: true,
+						HostEngine: &monitoringv2alpha1.DcgmHostEngineSpec{
+							Enabled: true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	podSpec := corev1.PodSpec{}
+	addDcgmExporterToNodeAgent(&podSpec, cr)
+
+	if len(podSpec.Containers) != 2 {
+		t.Fatalf("expected dcgm-exporter and dcgm-hostengine containers, got %d", len(podSpec.Containers))
+	}
+
+	containers := make(map[string]corev1.Container, len(podSpec.Containers))
+	for _, container := range podSpec.Containers {
+		containers[container.Name] = container
+	}
+
+	exporter, ok := containers["dcgm-exporter"]
+	if !ok {
+		t.Fatal("expected dcgm-exporter container")
+	}
+	if exporter.Image != "public.ecr.aws/whatap/dcgm-exporter:4.6.0-4.8.3-distroless" {
+		t.Fatalf("unexpected default dcgm-exporter image: %s", exporter.Image)
+	}
+
+	hostEngine, ok := containers["dcgm-hostengine"]
+	if !ok {
+		t.Fatal("expected dcgm-hostengine container")
+	}
+	if hostEngine.Image != "nvcr.io/nvidia/cloud-native/dcgm:4.6.0-1-ubuntu24.04" {
+		t.Fatalf("unexpected default dcgm-hostengine image: %s", hostEngine.Image)
+	}
+
+	remoteHostEngine := ""
+	for _, env := range exporter.Env {
+		if env.Name == "DCGM_REMOTE_HOSTENGINE_INFO" {
+			remoteHostEngine = env.Value
+			break
+		}
+	}
+	if remoteHostEngine != "localhost:5555" {
+		t.Fatalf("expected exporter to connect to localhost:5555, got %q", remoteHostEngine)
+	}
+}

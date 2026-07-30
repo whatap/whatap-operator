@@ -874,7 +874,7 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 	gpuSpec := cr.Spec.Features.K8sAgent.GpuMonitoring
 
 	// Check if a custom image is specified
-	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.5.3-4.8.2-ubuntu22.04"
+	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.6.0-4.8.3-distroless"
 	if gpuSpec.CustomImageFullName != "" {
 		dcgmImage = gpuSpec.CustomImageFullName
 	}
@@ -978,7 +978,7 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 
 	// Add DCGM host engine sidecar container if enabled
 	if gpuSpec.HostEngine != nil && gpuSpec.HostEngine.Enabled {
-		hostEngineImage := "nvidia/dcgm:4.4.1-2-ubuntu22.04"
+		hostEngineImage := "nvcr.io/nvidia/cloud-native/dcgm:4.6.0-1-ubuntu24.04"
 		if gpuSpec.HostEngine.CustomImageFullName != "" {
 			hostEngineImage = gpuSpec.HostEngine.CustomImageFullName
 		}

@@ -273,7 +273,7 @@ spec:
         # 물리 GPU + MIG GPU Instance 메트릭을 동시에 수집할 때 필요합니다.
         # hostEngine:
         #   enabled: true
-        #   # customImageFullName: "nvidia/dcgm:4.4.1-2-ubuntu22.04"
+        #   # customImageFullName: "nvcr.io/nvidia/cloud-native/dcgm:4.6.0-1-ubuntu24.04"
         #   # port: 5555
 
         # GPU 메트릭에 대한 MetricRelabelConfigs (옵션)
