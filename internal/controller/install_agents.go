@@ -941,6 +941,19 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 	// Append or overwrite user-defined environment variables
 	if len(gpuSpec.Envs) > 0 {
 		for _, userEnv := range gpuSpec.Envs {
+			// An explicitly empty remote hostengine address opts the exporter back into
+			// embedded DCGM mode while keeping the hostengine sidecar available.
+			if userEnv.Name == "DCGM_REMOTE_HOSTENGINE_INFO" && userEnv.Value == "" && userEnv.ValueFrom == nil {
+				filtered := envVars[:0]
+				for _, env := range envVars {
+					if env.Name != userEnv.Name {
+						filtered = append(filtered, env)
+					}
+				}
+				envVars = filtered
+				continue
+			}
+
 			found := false
 			for i, env := range envVars {
 				if env.Name == userEnv.Name {

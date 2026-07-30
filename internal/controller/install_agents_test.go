@@ -250,3 +250,44 @@ func TestAddDcgmExporterToNodeAgent_DefaultImagesWithHostEngine(t *testing.T) {
 		t.Fatalf("expected exporter to connect to localhost:5555, got %q", remoteHostEngine)
 	}
 }
+
+func TestAddDcgmExporterToNodeAgent_EmptyRemoteHostEngineUsesEmbeddedMode(t *testing.T) {
+	cr := &monitoringv2alpha1.WhatapAgent{
+		Spec: monitoringv2alpha1.WhatapAgentSpec{
+			Features: monitoringv2alpha1.FeaturesSpec{
+				K8sAgent: monitoringv2alpha1.K8sAgentSpec{
+					GpuMonitoring: monitoringv2alpha1.GpuMonitoringSpec{
+						Enabled: true,
+						Envs: []corev1.EnvVar{
+							{Name: "DCGM_REMOTE_HOSTENGINE_INFO", Value: ""},
+						},
+						HostEngine: &monitoringv2alpha1.DcgmHostEngineSpec{
+							Enabled: true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	podSpec := corev1.PodSpec{}
+	addDcgmExporterToNodeAgent(&podSpec, cr)
+
+	if len(podSpec.Containers) != 2 {
+		t.Fatalf("expected dcgm-exporter and dcgm-hostengine containers, got %d", len(podSpec.Containers))
+	}
+
+	for _, container := range podSpec.Containers {
+		if container.Name != "dcgm-exporter" {
+			continue
+		}
+		for _, env := range container.Env {
+			if env.Name == "DCGM_REMOTE_HOSTENGINE_INFO" {
+				t.Fatalf("expected empty remote hostengine override to remove the env, got %#v", env)
+			}
+		}
+		return
+	}
+
+	t.Fatal("expected dcgm-exporter container")
+}
