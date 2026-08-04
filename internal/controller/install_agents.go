@@ -2020,14 +2020,15 @@ func collectTLSSecrets(targets []monitoringv2alpha1.OpenAgentTargetSpec) map[str
 }
 
 // collectAllTLSSecrets collects TLS Secrets from inline OpenAgent targets as well
-// as from separate WhatapPodMonitor / WhatapServiceMonitor CRs. The path conversion
-// (caSecret -> caFile) in generateScrapeConfig already covers monitor CRs, so the
-// corresponding Secret volumes must be mounted for those targets too; otherwise the
-// cert files referenced in scrape_config never appear in the pod.
+// as from separate WhatapPodMonitor / WhatapServiceMonitor / WhatapStaticEndpoint CRs.
+// The path conversion (caSecret -> caFile) in generateScrapeConfig already covers every
+// separate CR, so the corresponding Secret volumes must be mounted for those targets too;
+// otherwise the cert files referenced in scrape_config never appear in the pod.
 func collectAllTLSSecrets(
 	targets []monitoringv2alpha1.OpenAgentTargetSpec,
 	podMonitors *monitoringv2alpha1.WhatapPodMonitorList,
 	serviceMonitors *monitoringv2alpha1.WhatapServiceMonitorList,
+	staticEndpoints *monitoringv2alpha1.WhatapStaticEndpointList,
 ) map[string][]string {
 	secrets := make(map[string][]string)
 	for _, target := range targets {
@@ -2041,6 +2042,11 @@ func collectAllTLSSecrets(
 	if serviceMonitors != nil {
 		for _, monitor := range serviceMonitors.Items {
 			addTLSSecretsFromEndpoints(secrets, monitor.Spec.Endpoints)
+		}
+	}
+	if staticEndpoints != nil {
+		for _, se := range staticEndpoints.Items {
+			addTLSSecretsFromEndpoints(secrets, se.Spec.Endpoints)
 		}
 	}
 	return secrets
@@ -2282,9 +2288,10 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 			}
 
 			// Add TLS Secret volumes and volume mounts.
-			// Include TLS secrets from separate WhatapPodMonitor/WhatapServiceMonitor CRs,
-			// not just inline targets, so their cert files are actually mounted.
-			tlsSecrets := collectAllTLSSecrets(cr.Spec.Features.OpenAgent.Targets, podMonitors, serviceMonitors)
+			// Include TLS secrets from separate WhatapPodMonitor/WhatapServiceMonitor/
+			// WhatapStaticEndpoint CRs, not just inline targets, so their cert files are
+			// actually mounted.
+			tlsSecrets := collectAllTLSSecrets(cr.Spec.Features.OpenAgent.Targets, podMonitors, serviceMonitors, staticEndpoints)
 			for secretName, secretKeys := range tlsSecrets {
 				volumeName := fmt.Sprintf("tls-secret-%s", secretName)
 
