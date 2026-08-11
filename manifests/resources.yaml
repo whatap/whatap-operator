@@ -27,8 +27,6 @@ metadata:
   name: whatap-operator
   annotations:
     rbac.authorization.kubernetes.io/autoupdate: "true"
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"ClusterRole","metadata":{"annotations":{"rbac.authorization.kubernetes.io/autoupdate":"true"},"labels":{"app.kubernetes.io/name":"whatap-operator"},"name":"whatap-operator"},"rules":[{"apiGroups":["monitoring.whatap.com"],"resources":["whatapagents","whatapagents/status"],"verbs":["get","list","watch","create","update","patch","delete"]},{"apiGroups":["*"],"resources":["*"],"verbs":["get","list","watch","update","patch","delete","create"]},{"nonResourceURLs":["*"],"verbs":["*"]}]}
   labels:
     app.kubernetes.io/name: whatap-operator
 rules:
@@ -40,6 +38,10 @@ rules:
     resources: ["*"]
     verbs: ["get", "list", "watch", "update", "patch","delete", "create"]
 
+  # RBAC escalation prevention: 오퍼레이터는 자신이 보유한 nonResourceURLs 만
+  # OpenAgent 에게 부여할 수 있다. 따라서 이 목록은 WhatapAgent CR 의
+  # spec.features.openAgent.nonResourceURLs 의 상위집합이어야 한다.
+  # 스크랩 경로가 확정되어 있다면 해당 경로만 남기는 것을 권장한다. (예: ["/metrics"])
   - nonResourceURLs: ["*"]
     verbs: ["*"]
 

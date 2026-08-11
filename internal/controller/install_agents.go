@@ -2095,6 +2095,13 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 	}
 	logResult(logger, "Whatap", "OpenAgent ServiceAccount", op)
 
+	// Non-resource URLs granted to the OpenAgent ClusterRole. Configurable via the
+	// CR so that endpoints beyond "/metrics" can be scraped; defaults to "/metrics".
+	nonResourceURLs := cr.Spec.Features.OpenAgent.NonResourceURLs
+	if len(nonResourceURLs) == 0 {
+		nonResourceURLs = []string{"/metrics"}
+	}
+
 	// Create ClusterRole
 	cr1 := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2117,13 +2124,18 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
-				NonResourceURLs: []string{"/metrics"},
+				NonResourceURLs: nonResourceURLs,
 				Verbs:           []string{"*"},
 			},
 		}
 		return nil
 	})
 	if err != nil {
+		if errors.IsForbidden(err) {
+			logger.Error(err, "Failed to create/update ClusterRole for OpenAgent: the operator's own ClusterRole must grant these nonResourceURLs before it can delegate them (RBAC escalation prevention). Widen the operator ClusterRole to cover them.",
+				"nonResourceURLs", nonResourceURLs)
+			return err
+		}
 		logger.Error(err, "Failed to create/update ClusterRole for OpenAgent")
 		return err
 	}
