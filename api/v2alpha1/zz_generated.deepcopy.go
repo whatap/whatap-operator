@@ -683,6 +683,11 @@ func (in *OpenAgentSpec) DeepCopyInto(out *OpenAgentSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.NonResourceURLs != nil {
+		in, out := &in.NonResourceURLs, &out.NonResourceURLs
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.Labels != nil {
 		in, out := &in.Labels, &out.Labels
 		*out = make(map[string]string, len(*in))
