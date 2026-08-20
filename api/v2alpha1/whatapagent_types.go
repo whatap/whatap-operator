@@ -52,7 +52,7 @@ type OpenAgentSpec struct {
 	// +optional
 	Targets []OpenAgentTargetSpec `json:"targets,omitempty"`
 	// NonResourceURLs defines the non-resource URLs granted to the OpenAgent
-	// ClusterRole (whatap-open-agent-role). Defaults to ["/metrics"] when omitted.
+	// ClusterRole (whatap-open-agent-role). Defaults to ["*"] when omitted.
 	//
 	// This is an RBAC grant, not a scrape configuration: it only authorises requests
 	// to the kube-apiserver's own non-resource paths (e.g. "/metrics", "/metrics/slis",
@@ -64,10 +64,8 @@ type OpenAgentSpec struct {
 	// when the kube-apiserver itself is the scrape target.
 	//
 	// NOTE: Kubernetes RBAC escalation prevention requires the operator's own
-	// ClusterRole to hold a superset of these URLs. If the operator does not,
-	// the API server rejects the ClusterRole with
-	// "attempt to grant extra privileges". Widen the operator ClusterRole
-	// (Helm value `rbac.operator.nonResourceURLs`) together with this field.
+	// ClusterRole to hold a superset of these URLs. The default operator RBAC grants
+	// ["*"]; externally managed RBAC must provide an equivalent superset.
 	// +optional
 	NonResourceURLs []string `json:"nonResourceURLs,omitempty"`
 	// ImageName defines the name of the OpenAgent image to use
