@@ -149,7 +149,7 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["*"]
-  - nonResourceURLs: [ "/metrics" ]
+  - nonResourceURLs: [ "*" ]
     verbs: [ "*" ]
 
 ---

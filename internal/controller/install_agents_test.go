@@ -110,6 +110,32 @@ func TestGetOpenAgentCommand(t *testing.T) {
 	}
 }
 
+func TestResolveOpenAgentNonResourceURLs(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured []string
+		expected   []string
+	}{
+		{name: "wildcard default", expected: []string{"*"}},
+		{name: "empty allowlist uses wildcard default", configured: []string{}, expected: []string{"*"}},
+		{name: "explicit allowlist", configured: []string{"/metrics", "/healthz"}, expected: []string{"/metrics", "/healthz"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := resolveOpenAgentNonResourceURLs(tt.configured)
+			if len(actual) != len(tt.expected) {
+				t.Fatalf("expected %v, got %v", tt.expected, actual)
+			}
+			for i := range tt.expected {
+				if actual[i] != tt.expected[i] {
+					t.Fatalf("expected %v, got %v", tt.expected, actual)
+				}
+			}
+		})
+	}
+}
+
 func TestAddDcgmExporterToNodeAgent_AddsNodeNameEnv(t *testing.T) {
 	cr := &monitoringv2alpha1.WhatapAgent{
 		Spec: monitoringv2alpha1.WhatapAgentSpec{

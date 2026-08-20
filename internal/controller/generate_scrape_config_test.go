@@ -234,7 +234,7 @@ func TestGenerateScrapeConfig_RelabelCamelCaseFallback(t *testing.T) {
 		},
 	}
 
-	config := generateScrapeConfig(cr, "default", podMonitors, nil)
+	config := generateScrapeConfig(cr, "default", podMonitors, nil, nil)
 
 	// camelCase-only input must be rendered with snake_case keys
 	if !strings.Contains(config, "target_label: team") {

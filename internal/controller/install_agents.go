@@ -2026,6 +2026,13 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
+func resolveOpenAgentNonResourceURLs(configured []string) []string {
+	if len(configured) == 0 {
+		return []string{"*"}
+	}
+	return configured
+}
+
 func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr.Logger, cr *monitoringv2alpha1.WhatapAgent) error {
 	// Create ServiceAccount
 	sa := &corev1.ServiceAccount{
@@ -2047,11 +2054,8 @@ func installOpenAgent(ctx context.Context, r *WhatapAgentReconciler, logger logr
 	logResult(logger, "Whatap", "OpenAgent ServiceAccount", op)
 
 	// Non-resource URLs granted to the OpenAgent ClusterRole. Configurable via the
-	// CR so that endpoints beyond "/metrics" can be scraped; defaults to "/metrics".
-	nonResourceURLs := cr.Spec.Features.OpenAgent.NonResourceURLs
-	if len(nonResourceURLs) == 0 {
-		nonResourceURLs = []string{"/metrics"}
-	}
+	// CR and defaults to all non-resource paths.
+	nonResourceURLs := resolveOpenAgentNonResourceURLs(cr.Spec.Features.OpenAgent.NonResourceURLs)
 
 	// Create ClusterRole
 	cr1 := &rbacv1.ClusterRole{
