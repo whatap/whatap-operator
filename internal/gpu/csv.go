@@ -33,6 +33,10 @@ const WhatapGPUMetricsCSV = `
     # Temperature
     DCGM_FI_DEV_GPU_TEMP,    gauge, GPU temperature (in C).                       # code 150
 
+    # Errors & Throttling
+    DCGM_FI_DEV_XID_ERRORS,             gauge, Value of the last XID error encountered.      # code 230
+    DCGM_FI_DEV_CLOCK_THROTTLE_REASONS, gauge, Current clock throttle reasons (bitmask).     # code 240
+
     # Utilization
     DCGM_FI_DEV_GPU_UTIL,      gauge, GPU utilization (in %).                     # code 203
     DCGM_FI_DEV_WEIGHTED_GPU_UTIL, gauge, Weighted GPU utilization for MIG and non-MIG devices (ratio 0.0-1.0). # code 9003
