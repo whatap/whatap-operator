@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -24,18 +22,17 @@ func (c failingGetClient) Get(context.Context, client.ObjectKey, client.Object, 
 	return c.err
 }
 
-func TestDefaultMarksUnexpectedWhatapAgentReadFailure(t *testing.T) {
+func TestDefaultDefersUnexpectedWhatapAgentReadFailureEventUntilPodPersistence(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	recorder := record.NewFakeRecorder(1)
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 	defaulter := &WhatapAgentCustomDefaulter{
 		client: failingGetClient{
-			Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			Client: k8sClient,
 			err:    errors.New("forbidden"),
 		},
-		recorder: recorder,
 	}
 	pod := &corev1.Pod{}
 	pod.Namespace = "app"
@@ -50,7 +47,7 @@ func TestDefaultMarksUnexpectedWhatapAgentReadFailure(t *testing.T) {
 	if got := pod.Annotations["whatap-apm-injection-reason"]; got != "WhatapAgentReadFailed" {
 		t.Errorf("injection reason = %q, want WhatapAgentReadFailed", got)
 	}
-	assertWarningEvent(t, recorder, "WhatapAgentReadFailed")
+	assertNoEvent(t, k8sClient, pod.Namespace)
 }
 
 func TestDefaultMarksMissingWhatapAgentAsExpectedSkip(t *testing.T) {
@@ -79,7 +76,7 @@ func TestDefaultMarksMissingWhatapAgentAsExpectedSkip(t *testing.T) {
 	}
 }
 
-func TestDefaultDistinguishesNamespaceReadFailureFromSelectorMismatch(t *testing.T) {
+func TestDefaultDefersNamespaceReadFailureEventUntilPodPersistence(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
@@ -98,10 +95,9 @@ func TestDefaultDistinguishesNamespaceReadFailureFromSelectorMismatch(t *testing
 			MatchLabels: map[string]string{"app": "example"},
 		},
 	}}
-	recorder := record.NewFakeRecorder(1)
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).Build()
 	defaulter := &WhatapAgentCustomDefaulter{
-		client:   fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).Build(),
-		recorder: recorder,
+		client: k8sClient,
 	}
 	pod := &corev1.Pod{}
 	pod.Namespace = "missing-namespace"
@@ -114,17 +110,16 @@ func TestDefaultDistinguishesNamespaceReadFailureFromSelectorMismatch(t *testing
 	if got := pod.Annotations["whatap-apm-injection-reason"]; got != "NamespaceReadFailed" {
 		t.Errorf("injection reason = %q, want NamespaceReadFailed", got)
 	}
-	assertWarningEvent(t, recorder, "NamespaceReadFailed")
+	assertNoEvent(t, k8sClient, pod.Namespace)
 }
 
-func assertWarningEvent(t *testing.T, recorder *record.FakeRecorder, reason string) {
+func assertNoEvent(t *testing.T, k8sClient client.Client, namespace string) {
 	t.Helper()
-	select {
-	case event := <-recorder.Events:
-		if want := "Warning " + reason; len(event) < len(want) || event[:len(want)] != want {
-			t.Errorf("event = %q, want prefix %q", event, want)
-		}
-	case <-time.After(time.Second):
-		t.Fatalf("timed out waiting for %s event", reason)
+	events := &corev1.EventList{}
+	if err := k8sClient.List(context.Background(), events, client.InNamespace(namespace)); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(events.Items); got != 0 {
+		t.Fatalf("admission-time event count = %d, want 0", got)
 	}
 }
