@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,10 +39,16 @@ var whatapWebhookLogger = logf.Log.WithName("whatap-webhook")
 
 // SetupWhatapAgentWebhookWithManager registers the webhook for WhatapAgent in the manager.
 func SetupWhatapAgentWebhookWithManager(mgr ctrl.Manager) error {
+	if err := (&InjectionFailureEventReconciler{Client: mgr.GetClient()}).SetupWithManager(mgr); err != nil {
+		return err
+	}
+
 	// Register the Pod webhook for injection
 	if err := ctrl.NewWebhookManagedBy(mgr).
 		For(&corev1.Pod{}).
-		WithDefaulter(&WhatapAgentCustomDefaulter{mgr.GetClient()}).
+		WithDefaulter(&WhatapAgentCustomDefaulter{
+			client: mgr.GetClient(),
+		}).
 		WithDefaulterCustomPath("/whatap-injection--v1-pod").
 		Complete(); err != nil {
 		return err
@@ -70,12 +77,30 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		whatapWebhookLogger.Info("skipping non-Pod object")
 		return nil
 	}
+	podIdentifier := pod.GetNamespace() + "/" + pod.GetName()
+	if pod.GetName() == "" {
+		// Use namespace + generateName as alternative identifier for pods created by controllers
+		podIdentifier = pod.GetNamespace()
+		if pod.GetGenerateName() != "" {
+			podIdentifier += "/" + pod.GetGenerateName() + "*"
+		} else {
+			podIdentifier += "/unknown"
+		}
+	}
+	whatapWebhookLogger.Info("Processing pod admission for APM injection", "pod", podIdentifier)
+
 	// WhatapAgent CR 가져오기 (클러스터 스코프)
 	var whatapAgentCustomResource monitoringv2alpha1.WhatapAgent
 
 	if err := d.client.Get(ctx, client.ObjectKey{Name: "whatap"}, &whatapAgentCustomResource); err != nil {
-		// CR이 아직 생성 안 됐으면 주입 안 함
-		whatapWebhookLogger.V(1).Info("WhatapAgent CR not found, skipping APM injection", "pod", pod.GetNamespace()+"/"+pod.GetName(), "error", err.Error())
+		if apierrors.IsNotFound(err) {
+			// The CR may legitimately not have been installed yet.
+			whatapWebhookLogger.V(1).Info("WhatapAgent CR does not exist, skipping APM injection", "pod", podIdentifier)
+			d.markInjectionSkipped(pod, "WhatapAgentNotFound")
+			return nil
+		}
+		whatapWebhookLogger.Error(err, "Failed to read WhatapAgent CR; APM injection could not be evaluated", "pod", podIdentifier)
+		d.markInjectionFailed(pod, whatapAgentReadFailedReason)
 		return nil
 	}
 	defaultNS := config.GetWhatapDefaultNamespace()
@@ -93,12 +118,14 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	instrumentation := whatapAgentCustomResource.Spec.Features.Apm.Instrumentation
 	if !instrumentation.Enabled {
 		whatapWebhookLogger.V(1).Info("APM instrumentation is disabled, skipping APM injection", "pod", pod.GetNamespace()+"/"+pod.GetName())
+		d.markInjectionSkipped(pod, "InstrumentationDisabled")
 		return nil
 	}
 
 	// Additional safety check: if targets slice is nil or empty, nothing to process
 	if len(instrumentation.Targets) == 0 {
 		whatapWebhookLogger.V(1).Info("No APM targets configured, skipping APM injection", "pod", pod.GetNamespace()+"/"+pod.GetName())
+		d.markInjectionSkipped(pod, "NoTargetsConfigured")
 		return nil
 	}
 
@@ -110,20 +137,10 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		}
 	}
 
-	podIdentifier := pod.GetNamespace() + "/" + pod.GetName()
-	if pod.GetName() == "" {
-		// Use namespace + generateName as alternative identifier for pods created by controllers
-		podIdentifier = pod.GetNamespace()
-		if pod.GetGenerateName() != "" {
-			podIdentifier += "/" + pod.GetGenerateName() + "*"
-		} else {
-			podIdentifier += "/unknown"
-		}
-	}
-
 	whatapWebhookLogger.V(1).Info("Processing APM injection for pod", "pod", podIdentifier, "targets", len(instrumentation.Targets))
 
 	injected := false
+	evaluationFailed := false
 	for _, target := range instrumentation.Targets {
 		if !target.Enabled {
 			whatapWebhookLogger.V(2).Info("Target is disabled, skipping", "pod", podIdentifier, "target", target.Name)
@@ -139,7 +156,9 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		// Get the namespace object to check its labels
 		var namespace corev1.Namespace
 		if err := d.client.Get(ctx, client.ObjectKey{Name: pod.Namespace}, &namespace); err != nil {
-			whatapWebhookLogger.Error(err, "Failed to get namespace", "namespace", pod.Namespace)
+			whatapWebhookLogger.Error(err, "Failed to read namespace; target selector could not be evaluated", "pod", podIdentifier, "target", target.Name, "namespace", pod.Namespace)
+			d.markInjectionFailed(pod, namespaceReadFailedReason)
+			evaluationFailed = true
 			continue
 		}
 
@@ -163,6 +182,8 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		}
 		pod.Annotations["whatap-apm-injected"] = "true"
 		pod.Annotations["whatap-apm-language"] = target.Language
+		delete(pod.Annotations, injectionStatusAnnotation)
+		delete(pod.Annotations, injectionReasonAnnotation)
 		// Resolve version with default fallback
 		resolvedVersion := target.WhatapApmVersions[target.Language]
 		if resolvedVersion == "" {
@@ -175,10 +196,29 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		break
 	}
 
-	if !injected {
+	if !injected && evaluationFailed {
+		whatapWebhookLogger.Info("APM injection was skipped because one or more target selectors could not be evaluated", "pod", podIdentifier)
+	} else if !injected {
 		whatapWebhookLogger.V(1).Info("No matching targets found for pod, skipping APM injection", "pod", podIdentifier)
+		d.markInjectionSkipped(pod, "NoMatchingTarget")
 	}
 	return nil
+}
+
+func (d *WhatapAgentCustomDefaulter) markInjectionSkipped(pod *corev1.Pod, reason string) {
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string, 2)
+	}
+	pod.Annotations[injectionStatusAnnotation] = injectionStatusSkipped
+	pod.Annotations[injectionReasonAnnotation] = reason
+}
+
+func (d *WhatapAgentCustomDefaulter) markInjectionFailed(pod *corev1.Pod, reason string) {
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string, 2)
+	}
+	pod.Annotations[injectionStatusAnnotation] = injectionStatusFailed
+	pod.Annotations[injectionReasonAnnotation] = reason
 }
 
 // WhatapAgentCredentialDefaulter handles defaulting for WhatapAgent resources
