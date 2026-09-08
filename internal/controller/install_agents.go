@@ -870,8 +870,14 @@ func createOrUpdateGpuConfigMap(ctx context.Context, r *WhatapAgentReconciler, l
 
 // ---------- GPU Exporter 추가 함수 ----------
 
+const defaultGpuPodResourcesPath = "/var/lib/kubelet/pod-resources"
+
 func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.WhatapAgent) {
 	gpuSpec := cr.Spec.Features.K8sAgent.GpuMonitoring
+	podResourcesHostPath := defaultGpuPodResourcesPath
+	if gpuSpec.PodResourcesPath != "" {
+		podResourcesHostPath = gpuSpec.PodResourcesPath
+	}
 
 	// Check if a custom image is specified
 	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.6.0-4.8.3-distroless"
@@ -983,7 +989,7 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: "pod-gpu-resources", MountPath: "/var/lib/kubelet/pod-resources", ReadOnly: true},
+			{Name: "pod-gpu-resources", MountPath: defaultGpuPodResourcesPath, ReadOnly: true},
 			{Name: "whatap-dcgm-exporter-csv", MountPath: "/etc/dcgm-exporter/whatap-dcgm-exporter.csv", SubPath: "whatap-gpu.csv", ReadOnly: true},
 		},
 	}
@@ -1028,7 +1034,7 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 		corev1.Volume{
 			Name: "pod-gpu-resources",
 			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/kubelet/pod-resources"},
+				HostPath: &corev1.HostPathVolumeSource{Path: podResourcesHostPath},
 			},
 		},
 		corev1.Volume{

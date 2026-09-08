@@ -480,6 +480,13 @@ type AgentComponentSpec struct {
 type GpuMonitoringSpec struct {
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled"`
+	// PodResourcesPath overrides the host directory containing the kubelet pod-resources socket.
+	// Specify the directory, not the kubelet root or kubelet.sock file.
+	// If empty, /var/lib/kubelet/pod-resources is used. The exporter container mount remains unchanged.
+	// Example: /repo.p/kubelet/pod-resources
+	// +kubebuilder:validation:Pattern=`^(/.*)?$`
+	// +optional
+	PodResourcesPath string `json:"podResourcesPath,omitempty"`
 	// CustomImageFullName allows specifying a full custom image name (including repository and tag)
 	// If not provided, the default image will be used
 	// +optional
