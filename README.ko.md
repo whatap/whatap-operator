@@ -71,5 +71,38 @@ K8s 클러스터 내의 와탭 모니터링 컴포넌트 구성을 단일 파일
 
 [와탭 오퍼레이터 설치 가이드](./docs/operator.md)
 
+## GPU 모니터링: kubelet pod-resources 경로 설정
+
+기본 kubelet 경로가 아닌 환경에서는 기존 `WhatapAgent` CR의
+`spec.features.k8sAgent.gpuMonitoring.podResourcesPath`에 **호스트의 pod-resources 디렉터리**를 지정합니다.
+Operator `3.0.20` 이상과 이 필드를 포함한 CRD가 모두 필요합니다. Helm 설치는 차트 `1.9.11` 이상을
+사용하고, 기존 `image.tag`를 재사용하는 업그레이드에서는 이미지도 `3.0.20` 이상으로 지정해야 합니다.
+Operator `3.0.19`에는 지원되지 않습니다. 설치된 스키마는 다음 명령으로 확인합니다.
+
+```bash
+kubectl explain whatapagent.spec.features.k8sAgent.gpuMonitoring.podResourcesPath
+```
+
+예를 들어 kubelet 루트가 `/repo.p/kubelet`이고, GPU 노드에서
+`/repo.p/kubelet/pod-resources/kubelet.sock` 소켓의 존재를 확인했다면 기존 CR에 다음 설정을 병합합니다.
+아래는 전체 설치용 CR이 아닌 설정 부분 예시입니다.
+
+```yaml
+spec:
+  features:
+    k8sAgent:
+      gpuMonitoring:
+        enabled: true
+        podResourcesPath: /repo.p/kubelet/pod-resources
+```
+
+- 미설정 또는 빈 문자열이면 기존 `/var/lib/kubelet/pod-resources`를 사용합니다.
+- kubelet 루트(`/repo.p/kubelet`)나 소켓 파일(`kubelet.sock`)이 아닌, 소켓이 들어 있는 디렉터리의 절대 경로를 지정합니다.
+- 호스트의 `pod-gpu-resources` 볼륨 경로만 바뀌며, exporter 내부에는 `/var/lib/kubelet/pod-resources`로 읽기 전용 마운트됩니다.
+- `nodeAgent.runtimeSocketPath`는 별도의 컨테이너 런타임 소켓 설정이므로 이 옵션과 독립적입니다.
+- 공통 Node Agent와 GPU 전용 DaemonSet 모두 적용됩니다. 대상 GPU 노드들은 같은 호스트 경로를 사용해야 합니다.
+- DaemonSet을 직접 편집하거나 Operator를 중지할 필요 없이 CR을 변경하면 reconciliation으로 반영됩니다. 경로 변경 시 해당 DaemonSet의 Pod 템플릿이 갱신되어 롤링 업데이트가 발생합니다.
+- 잘못된 경로를 자동 생성하지 않습니다. 실제 소켓과 노드 권한을 먼저 확인하고, 적용 후 DaemonSet의 `pod-gpu-resources.hostPath.path`, exporter 로그 및 GPU/Pod 매핑 지표를 확인합니다.
+
 추가 문서
 - [Helm차트에서 whatap-credentials Secret 생성 옵션 PRD](./docs/prd-helm-credentials.md)
