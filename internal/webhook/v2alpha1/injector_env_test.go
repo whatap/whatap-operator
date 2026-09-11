@@ -93,8 +93,8 @@ func TestInjectPythonEnvVars_OverridesPreInjectedHostAndKeepsPythonPath(t *testi
 	if vals := envValues(got, EnvPythonWhatapHost); len(vals) != 1 || vals[0] != "10.20.30.40" {
 		t.Fatalf("expected single whatap_server_host=10.20.30.40, got %v", vals)
 	}
-	if v, _ := effective(got, EnvPythonPath); v != "/app/libs" {
-		t.Fatalf("user PYTHONPATH not preserved, got %q", v)
+	if v, _ := effective(got, EnvPythonPath); v != ValWhatapHome+":"+ValPythonBootstrap+":/app/libs" {
+		t.Fatalf("user PYTHONPATH not preserved with agent bootstrap, got %q", v)
 	}
 }
 
