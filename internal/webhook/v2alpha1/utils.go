@@ -11,39 +11,42 @@ import (
 func boolPtr(b bool) *bool    { return &b }
 func int64Ptr(i int64) *int64 { return &i }
 
-// findEnvValueByKeys searches for an environment variable by multiple candidate keys.
-// Returns the value of the first matching key found.
-func findEnvValueByKeys(envs []corev1.EnvVar, keys ...string) (string, bool) {
+// findEnvVarByKeys preserves both literal values and ConfigMap/Secret references.
+// Candidate key order defines the existing override precedence.
+func findEnvVarByKeys(envs []corev1.EnvVar, keys ...string) (corev1.EnvVar, bool) {
 	for _, key := range keys {
 		for _, e := range envs {
 			if e.Name == key {
-				return e.Value, true
+				return *e.DeepCopy(), true
 			}
 		}
 	}
-	return "", false
+	return corev1.EnvVar{}, false
 }
 
 func getWhatapLicenseEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec) corev1.EnvVar {
 	// target envs에서 license 오버라이드 검색: WHATAP_LICENSE, license (Java/Python whatap.conf 키)
-	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapLicense, EnvJavaLicense); ok {
-		return corev1.EnvVar{Name: EnvWhatapLicense, Value: val}
+	if env, ok := findEnvVarByKeys(target.Envs, EnvWhatapLicense, EnvJavaLicense); ok {
+		env.Name = EnvWhatapLicense
+		return env
 	}
 	return corev1.EnvVar{Name: EnvWhatapLicense, Value: config.GetWhatapLicense()}
 }
 
 func getWhatapHostEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec) corev1.EnvVar {
 	// target envs에서 host 오버라이드 검색: WHATAP_HOST, whatap.server.host, whatap_server_host, WHATAP_SERVER_HOST
-	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapHost, EnvJavaWhatapHost, EnvPythonWhatapHost, EnvNodejsWhatapHost); ok {
-		return corev1.EnvVar{Name: EnvWhatapHost, Value: val}
+	if env, ok := findEnvVarByKeys(target.Envs, EnvWhatapHost, EnvJavaWhatapHost, EnvPythonWhatapHost, EnvNodejsWhatapHost); ok {
+		env.Name = EnvWhatapHost
+		return env
 	}
 	return corev1.EnvVar{Name: EnvWhatapHost, Value: config.GetWhatapHost()}
 }
 
 func getWhatapPortEnvVar(cr monitoringv2alpha1.WhatapAgent, target monitoringv2alpha1.TargetSpec) corev1.EnvVar {
 	// target envs에서 port 오버라이드 검색: WHATAP_PORT, whatap.server.port, whatap_server_port, WHATAP_SERVER_PORT
-	if val, ok := findEnvValueByKeys(target.Envs, EnvWhatapPort, EnvJavaWhatapPort, EnvPythonWhatapPort, EnvNodejsWhatapPort); ok {
-		return corev1.EnvVar{Name: EnvWhatapPort, Value: val}
+	if env, ok := findEnvVarByKeys(target.Envs, EnvWhatapPort, EnvJavaWhatapPort, EnvPythonWhatapPort, EnvNodejsWhatapPort); ok {
+		env.Name = EnvWhatapPort
+		return env
 	}
 	return corev1.EnvVar{Name: EnvWhatapPort, Value: config.GetWhatapPort()}
 }
@@ -81,11 +84,9 @@ func mergeEnvVars(base []corev1.EnvVar, extras []corev1.EnvVar) []corev1.EnvVar 
 // upsertEnvVars overlays overrides onto base BY NAME, forcing the override value to win.
 //
 // For every override entry, ALL pre-existing entries in base with the same name are
-// dropped and the override is appended once. This matters because Kubernetes resolves a
-// duplicated env name to its FIRST occurrence: if another mutating webhook / 3rd-party APM
-// injected e.g. "whatap.server.host" earlier in container.Env, a plain append (operator
-// value last) would be shadowed and the agent would fall back to 127.0.0.1. mergeEnvVars
-// (existing-wins) is therefore insufficient for whatap-owned keys — use this instead.
+// dropped and the override is appended once. Kubernetes expands entries in declaration
+// order and the last occurrence wins. mergeEnvVars skips names already present, so it
+// cannot replace stale whatap-owned keys; use this helper for those keys instead.
 //
 // A new slice is returned; base is not mutated. Use only for keys the operator owns and
 // must control (license / server host+port / micro / downward-API metadata). Keys where a
@@ -152,6 +153,8 @@ func toNameSet(names ...string) map[string]struct{} {
 var (
 	pythonForceEnvNames = toNameSet(
 		EnvPythonLicense, EnvPythonWhatapHost, EnvPythonWhatapPort,
+		EnvPythonNativeHost, EnvPythonNativePort,
+		EnvJavaWhatapHost, EnvJavaWhatapPort,
 		EnvWhatapHome, EnvWhatapMicroEnabled,
 		EnvNodeIP, EnvNodeName, EnvPodName,
 	)

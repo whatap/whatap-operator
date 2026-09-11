@@ -1,6 +1,9 @@
 package v2alpha1
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -21,10 +24,22 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 	licenseEnv.Name = EnvPythonLicense // Python agent expects "license" env var name
 
 	hostEnv := getWhatapHostEnvVar(cr, target)
-	hostEnv.Name = EnvPythonWhatapHost // Python agent expects "whatap_server_host" env var name
+	hostEnv.Name = EnvPythonWhatapHost
 
 	portEnv := getWhatapPortEnvVar(cr, target)
 	portEnv.Name = EnvPythonWhatapPort
+
+	// Keep the Python aliases for compatibility, and also supply the names read
+	// by its native collector when a custom whatap.conf omits connection fields.
+	// Do not change the collector's existing file-over-environment precedence.
+	nativeHostEnv, nativePortEnv := hostEnv, portEnv
+	nativeHostEnv.Name = EnvPythonNativeHost
+	nativePortEnv.Name = EnvPythonNativePort
+	// Exact dotted keys take precedence over uppercase aliases in the native
+	// collector; keep all accepted names consistent with the resolved CR value.
+	dottedHostEnv, dottedPortEnv := hostEnv, portEnv
+	dottedHostEnv.Name = EnvJavaWhatapHost
+	dottedPortEnv.Name = EnvJavaWhatapPort
 
 	// Python APM 환경변수 구성
 	envVars := []corev1.EnvVar{
@@ -32,6 +47,10 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 		licenseEnv,
 		hostEnv,
 		portEnv,
+		nativeHostEnv,
+		nativePortEnv,
+		dottedHostEnv,
+		dottedPortEnv,
 
 		// Python 애플리케이션 정보
 		{Name: EnvAppName, Value: appName},
@@ -52,9 +71,6 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 	if okind != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: EnvOkind, Value: okind})
 	}
-
-	// PYTHONPATH 안전하게 주입 (새로운 구조)
-	envVars = injectPythonPath(envVars, ValPythonBootstrap, logger)
 
 	// WHATAP_PYTHON_AGENT_PATH 기본값 설정: 사용자가 지정하지 않은 경우에만 추가
 	// 우선순위: 컨테이너에 이미 존재하면 그대로 유지
@@ -79,39 +95,86 @@ func injectPythonEnvVars(container corev1.Container, target monitoringv2alpha1.T
 	}
 
 	// 와탭 소유 연결/설정 ENV(license, whatap_server_host/port, WHATAP_HOME, micro, downward-API)는
-	// 기존 container.Env에 동일 키가 있어도 operator 값으로 강제 override (KAZAA-641, 단순 append는 k8s
-	// 중복 첫-값-우선 규칙에 무시됨). app_name/PYTHONPATH/agent path 등은 기존/사용자 값을 보존한다.
-	return combineEnvVars(container.Env, envVars, func(name string) bool {
+	// 기존 container.Env에 동일 키가 있어도 operator 값으로 강제 override (KAZAA-641).
+	// Kubernetes는 중복 ENV의 마지막 선언을 사용한다. app_name/PYTHONPATH/agent path 등은 사용자 값을 보존한다.
+	envVars = combineEnvVars(container.Env, envVars, func(name string) bool {
 		_, ok := pythonForceEnvNames[name]
 		return ok
 	})
+	// Augment the effective application environment, not just the new variables:
+	// an existing-wins merge would otherwise discard the bootstrap path.
+	return injectPythonPath(envVars, target.Envs, ValPythonBootstrap, logger)
 }
 
-// PYTHONPATH 안전하게 주입 (OpenTelemetry 방식)
-func injectPythonPath(envVars []corev1.EnvVar, bootstrapPath string, logger logr.Logger) []corev1.EnvVar {
-	found := false
+// Preserve application paths and their runtime references while enabling the
+// agent's sitecustomize.py. Never resolve ConfigMap/Secret contents in admission.
+func injectPythonPath(envVars, reservedEnvVars []corev1.EnvVar, bootstrapPath string, logger logr.Logger) []corev1.EnvVar {
+	lastPathIndex := -1
 	for i, env := range envVars {
 		if env.Name == EnvPythonPath {
-			if env.ValueFrom != nil {
-				logger.Info("PYTHONPATH is set via ConfigMap/Secret. Skipping injection.")
-				found = true
-				break
-			} else {
-				// 이미 값이 있는 경우: 앞쪽에 추가 (우선순위 높임) 또는 뒤쪽?
-				// 보통 PYTHONPATH는 앞쪽이 우선. bootstrap을 앞에 두어 에이전트 로딩 보장
-				// 구분자는 ':'
-				logger.Info("Appending to existing PYTHONPATH", "original", env.Value)
-				envVars[i].Value = bootstrapPath + ":" + env.Value
-				found = true
-				break
+			lastPathIndex = i
+		}
+	}
+	result := make([]corev1.EnvVar, 0, len(envVars)+1)
+	for i, env := range envVars {
+		// Kubelet expands then overwrites in declaration order: only augment the
+		// last value, leaving earlier values intact for consumers/self-references.
+		if i != lastPathIndex {
+			result = append(result, env)
+			continue
+		}
+		if env.ValueFrom != nil {
+			// Kubernetes expands $(NAME) in declaration order. Keep the referenced
+			// value immediately before PYTHONPATH and before its existing consumers.
+			source := env
+			source.Name = pythonPathSourceName(envVars, reservedEnvVars)
+			cm, secret := source.ValueFrom.ConfigMapKeyRef, source.ValueFrom.SecretKeyRef
+			if (cm != nil && cm.Optional != nil && *cm.Optional) ||
+				(secret != nil && secret.Optional != nil && *secret.Optional) {
+				// Kubelet skips missing optional sources without assigning them.
+				// Seed the alias from the effective path (including envFrom), so
+				// a present source overwrites it and an absent one preserves it.
+				result = append(result, corev1.EnvVar{Name: source.Name, Value: "$(" + EnvPythonPath + ")"})
+			}
+			result = append(result, source)
+			env = corev1.EnvVar{Name: EnvPythonPath, Value: "$(" + source.Name + ")"}
+			logger.Info("Preserving PYTHONPATH valueFrom with a runtime environment reference")
+		}
+		env.Value = prependPythonPaths(env.Value, bootstrapPath)
+		result = append(result, env)
+	}
+	if lastPathIndex == -1 {
+		result = append(result, corev1.EnvVar{Name: EnvPythonPath, Value: prependPythonPaths("", bootstrapPath)})
+	}
+	return result
+}
+
+func prependPythonPaths(value, bootstrapPath string) string {
+	// The package root also matters: the bundled bootstrap's fallback does not
+	// parse a colon-separated PYTHONPATH when importing the whatap package.
+	paths := []string{ValWhatapHome, bootstrapPath}
+	if value != "" {
+		for _, path := range strings.Split(value, ":") {
+			if path != ValWhatapHome && path != bootstrapPath {
+				paths = append(paths, path)
 			}
 		}
 	}
-	if !found {
-		// 없으면 새로 추가
-		envVars = append(envVars, corev1.EnvVar{Name: EnvPythonPath, Value: bootstrapPath})
+	return strings.Join(paths, ":")
+}
+
+func pythonPathSourceName(envVars, reservedEnvVars []corev1.EnvVar) string {
+	used := make(map[string]bool, len(envVars)+len(reservedEnvVars))
+	for _, envs := range [][]corev1.EnvVar{envVars, reservedEnvVars} {
+		for _, env := range envs {
+			used[env.Name] = true
+		}
 	}
-	return envVars
+	name := EnvPythonPathSource
+	for suffix := 1; used[name]; suffix++ {
+		name = fmt.Sprintf("%s_%d", EnvPythonPathSource, suffix)
+	}
+	return name
 }
 
 func getPythonAppConfig(envs []corev1.EnvVar) (string, string, string) {
