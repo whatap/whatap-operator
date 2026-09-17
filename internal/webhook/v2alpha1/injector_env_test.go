@@ -9,8 +9,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// envValues returns every value bound to name (in order). Kubernetes applies the FIRST one;
-// a correct injection must therefore leave exactly one entry with the operator value.
+// envValues returns every literal value bound to name, in declaration order.
+// Kubernetes expands declarations in order and the last assignment wins.
 func envValues(envs []corev1.EnvVar, name string) []string {
 	var out []string
 	for _, e := range envs {
@@ -21,7 +21,8 @@ func envValues(envs []corev1.EnvVar, name string) []string {
 	return out
 }
 
-// effective returns the value Kubernetes would apply for name (first occurrence).
+// effective reads single-entry fixtures. Use resolveNodejsTestEnv for ordered
+// duplicate declarations, ValueFrom, or Kubernetes variable expansion.
 func effective(envs []corev1.EnvVar, name string) (string, bool) {
 	for _, e := range envs {
 		if e.Name == name {
@@ -56,7 +57,7 @@ func TestInjectJavaEnvVars_OverridesPreInjectedHost(t *testing.T) {
 	container := corev1.Container{
 		Name: "app",
 		Env: []corev1.EnvVar{
-			{Name: EnvJavaWhatapHost, Value: "127.0.0.1"}, // stale conflict, first → would normally win
+			{Name: EnvJavaWhatapHost, Value: "127.0.0.1"}, // stale value retained by an existing-wins merge
 			{Name: EnvJavaToolOptions, Value: "-Dexisting=1"},
 		},
 	}
@@ -98,25 +99,29 @@ func TestInjectPythonEnvVars_OverridesPreInjectedHostAndKeepsPythonPath(t *testi
 	}
 }
 
-func TestInjectNodejsEnvVars_OverridesPreInjectedHostAndKeepsNodeOptions(t *testing.T) {
+func TestInjectNodejsEnvVars_OverridesPreInjectedHostAndAugmentsNodeEnv(t *testing.T) {
 	container := corev1.Container{
 		Name: "app",
 		Env: []corev1.EnvVar{
 			{Name: EnvNodejsWhatapHost, Value: "127.0.0.1"},
 			{Name: EnvNodejsOptions, Value: "--max-old-space-size=512"}, // user value preserved
+			{Name: EnvNodejsPath, Value: "/app/libs::/app/plugins:"},
 		},
 	}
 	target := monitoringv2alpha1.TargetSpec{
 		Envs: []corev1.EnvVar{{Name: EnvWhatapHost, Value: "10.20.30.40"}},
 	}
 
-	got := injectNodejsEnvVars(container, target, monitoringv2alpha1.WhatapAgent{}, "latest", logr.Discard())
+	got := injectLanguageSpecificEnvVars(container, target, monitoringv2alpha1.WhatapAgent{}, "nodejs", "latest", logr.Discard())
 
 	if vals := envValues(got, EnvNodejsWhatapHost); len(vals) != 1 || vals[0] != "10.20.30.40" {
 		t.Fatalf("expected single WHATAP_SERVER_HOST=10.20.30.40, got %v", vals)
 	}
-	if v, _ := effective(got, EnvNodejsOptions); v != "--max-old-space-size=512" {
-		t.Fatalf("user NODE_OPTIONS not preserved, got %q", v)
+	if v, _ := effective(got, EnvNodejsOptions); v != "-r whatap --max-old-space-size=512" {
+		t.Errorf("user NODE_OPTIONS not preserved with WhaTap preload, got %q", v)
+	}
+	if v, _ := effective(got, EnvNodejsPath); v != ValNodejsModules+":/app/libs::/app/plugins:" {
+		t.Errorf("user NODE_PATH not preserved with agent modules, got %q", v)
 	}
 }
 

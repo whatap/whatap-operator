@@ -1,6 +1,9 @@
 package v2alpha1
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/go-logr/logr"
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -52,12 +55,6 @@ func injectNodejsEnvVars(container corev1.Container, target monitoringv2alpha1.T
 		envVars = append(envVars, corev1.EnvVar{Name: EnvOkind, Value: okind})
 	}
 
-	// NODEJS_PATH 안전하게 주입 (모듈 검색 경로 추가)
-	envVars = injectNodejsPath(envVars, ValNodejsModules, logger)
-
-	// NODEJS_OPTIONS 안전하게 주입 (-r whatap)
-	envVars = injectNodejsOptions(envVars, ValNodejsRequire, logger)
-
 	// WHATAP_NODEJS_AGENT_PATH 기본값 설정: 사용자가 지정하지 않은 경우에만 추가
 	hasNodeAgentPath := false
 	for _, e := range container.Env {
@@ -80,24 +77,120 @@ func injectNodejsEnvVars(container corev1.Container, target monitoringv2alpha1.T
 
 	// 와탭 소유 연결/설정 ENV는 기존 동일 키가 있어도 operator 값으로 강제 override (KAZAA-641, Java/Python과 동일 패턴).
 	// app_name/NODE_PATH/NODE_OPTIONS/agent path 등은 기존/사용자 값을 보존한다.
-	return combineEnvVars(container.Env, envVars, func(name string) bool {
+	envVars = combineEnvVars(container.Env, envVars, func(name string) bool {
 		_, ok := nodejsForceEnvNames[name]
 		return ok
 	})
+	// Augment the merged application environment; an existing-wins merge
+	// after augmentation would discard the WhaTap module path and preload.
+	original := envVars
+	var supported bool
+	envVars, supported = preserveNodejsEnvSource(envVars, target.Envs, EnvNodejsPath)
+	if !supported {
+		logger.Info("Skipping Node.js environment augmentation", "env", EnvNodejsPath, "reason", "optional source fallback is not guaranteed; use explicit non-optional environment variables")
+		return original
+	}
+	envVars = injectNodejsPath(envVars, ValNodejsModules, logger)
+	envVars, supported = preserveNodejsEnvSource(envVars, target.Envs, EnvNodejsOptions)
+	if !supported {
+		logger.Info("Skipping Node.js environment augmentation", "env", EnvNodejsOptions, "reason", "optional source fallback is not guaranteed; use explicit non-optional environment variables")
+		return original
+	}
+	return injectNodejsOptions(envVars, ValNodejsRequire, logger)
+}
+
+// Keep ValueFrom opaque to admission. Kubelet resolves the alias immediately
+// before the final declaration, without changing earlier duplicate consumers.
+func preserveNodejsEnvSource(envVars, reserved []corev1.EnvVar, name string) ([]corev1.EnvVar, bool) {
+	for i := len(envVars) - 1; i >= 0; i-- {
+		if envVars[i].Name != name {
+			continue
+		}
+		if envVars[i].ValueFrom == nil {
+			return envVars, true
+		}
+		optional := optionalNodejsEnvSource(envVars[i].ValueFrom)
+		fallback := ""
+		if optional {
+			var supported bool
+			fallback, supported = nodejsEnvSourceFallback(envVars[:i], name)
+			if !supported {
+				return envVars, false
+			}
+		}
+		used := make(map[string]bool, len(envVars)+len(reserved))
+		for _, envs := range [][]corev1.EnvVar{envVars, reserved} {
+			for _, env := range envs {
+				used[env.Name] = true
+			}
+		}
+		base := "WHATAP_ORIGINAL_" + name
+		alias := base
+		for suffix := 1; used[alias]; suffix++ {
+			alias = fmt.Sprintf("%s_%d", base, suffix)
+		}
+		source := envVars[i]
+		source.Name = alias
+		result := make([]corev1.EnvVar, 0, len(envVars)+2)
+		result = append(result, envVars[:i]...)
+		if optional {
+			// A missing optional reference keeps this seed. In particular, never
+			// leave an unresolved alias in NODE_OPTIONS: Node rejects it at startup.
+			result = append(result, corev1.EnvVar{Name: alias, Value: fallback})
+		}
+		result = append(result, source, corev1.EnvVar{Name: name, Value: "$(" + alias + ")"})
+		return append(result, envVars[i+1:]...), true
+	}
+	return envVars, true
+}
+
+func optionalNodejsEnvSource(source *corev1.EnvVarSource) bool {
+	if source == nil {
+		return false
+	}
+	if ref := source.ConfigMapKeyRef; ref != nil {
+		return ref.Optional != nil && *ref.Optional
+	}
+	if ref := source.SecretKeyRef; ref != nil {
+		return ref.Optional != nil && *ref.Optional
+	}
+	return false
+}
+
+// Seed an optional alias only after a guaranteed assignment. Otherwise a missing
+// source may fall back to envFrom or image ENV that admission cannot inspect;
+// neither an empty seed nor an undefined $(NAME) preserves that value.
+func nodejsEnvSourceFallback(earlier []corev1.EnvVar, name string) (string, bool) {
+	for _, env := range earlier {
+		if env.Name != name {
+			continue
+		}
+		if !optionalNodejsEnvSource(env.ValueFrom) {
+			return "$(" + name + ")", true
+		}
+	}
+	return "", false
 }
 
 // NODEJS_PATH 안전하게 주입 (Python의 injectPythonPath와 동일 패턴)
 func injectNodejsPath(envVars []corev1.EnvVar, modulesPath string, logger logr.Logger) []corev1.EnvVar {
+	envVars = append([]corev1.EnvVar(nil), envVars...)
 	found := false
-	for i, env := range envVars {
+	for i := len(envVars) - 1; i >= 0; i-- {
+		env := envVars[i]
 		if env.Name == EnvNodejsPath {
 			if env.ValueFrom != nil {
 				logger.Info("NODEJS_PATH is set via ConfigMap/Secret. Skipping injection.")
 				found = true
 				break
 			}
-			logger.Info("Prepending to existing NODEJS_PATH", "original", env.Value)
-			envVars[i].Value = modulesPath + ":" + env.Value
+			paths := []string{modulesPath}
+			for _, path := range strings.Split(env.Value, ":") {
+				if path != modulesPath {
+					paths = append(paths, path)
+				}
+			}
+			envVars[i].Value = strings.Join(paths, ":")
 			found = true
 			break
 		}
@@ -110,16 +203,21 @@ func injectNodejsPath(envVars []corev1.EnvVar, modulesPath string, logger logr.L
 
 // NODEJS_OPTIONS 안전하게 주입 (-r whatap)
 func injectNodejsOptions(envVars []corev1.EnvVar, requireOption string, logger logr.Logger) []corev1.EnvVar {
+	envVars = append([]corev1.EnvVar(nil), envVars...)
 	found := false
-	for i, env := range envVars {
+	for i := len(envVars) - 1; i >= 0; i-- {
+		env := envVars[i]
 		if env.Name == EnvNodejsOptions {
 			if env.ValueFrom != nil {
 				logger.Info("NODEJS_OPTIONS is set via ConfigMap/Secret. Skipping injection.")
 				found = true
 				break
 			}
-			logger.Info("Prepending to existing NODEJS_OPTIONS", "original", env.Value)
-			envVars[i].Value = requireOption + " " + env.Value
+			if env.Value == "" {
+				envVars[i].Value = requireOption
+			} else if env.Value != requireOption && !strings.HasPrefix(env.Value, requireOption+" ") {
+				envVars[i].Value = requireOption + " " + env.Value
+			}
 			found = true
 			break
 		}
