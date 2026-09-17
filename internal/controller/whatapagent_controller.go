@@ -401,6 +401,10 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	} else {
 		// The object is being deleted
 		if controllerutil.ContainsFinalizer(whatapAgent, whatapFinalizer) {
+			// Retain the finalizer if owned network cleanup fails; never adopt/delete foreign objects.
+			if err := r.cleanupNetworkAgent(ctx, whatapAgent); err != nil {
+				return ctrl.Result{}, err
+			}
 			// our finalizer is present, so let's handle any external dependency
 			if err := r.cleanupAgents(ctx); err != nil {
 				logger.Error(err, "Failed to clean up agents")
@@ -519,6 +523,9 @@ func (r *WhatapAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.cleanupNodeAgent(ctx); err != nil {
 			logger.Error(err, "Failed to cleanup Node Agent")
 		}
+	}
+	if err := r.reconcileNetworkAgent(ctx, whatapAgent); err != nil {
+		return ctrl.Result{}, err
 	}
 	if k8sAgentSpec.ApiserverMonitoring.Enabled {
 		logger.V(1).Info("Installing Apiserver Monitoring Agent")

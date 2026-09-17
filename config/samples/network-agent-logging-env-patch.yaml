@@ -1,0 +1,20 @@
+# Review-only JSON merge patch: not a complete WhatapAgent.
+# Requires an env-capable collector image and updated operator + CRD.
+# Keep the approved image/enabled/scheduling settings; this patch does not deploy.
+# The env array replaces existing entries: merge any existing custom env first.
+# envFrom and other existing settings are preserved by this merge patch.
+spec:
+  features:
+    networkAgent:
+      # Remove CLI overrides so the environment can control logging.
+      stdout: null
+      logLevel: null
+      logInterval: null
+      env:
+        - name: WHATAP_STDOUT
+          value: "auto"
+        - name: WHATAP_LOG_LEVEL
+          value: "info"
+        - name: WHATAP_LOG_INTERVAL
+          value: "1m"
+# For ConfigMap/Secret-backed valueFrom or envFrom examples, see NETWORK_AGENT.md.

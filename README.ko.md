@@ -14,6 +14,13 @@
 - **Open Agent를 통한 오픈메트릭 수집**: Open Agent 설치를 통해 오픈메트릭(OpenMetrics) 데이터를 수집하고 활용할 수 있습니다.
 - **통합 모니터링 관리**: 단일 CR을 통해 애플리케이션 성능 모니터링(APM)과 쿠버네티스 인프라 모니터링을 한 번에 구성하고 관리하여 운영 효율성을 높입니다.
 
+### Network agent (개발 기능)
+
+`spec.features.networkAgent.enabled`로 별도 eBPF network DaemonSet을 활성화합니다.
+기본값은 비활성화이며 기존 node agent/helper Pod를 변경하지 않습니다.
+[기존 CR에 추가할 YAML·권한·업그레이드 및 비활성화 안내](./NETWORK_AGENT.md)를 참고하세요.
+이 소스 변경을 포함한 operator 이미지와 CRD가 모두 필요합니다.
+
 ## **와탭 오퍼레이터의 목표**
 
 와탭 오퍼레이터는 쿠버네티스 환경에서 모니터링 구성의 복잡성을 줄이고 관리를 단순화하는 데 중점을 둡니다.
