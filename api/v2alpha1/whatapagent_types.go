@@ -39,9 +39,56 @@ type WhatapAgentSpec struct {
 }
 
 type FeaturesSpec struct {
-	Apm       ApmSpec       `json:"apm,omitempty"`
-	OpenAgent OpenAgentSpec `json:"openAgent,omitempty"`
-	K8sAgent  K8sAgentSpec  `json:"k8sAgent,omitempty"`
+	Apm          ApmSpec          `json:"apm,omitempty"`
+	OpenAgent    OpenAgentSpec    `json:"openAgent,omitempty"`
+	K8sAgent     K8sAgentSpec     `json:"k8sAgent,omitempty"`
+	NetworkAgent NetworkAgentSpec `json:"networkAgent,omitempty"`
+}
+
+// NetworkAgentSpec configures the standalone privileged eBPF collector.
+// Privileged admission (including OpenShift SCC approval) must be granted externally.
+type NetworkAgentSpec struct {
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+	// Image is an explicit image reference; there is no implicit latest image.
+	// +optional
+	Image string `json:"image,omitempty"`
+	// Stdout controls telemetry JSONL separately from operational logs.
+	// Omit to use the image default; explicit settings require a logging-capable image.
+	// +kubebuilder:validation:Enum=auto;jsonl;none
+	// +optional
+	Stdout string `json:"stdout,omitempty"`
+	// LogLevel controls periodic operational summaries, never telemetry stdout.
+	// Fatal errors and final delivery summaries remain visible at every level.
+	// +kubebuilder:validation:Enum=debug;info;warn;error
+	// +optional
+	LogLevel string `json:"logLevel,omitempty"`
+	// LogInterval is a nonnegative Go duration (for example 1m or 0s).
+	// Zero disables periodic summaries, not the final summary or fatal errors.
+	// +optional
+	LogInterval string `json:"logInterval,omitempty"`
+	// Env adds ordered container variables. Operator-managed identity, credentials
+	// and Go runtime variable names are reserved. Explicit logging fields override env.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+	// EnvFrom adds ordered ConfigMap/Secret sources in the agent namespace.
+	// Explicit Env (including operator-managed variables) takes precedence.
+	// +optional
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	// +kubebuilder:default="whatap-credentials"
+	// +optional
+	CredentialsSecretName string `json:"credentialsSecretName,omitempty"`
+	// ServiceAccountName reuses an externally managed account without SA/RBAC writes.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // OpenAgentSpec defines the openAgent enablement and configuration

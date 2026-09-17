@@ -1,0 +1,19 @@
+# Merge into an existing WhatapAgent; do not use as a full replacement CR.
+# Requires an operator image AND CRD containing the networkAgent feature.
+# Reuses an already-authorized SA; this example grants no SCC/RBAC.
+spec:
+  features:
+    networkAgent:
+      enabled: true
+      image: public.ecr.aws/whatap/network_agent_dev@sha256:97d19e79ff3a1a89039c0d9f54ea8fdfa40745efc63d48f4706bfef084319421
+      credentialsSecretName: whatap-credentials
+      serviceAccountName: whatap
+      nodeSelector:
+        kubernetes.io/hostname: worker01.okd4.cluster.local
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
