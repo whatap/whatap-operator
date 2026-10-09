@@ -358,6 +358,10 @@ func patchPodTemplateSpec(podSpec *corev1.PodSpec, cr monitoringv2alpha1.WhatapA
 		}
 	}
 
+	if lang == "nodejs" && skipNodejsNpm(target) {
+		configureNodejsNpmPreload(initContainers)
+	}
+
 	podSpec.InitContainers = append(podSpec.InitContainers, initContainers...)
 
 	// 3️⃣ 공유 볼륨 추가 (에이전트용)

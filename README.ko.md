@@ -113,3 +113,24 @@ spec:
 
 추가 문서
 - [Helm차트에서 whatap-credentials Secret 생성 옵션 PRD](./docs/prd-helm-credentials.md)
+
+## Node.js에서 npm Agent 초기화 제외 (선택 기능)
+
+Node.js target에 다음을 지정하면 Operator가 공통 preload 파일을 준비하고
+`NODE_OPTIONS`에 `-r /whatap-agent/whatap-preload.cjs`를 주입합니다.
+
+```yaml
+envs:
+  - name: WHATAP_SKIP_NPM
+    value: "true"
+```
+
+preload는 실제 entry point가 npm package의 `bin/npm-cli.js`일 때만
+WhaTap 로딩을 건너뜁니다. 자식 앱으로 전달되는 NODE_OPTIONS는 변경하지 않습니다.
+Next.js 전용 처리가 아니며 일반 Node.js 앱도 기존처럼 WhaTap을 로딩합니다.
+미지정 또는 false이면 기존 `-r whatap` 방식입니다. Java/Python에는 적용되지 않습니다.
+기존 앱 실행 명령·npm lifecycle scripts는 변경하지 않습니다.
+별도로 지정한 `-r whatap` 또는 앱 코드의 직접 require는 이 wrapper 밖에서 실행되므로
+중복 Agent 로딩을 피하려면 기존 명시적 Agent preload를 별도로 정리해야 합니다.
+yarn·pnpm·npx·PM2는 제외 대상이 아닙니다.
+커스텀 init 이미지도 기존 custom 설정과 동일하게 `/init.sh` 초기화 계약을 따라야 합니다.
