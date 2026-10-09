@@ -33,6 +33,8 @@ import (
 	"github.com/whatap/whatap-operator/internal/config"
 )
 
+const configMapAnnotation = "whatap.io/apm-configmap"
+
 // nolint:unused
 // log is for logging in this package.
 var whatapWebhookLogger = logf.Log.WithName("whatap-webhook")
@@ -172,6 +174,11 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 		whatapWebhookLogger.Info("Target matched for APM injection", "pod", podIdentifier, "target", target.Name, "language", target.Language)
 
 		// 4) PodSpec 변형 (initContainer, volumes, env 등)
+		if name := pod.Annotations[configMapAnnotation]; name != "" {
+			target.Config.Mode = "custom"
+			target.Config.ConfigMapRef = &monitoringv2alpha1.ConfigMapRef{Name: name}
+		}
+
 		patchPodTemplateSpec(&pod.Spec, whatapAgentCustomResource, target, ns, whatapWebhookLogger)
 		if pod.Annotations == nil {
 			pod.Annotations = map[string]string{}
