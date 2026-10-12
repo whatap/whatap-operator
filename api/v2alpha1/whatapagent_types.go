@@ -43,6 +43,10 @@ type FeaturesSpec struct {
 	OpenAgent    OpenAgentSpec    `json:"openAgent,omitempty"`
 	K8sAgent     K8sAgentSpec     `json:"k8sAgent,omitempty"`
 	NetworkAgent NetworkAgentSpec `json:"networkAgent,omitempty"`
+	// KubeVirt installs the server agent during a selected new VM's first boot.
+	// It does not modify existing VMs or their running instances.
+	// +optional
+	KubeVirt KubeVirtSpec `json:"kubeVirt,omitempty"`
 }
 
 // NetworkAgentSpec configures the standalone privileged eBPF collector.

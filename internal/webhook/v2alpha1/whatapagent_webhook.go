@@ -31,6 +31,7 @@ import (
 
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	"github.com/whatap/whatap-operator/internal/config"
+	kv "github.com/whatap/whatap-operator/internal/kubevirt"
 )
 
 // nolint:unused
@@ -42,6 +43,12 @@ func SetupWhatapAgentWebhookWithManager(mgr ctrl.Manager) error {
 	if err := (&InjectionFailureEventReconciler{Client: mgr.GetClient()}).SetupWithManager(mgr); err != nil {
 		return err
 	}
+
+	// Raw admission avoids a mandatory KubeVirt dependency/cache watch on clusters
+	// without its CRDs. Use the direct reader for newly created immutable Secrets.
+	mgr.GetWebhookServer().Register(kv.WebhookPath, &admission.Webhook{
+		Handler: newKubeVirtAdmissionHandler(mgr.GetAPIReader(), mgr.GetClient()),
+	})
 
 	// Register the Pod webhook for injection
 	if err := ctrl.NewWebhookManagedBy(mgr).
@@ -405,5 +412,5 @@ func validateAgentConfigurations(whatapagent *monitoringv2alpha1.WhatapAgent) er
 	if whatapAgentCrName != "whatap" {
 		return fmt.Errorf("agent configuration is not valid")
 	}
-	return nil
+	return kv.ValidatePolicy(whatapagent.Spec.Features.KubeVirt)
 }
