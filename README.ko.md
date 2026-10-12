@@ -78,6 +78,26 @@ K8s 클러스터 내의 와탭 모니터링 컴포넌트 구성을 단일 파일
 
 [와탭 오퍼레이터 설치 가이드](./docs/operator.md)
 
+## Pod annotation으로 APM ConfigMap 선택
+
+중앙 `WhatapAgent` CR의 target config를 `mode: default`로 두고, 애플리케이션 Deployment의 Pod template에서 ConfigMap을 지정할 수 있습니다.
+
+```yaml
+spec:
+  template:
+    metadata:
+      annotations:
+        whatap.io/apm-configmap: service-config
+```
+
+- `service-config`는 예시입니다. ConfigMap은 Pod와 같은 Namespace에 존재하고 `data.whatap.conf`를 포함해야 합니다.
+- instrumentation과 target이 활성화되어 있고 Namespace·Pod selector가 일치하는 Pod에만 적용됩니다.
+- 비어 있지 않은 annotation은 해당 Pod에서 중앙 CR의 `configMapRef`보다 우선합니다. annotation이 없거나 빈 문자열이면 기존 CR 설정을 유지하며 중앙 CR은 변경하지 않습니다.
+- 중앙 target의 `volumeName`, `mountPath`, `pluginConfigMapRef`는 유지합니다. initContainer는 기본 `/config-volume`(또는 지정한 `mountPath`)의 `whatap.conf`를 쓰기 가능한 emptyDir의 `/whatap-agent/whatap.conf`로 복사합니다. ConfigMap 원본을 애플리케이션에 직접 마운트하지 않습니다.
+- annotation 변경은 새로 생성되는 Pod에 적용되므로 기존 Pod는 재생성해야 합니다.
+- ConfigMap이나 `whatap.conf` key가 없으면 기존 custom 설정과 동일하게 volume 마운트 또는 initContainer 복사가 실패합니다. 볼륨 이름 충돌도 기존 custom 설정 처리에 따르며 별도 fallback은 없습니다.
+- 이 변경을 포함한 Operator 이미지가 필요합니다. CRD 변경은 없습니다.
+
 ## GPU 모니터링: kubelet pod-resources 경로 설정
 
 기본 kubelet 경로가 아닌 환경에서는 기존 `WhatapAgent` CR의
