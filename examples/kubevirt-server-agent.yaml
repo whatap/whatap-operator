@@ -1,0 +1,66 @@
+# Structure example only. Merge kubeVirt into your EXISTING WhatapAgent spec;
+# do not replace or disable other features. Prepare the VM namespace and a fresh
+# cloud-init-ready root PVC. Inline licenses are visible to readers of this CR.
+# Use licenseSecretRef instead if the license should not be stored in the CR.
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+spec:
+  features:
+    kubeVirt:
+      enabled: true
+      targets:
+        - name: new-linux
+          enabled: true
+          namespace: vms
+          vmSelector:
+            matchLabels:
+              app: example
+          agentVersion: "2.9.25" # Optional; omission pins 2.9.25, not latest.
+          license: "REPLACE_WITH_SERVER_PROJECT_LICENSE"
+          # Alternatively, remove license above and use this existing Secret:
+          # licenseSecretRef:
+          #   name: whatap-server-license
+          #   key: license
+          host: collector.example.invalid
+          port: 6600
+---
+# Create only AFTER the updated Operator/CRD/RBAC and opt-in webhook are ready.
+# cloud-init must be installed and enabled in this PVC's Linux guest image.
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: example-new-linux
+  namespace: vms
+  labels:
+    monitoring.whatap.com/server-agent: "true"
+    app: example
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        app: example
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 1Gi
+        devices:
+          disks:
+            - name: root
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+      volumes:
+        - name: root
+          persistentVolumeClaim:
+            claimName: fresh-cloud-init-linux-root
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              timezone: Asia/Seoul

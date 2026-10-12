@@ -340,6 +340,9 @@ func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.C
 		// (e.g., NamespaceSelector, ObjectSelector, MatchPolicy, TimeoutSeconds)
 		// that we did not explicitly overwrite.
 		mwc.Webhooks = []admissionregistrationv1.MutatingWebhook{mpod, whatap}
+		if whatapAgent.Spec.Features.KubeVirt.Enabled {
+			mwc.Webhooks = append(mwc.Webhooks, r.kubeVirtWebhook())
+		}
 		return nil
 	})
 	return err
