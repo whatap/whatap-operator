@@ -9,7 +9,10 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func TestKubeVirtBootstrapRBACOnlyNeedsSecretGetAndCreate(t *testing.T) {
+// KubeVirt bootstrap needs Secret create/get/patch for admission, and Secret
+// list/delete plus VM/VMI list for the collector of unused Secrets. Secrets are
+// never watched or updated, and KubeVirt objects are never written.
+func TestKubeVirtBootstrapRBACStaysMinimal(t *testing.T) {
 	data, err := os.ReadFile("../../config/rbac/role.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -18,13 +21,30 @@ func TestKubeVirtBootstrapRBACOnlyNeedsSecretGetAndCreate(t *testing.T) {
 	if err := yaml.Unmarshal(data, &role); err != nil {
 		t.Fatal(err)
 	}
+	want := map[string][]string{
+		"secrets":                             {"create", "delete", "get", "list", "patch"},
+		"kubevirt.io/virtualmachines":         {"list"},
+		"kubevirt.io/virtualmachineinstances": {"list"},
+	}
+	found := map[string][]string{}
 	for _, rule := range role.Rules {
-		if reflect.DeepEqual(rule.APIGroups, []string{""}) && reflect.DeepEqual(rule.Resources, []string{"secrets"}) {
-			if !reflect.DeepEqual(rule.Verbs, []string{"create", "get"}) {
-				t.Fatal("bootstrap secret privileges were broadened")
+		for _, group := range rule.APIGroups {
+			for _, resource := range rule.Resources {
+				key := resource
+				if group != "" {
+					key = group + "/" + resource
+				}
+				if _, tracked := want[key]; !tracked {
+					continue
+				}
+				if _, duplicate := found[key]; duplicate {
+					t.Fatalf("%s is granted by more than one rule", key)
+				}
+				found[key] = rule.Verbs
 			}
-			return
 		}
 	}
-	t.Fatal("missing explicit Secret get/create rule")
+	if !reflect.DeepEqual(found, want) {
+		t.Fatalf("KubeVirt bootstrap privileges changed: got %v, want %v", found, want)
+	}
 }

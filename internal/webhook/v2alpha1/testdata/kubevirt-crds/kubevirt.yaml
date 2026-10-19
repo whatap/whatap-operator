@@ -1,0 +1,43 @@
+# Minimal KubeVirt CRDs for API-level tests of metadata-only lookups. Not the
+# real KubeVirt schema: no controller runs and no VM boots.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: virtualmachines.kubevirt.io
+spec:
+  group: kubevirt.io
+  names:
+    kind: VirtualMachine
+    listKind: VirtualMachineList
+    plural: virtualmachines
+    singular: virtualmachine
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: virtualmachineinstances.kubevirt.io
+spec:
+  group: kubevirt.io
+  names:
+    kind: VirtualMachineInstance
+    listKind: VirtualMachineInstanceList
+    plural: virtualmachineinstances
+    singular: virtualmachineinstance
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true

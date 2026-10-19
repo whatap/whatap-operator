@@ -31,8 +31,10 @@ type KubeVirtTargetSpec struct {
 	// VMSelector matches the VirtualMachine's top-level labels.
 	VMSelector metav1.LabelSelector `json:"vmSelector"`
 	// AgentVersion selects a published official Linux tar release for new VMs only.
-	// Changing it does not upgrade agents in existing VMs.
-	// +kubebuilder:default="2.9.25"
+	// Changing it does not upgrade agents in existing VMs. When omitted, the
+	// operator's built-in default is used at VM creation, so an operator upgrade
+	// moves omitted targets to its new default. There is deliberately no schema
+	// default: it would be written into the CR and pin the version forever.
 	// +kubebuilder:validation:Pattern=`^[0-9]+\.[0-9]+\.[0-9]+$`
 	// +kubebuilder:validation:MaxLength=32
 	// +optional
