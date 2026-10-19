@@ -28,8 +28,13 @@ func TestKubeVirtAgentVersionCRDSchema(t *testing.T) {
 			continue
 		}
 		field, found, err := unstructured.NestedMap(version, "schema", "openAPIV3Schema", "properties", "spec", "properties", "features", "properties", "kubeVirt", "properties", "targets", "items", "properties", "agentVersion")
-		if err != nil || !found || field["type"] != "string" || field["default"] != "2.9.25" || field["maxLength"] != float64(32) {
-			t.Fatal("CRD must preserve agentVersion, pin its default and bound its length")
+		if err != nil || !found || field["type"] != "string" || field["maxLength"] != float64(32) {
+			t.Fatal("CRD must preserve agentVersion and bound its length")
+		}
+		// A schema default is written into every CR and would pin omitted
+		// targets to one release across operator upgrades.
+		if _, pinned := field["default"]; pinned {
+			t.Fatal("agentVersion must not have a schema default; the operator resolves an omitted value")
 		}
 		pattern, ok := field["pattern"].(string)
 		if !ok {

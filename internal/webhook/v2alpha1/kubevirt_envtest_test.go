@@ -67,8 +67,8 @@ func TestKubeVirtBootstrapWithLocalAPIServer(t *testing.T) {
 	if !storedPolicy.Spec.Features.KubeVirt.Enabled || len(storedPolicy.Spec.Features.KubeVirt.Targets) != 1 || storedPolicy.Spec.Features.KubeVirt.Targets[0].Port != 6600 {
 		t.Fatal("real CRD pruned policy or did not default collector port")
 	}
-	if storedPolicy.Spec.Features.KubeVirt.Targets[0].AgentVersion != "2.9.25" {
-		t.Fatal("real API did not default the tar release")
+	if storedPolicy.Spec.Features.KubeVirt.Targets[0].AgentVersion != "" {
+		t.Fatal("real API persisted a default agentVersion; omitted targets must follow the operator default")
 	}
 	for _, version := range []string{"latest", "../2.9.25", "2.9.25\n"} {
 		invalid := storedPolicy.DeepCopy()
@@ -101,6 +101,9 @@ func TestKubeVirtBootstrapWithLocalAPIServer(t *testing.T) {
 		}
 		if !ownedBootstrap(&secret, storedPolicy, "new-vm") {
 			t.Fatal("real API did not preserve generated Secret ownership")
+		}
+		if secret.Annotations[bootstrapAdmittedAnnotation] == "" {
+			t.Fatal("real API did not keep the refresh of the reused immutable Secret")
 		}
 	}
 

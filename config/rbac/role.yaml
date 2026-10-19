@@ -24,7 +24,17 @@ rules:
   - secrets
   verbs:
   - create
+  - delete
   - get
+  - list
+  - patch
+- apiGroups:
+  - kubevirt.io
+  resources:
+  - virtualmachineinstances
+  - virtualmachines
+  verbs:
+  - list
 - apiGroups:
   - monitoring.whatap.com
   resources:

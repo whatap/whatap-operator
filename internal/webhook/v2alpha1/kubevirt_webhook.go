@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 
 	"fmt"
+	"time"
 
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
 	kv "github.com/whatap/whatap-operator/internal/kubevirt"
@@ -27,9 +28,14 @@ const (
 	bootstrapManagedLabel  = "monitoring.whatap.com/kubevirt-bootstrap"
 	bootstrapVMAnnotation  = "monitoring.whatap.com/bootstrap-vm"
 	defaultCloudInitVolume = "whatap-cloudinit"
+	// bootstrapAdmittedAnnotation is refreshed whenever admission reuses an
+	// existing bootstrap Secret. The new resourceVersion restarts the
+	// collector's unused observation and fails any delete it already prepared.
+	bootstrapAdmittedAnnotation = "monitoring.whatap.com/bootstrap-admitted-at"
+	bootstrapEnsureAttempts     = 3
 )
 
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=create;get
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=create;get;patch
 
 // KubeVirtAdmissionHandler prepares a new VM before its first VMI exists.
 // All generated credential-bearing data stays in a namespace-local Secret.
@@ -94,10 +100,20 @@ func (h *KubeVirtAdmissionHandler) Handle(ctx context.Context, req admission.Req
 		}
 		prepared := &corev1.Secret{}
 		if err := h.Reader.Get(ctx, client.ObjectKey{Namespace: vm.GetNamespace(), Name: ref}, prepared); err != nil || !ownedBootstrap(prepared, policy, vm.GetName()) {
+			if apierrors.IsNotFound(err) {
+				return admission.Denied("the prepared cloud-init Secret no longer exists (it is deleted after its VirtualMachine); create the VirtualMachine from its original manifest instead of a copy of the prepared object")
+			}
 			return admission.Denied("bootstrap marker is not backed by an owned immutable Secret")
 		}
 		if prepared.Name != bootstrapSecretName(policy, vm, prepared.Data["userdata"]) {
 			return admission.Denied("bootstrap Secret content does not match its identity")
+		}
+		if req.DryRun == nil || !*req.DryRun {
+			// Keep the reused Secret away from the collector, or restore it if it
+			// was collected after the read above.
+			if err := h.ensureBootstrapSecret(ctx, newBootstrapSecret(policy, vm, prepared.Data["userdata"]), policy, vm.GetName()); err != nil {
+				return admission.Denied("cannot confirm the prepared cloud-init Secret")
+			}
 		}
 		return admission.Allowed("cloud-init bootstrap already prepared; guest installation is not verified")
 	}
@@ -313,20 +329,43 @@ func ownedBootstrap(secret *corev1.Secret, policy *monitoringv2alpha1.WhatapAgen
 	return owner != nil && owner.UID == policy.UID && owner.Name == policy.Name && owner.Kind == "WhatapAgent" && owner.APIVersion == monitoringv2alpha1.GroupVersion.String() && secret.Immutable != nil && *secret.Immutable && secret.Labels[bootstrapManagedLabel] == "true" && secret.Annotations[bootstrapVMAnnotation] == vmName && len(secret.Data["userdata"]) != 0
 }
 
+// ensureBootstrapSecret creates the content-addressed Secret or confirms that the
+// stored one is owned and identical. A reused Secret is refreshed so that the
+// collector, which deletes only a revision it saw unused twice, keeps it for the
+// VM being admitted. A Secret collected in between is created again.
 func (h *KubeVirtAdmissionHandler) ensureBootstrapSecret(ctx context.Context, desired *corev1.Secret, policy *monitoringv2alpha1.WhatapAgent, vmName string) error {
-	if err := h.Writer.Create(ctx, desired); err != nil {
+	for attempt := 0; attempt < bootstrapEnsureAttempts; attempt++ {
+		err := h.Writer.Create(ctx, desired.DeepCopy())
+		if err == nil {
+			return nil
+		}
 		if !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("cannot create bootstrap Secret")
 		}
 		stored := &corev1.Secret{}
 		if err := h.Reader.Get(ctx, client.ObjectKeyFromObject(desired), stored); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
 			return fmt.Errorf("cannot read bootstrap Secret")
 		}
 		if !ownedBootstrap(stored, policy, vmName) || !bytes.Equal(stored.Data["userdata"], desired.Data["userdata"]) {
 			return fmt.Errorf("bootstrap Secret is not owned or its content differs")
 		}
+		base := stored.DeepCopy()
+		metav1.SetMetaDataAnnotation(&stored.ObjectMeta, bootstrapAdmittedAnnotation, time.Now().UTC().Format(time.RFC3339Nano))
+		err = h.Writer.Patch(ctx, stored, client.MergeFrom(base))
+		if apierrors.IsNotFound(err) {
+			continue
+		}
+		if err != nil {
+			// The verified Secret still exists; a failed refresh only gives up the
+			// collector race guard, so admission is not blocked by it.
+			whatapWebhookLogger.Info("cannot refresh reused KubeVirt bootstrap Secret", "namespace", stored.Namespace, "secret", stored.Name, "reason", apierrors.ReasonForError(err))
+		}
+		return nil
 	}
-	return nil
+	return fmt.Errorf("bootstrap Secret was deleted repeatedly during admission")
 }
 
 var _ admission.Handler = (*KubeVirtAdmissionHandler)(nil)

@@ -49,7 +49,7 @@ sequenceDiagram
 | WhatapAgent CR `spec.features.kubeVirt` | 클러스터 | 어떤 VM에, 어떤 서버 프로젝트와 버전으로 설치할지 정하는 정책 |
 | 오퍼레이터 컨트롤러 | 오퍼레이터 Pod | `enabled: true`이면 `whatap-webhook`에 KubeVirt용 webhook 항목을 등록하고, `false`면 제거 |
 | KubeVirt admission webhook | 오퍼레이터 Pod | VM 생성 요청을 받아 cloud-init 병합, Secret 생성, VM 수정 |
-| cloud-init Secret (`whatap-kv-<해시>`) | VM 네임스페이스 | 병합된 cloud-init 전체(액세스 키 포함). 변경 불가(immutable), WhatapAgent CR 소유 |
+| cloud-init Secret (`whatap-kv-<해시>`) | VM 네임스페이스 | 병합된 cloud-init 전체(액세스 키 포함). 변경 불가(immutable), WhatapAgent CR 소유. VM이 사라지면 오퍼레이터가 지운다. |
 | cloud-init | VM 안 | 첫 부팅 때 Secret에 적힌 파일 작성과 명령 실행을 한 번 수행 |
 | 설치 스크립트 | VM 안 `/usr/local/sbin/whatap-kubevirt-install.sh` | tar 다운로드, 검사, 설치, 서비스 시작 |
 | 공식 installer `install.sh` | tar 안 | 파일 복사, 서비스 파일 생성과 등록. 서비스 시작은 하지 않음 |
@@ -75,7 +75,7 @@ spec:
           vmSelector:                 # VM의 metadata.labels와 비교
             matchLabels:
               app: my-vm
-          agentVersion: "2.9.25"      # 생략하면 2.9.25, latest는 쓰지 않음
+          agentVersion: "2.9.25"      # 생략하면 오퍼레이터 기본 버전, latest는 쓰지 않음
           license: "<서버 프로젝트 액세스 키>"   # 또는 licenseSecretRef (둘 중 하나)
           host: "<수집 서버 IP>"       # 여러 개면 '/'로 구분
           port: 6600
@@ -85,6 +85,8 @@ spec:
 - `vmSelector`는 VM 자체의 라벨을 본다. VM 안에서 실행되는 Pod(virt-launcher)의 라벨은 보지 않는다.
 - 액세스 키는 서버 프로젝트의 키여야 한다. 쿠버네티스·APM 프로젝트 키를 자동으로 가져다 쓰지 않는다.
 - `agentVersion`은 `X.Y.Z` 숫자 형식만 받는다(최대 32자). 잘못된 값이 다운로드 주소나 명령에 섞이지 않게 하기 위해서다. 해당 버전이 실제로 게시돼 있는지는 확인하지 않는다.
+- `agentVersion`을 생략하면 VM을 만들 때 오퍼레이터 기본 버전을 쓴다(3.0.25 기준 2.9.25). 오퍼레이터를 올리면 생략한 대상은 새 기본 버전을 따른다.
+  - 3.0.24 CRD는 생략한 값을 `2.9.25`로 CR에 저장한다. 그 CRD로 만든 CR은 이 값이 고정돼 있으니, 기본 버전을 따르려면 CR에서 `agentVersion`을 지운다.
 
 ### 2. VM 생성 때 webhook의 판단
 
@@ -114,6 +116,17 @@ spec:
   - `monitoring.whatap.com/server-agent-bootstrap`: Secret 이름. **설치 완료 표시가 아니다.**
   - `monitoring.whatap.com/server-agent-target`: 적용된 대상 이름
 - dry-run 요청에는 Secret을 만들지 않는다.
+- 이미 있는 Secret을 재사용하면 Secret의 `monitoring.whatap.com/bootstrap-admitted-at` annotation을 갱신한다. 아래 Secret 정리가 이 Secret을 지우지 않게 하기 위해서다.
+
+### Secret 정리
+
+Secret은 VM보다 먼저 만들어지므로 VM을 소유자로 둘 수 없다. 그래서 쿠버네티스 GC 대신 오퍼레이터가 5분마다 직접 정리한다.
+
+- **지우는 대상**: Secret의 `monitoring.whatap.com/bootstrap-vm`에 적힌 VM이 이 Secret을 더는 쓰지 않는 경우다. VM의 `server-agent-bootstrap` annotation과 볼륨 어디에도 이 Secret이 없어야 한다. VM이 지워졌거나, 같은 이름의 VM이 다른 Secret을 쓰는 경우가 여기에 해당한다. VM이 없어도 같은 이름의 VMI가 남아 있으면 지우지 않는다.
+- **지우는 조건**: 만든 지 10분이 지났고, 연속된 두 번의 점검에서 같은 resourceVersion으로 쓰이지 않는 것으로 확인돼야 한다. 삭제 요청에는 그 UID와 resourceVersion을 전제조건으로 건다. 그래서 VM을 지우고 5~10분 뒤에 지워진다. webhook 뒤에 VM 생성이 실패해 남은 Secret은 만들어지고 15~20분 뒤에 지워진다.
+- **건드리지 않는 대상**: 이름이 `whatap-kv-`로 시작하지 않거나, 오퍼레이터 라벨이나 `bootstrap-vm` annotation이 없거나, WhatapAgent가 아닌 다른 controller가 소유한 Secret. VM 목록을 읽지 못한 네임스페이스도 건드리지 않는다.
+- Secret은 메타데이터만 읽는다. 액세스 키가 든 Secret 내용은 읽지 않는다. VM은 볼륨 참조를 보려고 명세까지 읽는다. 리더 오퍼레이터 한 대에서만 돌며, 지운 Secret마다 `deleted unused KubeVirt bootstrap Secret` 로그를 남긴다.
+- 필요한 권한: Secret `list`·`delete`·`patch`, `kubevirt.io` `virtualmachines`·`virtualmachineinstances` `list`.
 
 ### 4. 첫 부팅 때 설치 스크립트가 하는 일
 
@@ -139,7 +152,7 @@ spec:
 - **cloud-init을 쓰는 이유**: initContainer는 Pod 안에서 앱 컨테이너보다 먼저 실행되는 별도 컨테이너라 VM 안의 OS를 바꿀 수 없다. cloud-init은 VM OS 안에서 첫 부팅 때 실행되는 초기화 도구라 VM 안에 설치할 수 있다. KubeVirt가 공식 지원하는 방식이기도 하다.
 - **새 VM만 지원하는 이유**: cloud-init은 첫 부팅 때 한 번만 실행된다. 이미 실행 중인 VM에 설치하려면 SSH나 게스트 에이전트로 접속해야 하므로 범위에서 뺐다. webhook도 생성(CREATE) 요청만 처리하고 기존 VM은 건드리지 않는다.
 - **tar 방식인 이유**: Debian 계열과 RPM 계열 모두 같은 공식 tar와 `install.sh`로 설치할 수 있다. apt/yum 저장소를 추가하거나 배포판마다 다른 경로를 둘 필요가 없다.
-- **버전을 고정하는 이유**: 같은 정책이면 언제 만든 VM이든 같은 버전이 설치되게 하려고 latest를 따라가지 않는다. 기본값은 2.9.25다.
+- **버전을 고정하는 이유**: 같은 정책이면 언제 만든 VM이든 같은 버전이 설치되게 하려고 latest를 따라가지 않는다. 기본 버전은 오퍼레이터에 들어 있다(3.0.25 기준 2.9.25). CRD에는 기본값을 두지 않는다. CRD 기본값은 CR에 저장돼서 오퍼레이터를 올려도 바뀌지 않기 때문이다.
 - **서비스 시작을 직접 하는 이유**: 공식 `install.sh`는 서비스 등록까지만 하고 시작하지 않는다.
 - **매번 설치하는 이유**: tar 설치는 dpkg/rpm에 기록되지 않는다. 그래서 패키지 DB로 설치 여부를 판단하지 않고, 스크립트를 실행할 때마다 tar를 받아 설치한다.
 - **라벨 opt-in과 실패 시 거부**: 라벨을 붙인 VM만 대상이다. 오퍼레이터 장애 때 에이전트 없이 조용히 부팅되는 것보다 생성이 실패해서 바로 알 수 있는 쪽을 택했다. 라벨 없는 VM에는 영향이 없다.
@@ -207,7 +220,8 @@ spec:
 - 사용자 데이터는 비어 있거나 `#cloud-config` 형식이어야 한다.
 - 다운로드는 HTTPS와 압축 구조·버전 검사로 확인하며, 패키지 서명 검증은 아니다.
 - `success` 파일은 설치와 서비스 시작이 성공했다는 기록일 뿐 데이터 수신 성공을 뜻하지 않는다.
-- cloud-init Secret은 VM을 지워도 남는다. 반대로 WhatapAgent CR을 지우면 Secret도 함께 지워지므로, 그 Secret을 쓰는 VM은 다시 시작할 때 영향을 받을 수 있다.
+- cloud-init Secret은 VM을 지우고 5~10분 뒤에 오퍼레이터가 지운다(3.0.25부터, 이전 버전에서 남은 Secret 포함). 그래서 오퍼레이터가 고친 VM 명세(`server-agent-bootstrap` annotation 포함)를 저장해 두었다가 나중에 다시 만들면 거부된다. 원래 매니페스트로 만든다.
+- WhatapAgent CR을 지우면 Secret도 함께 지워지므로, 그 Secret을 쓰는 VM은 다시 시작할 때 영향을 받을 수 있다.
 
 ## 검증 결과
 
@@ -227,6 +241,7 @@ spec:
 - `internal/kubevirt/policy.go`: 정책 검증과 대상 선택
 - `internal/controller/kubevirt_webhook.go`: webhook 등록
 - `internal/webhook/v2alpha1/kubevirt_webhook.go`: VM 생성 요청 처리(병합, Secret, VM 수정)
+- `internal/webhook/v2alpha1/kubevirt_bootstrap_gc.go`: 쓰이지 않는 cloud-init Secret 정리
 - `internal/kubevirt/cloudinit/render.go`, `validate.go`: cloud-init 병합과 검증
 - `internal/kubevirt/cloudinit/bootstrap.sh`: VM 안에서 실행되는 설치 스크립트
 - `config/crd/bases/monitoring.whatap.com_whatapagents.yaml`: CRD

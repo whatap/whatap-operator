@@ -49,6 +49,11 @@ func SetupWhatapAgentWebhookWithManager(mgr ctrl.Manager) error {
 	mgr.GetWebhookServer().Register(kv.WebhookPath, &admission.Webhook{
 		Handler: newKubeVirtAdmissionHandler(mgr.GetAPIReader(), mgr.GetClient()),
 	})
+	// Deletes generated cloud-init Secrets once their VM is gone. Metadata-only,
+	// uncached reads; no KubeVirt watch or cache is added.
+	if err := mgr.Add(newKubeVirtBootstrapGC(mgr.GetAPIReader(), mgr.GetClient())); err != nil {
+		return err
+	}
 
 	// Register the Pod webhook for injection
 	if err := ctrl.NewWebhookManagedBy(mgr).
