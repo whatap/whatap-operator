@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
+	"github.com/whatap/whatap-operator/internal/apmwebhook"
 	kv "github.com/whatap/whatap-operator/internal/kubevirt"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,15 +30,18 @@ func TestKubeVirtWebhookIsOptInCreateOnlyAndRemovedWhenDisabled(t *testing.T) {
 		if err := c.Get(context.Background(), client.ObjectKey{Name: webhookConfigurationName}, mwc); err != nil {
 			t.Fatal(err)
 		}
-		want := 2
+		want := 3
 		if enabled {
-			want = 3
+			want = 4
 		}
 		if len(mwc.Webhooks) != want {
 			t.Fatalf("enabled=%v hooks=%d want=%d", enabled, len(mwc.Webhooks), want)
 		}
 		if mwc.Webhooks[0].Name != "mpod.kb.io" || mwc.Webhooks[1].Name != "whatapagent.kb.io" {
 			t.Fatal("existing webhook identities changed")
+		}
+		if mwc.Webhooks[want-1].Name != apmwebhook.ProbeWebhookName {
+			t.Fatal("APM probe webhook must stay registered whether KubeVirt is enabled or not")
 		}
 		if !enabled {
 			continue
