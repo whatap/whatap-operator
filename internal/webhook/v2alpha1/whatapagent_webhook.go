@@ -40,6 +40,9 @@ var whatapWebhookLogger = logf.Log.WithName("whatap-webhook")
 
 // SetupWhatapAgentWebhookWithManager registers the webhook for WhatapAgent in the manager.
 func SetupWhatapAgentWebhookWithManager(mgr ctrl.Manager) error {
+	if err := (&MissingInjectionReconciler{Client: mgr.GetClient(), Reader: mgr.GetAPIReader()}).SetupWithManager(mgr); err != nil {
+		return err
+	}
 	if err := (&InjectionFailureEventReconciler{Client: mgr.GetClient()}).SetupWithManager(mgr); err != nil {
 		return err
 	}
