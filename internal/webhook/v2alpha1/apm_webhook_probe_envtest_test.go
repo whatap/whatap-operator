@@ -149,7 +149,7 @@ func TestAPMWebhookDiagnosticsWithLocalAPIServer(t *testing.T) {
 	createAppPod(t, ctx, c, "unrelated", "other")
 	var podEvent corev1.Event
 	eventually(t, ctx, "Warning Event on the Pod admitted without injection", func() (bool, string) {
-		events := eventsWithReason(t, ctx, c, "app", apmWebhookNotCalledReason)
+		events := eventsWithReason(t, ctx, c, "app", apmInjectionMissingReason)
 		if len(events) == 1 {
 			podEvent = events[0]
 		}
@@ -168,7 +168,7 @@ func TestAPMWebhookDiagnosticsWithLocalAPIServer(t *testing.T) {
 		t.Fatalf("recovered events = %#v, want one Normal event", recovered)
 	}
 	// The unrelated and injected Pods must never have been reported.
-	if events := eventsWithReason(t, ctx, c, "app", apmWebhookNotCalledReason); len(events) != 1 {
+	if events := eventsWithReason(t, ctx, c, "app", apmInjectionMissingReason); len(events) != 1 {
 		t.Fatalf("Pod events = %d, want only the missed Pod's", len(events))
 	}
 }

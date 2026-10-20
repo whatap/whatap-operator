@@ -37,10 +37,10 @@ const (
 	// The probe Pod is a dry-run request and is never scheduled or pulled.
 	apmWebhookProbeImage = "registry.k8s.io/pause:3.10"
 
-	apmWebhookUnreachableReason = "ApmInjectionWebhookUnreachable"
-	apmWebhookRecoveredReason   = "ApmInjectionWebhookRecovered"
-	apmWebhookRecoveredMessage  = "The API server can call the WhaTap APM injection webhook again. " +
-		"Restart Pods that have " + apmWebhookNotCalledReason + " events to inject APM agents."
+	apmWebhookUnreachableReason = "APMInjectionWebhookUnreachable"
+	apmWebhookRecoveredReason   = "APMInjectionWebhookRecovered"
+	apmWebhookRecoveredMessage  = "kube-apiserver can call the WhaTap APM injection webhook again. " +
+		"Restart Pods that have " + apmInjectionMissingReason + " events to inject APM agents."
 )
 
 // +kubebuilder:rbac:groups="",resources=pods,verbs=create
@@ -172,7 +172,7 @@ func (p *apmWebhookProbe) probe(ctx context.Context) (apmWebhookProbeOutcome, st
 	case err == nil && pod.Annotations[apmwebhook.ProbeReachedAnnotation] == "true":
 		return apmWebhookReached, ""
 	case err == nil:
-		return apmWebhookUnreachable, "the API server admitted the probe Pod without calling the webhook " +
+		return apmWebhookUnreachable, "kube-apiserver admitted the probe Pod without calling the webhook " +
 			"(the MutatingWebhookConfiguration is missing or does not include " + apmwebhook.ProbeWebhookName + ")"
 	case strings.Contains(err.Error(), fmt.Sprintf("failed calling webhook %q", apmwebhook.ProbeWebhookName)):
 		return apmWebhookUnreachable, err.Error()
@@ -186,7 +186,7 @@ func (p *apmWebhookProbe) observe(ctx context.Context, agent *monitoringv2alpha1
 	case apmWebhookReached:
 		p.lastInconclusive = ""
 		if p.unreachable {
-			p.log.Info("The API server can call the APM injection webhook again")
+			p.log.Info("kube-apiserver can call the APM injection webhook again")
 			p.record(ctx, agent, corev1.EventTypeNormal, apmWebhookRecoveredReason, apmWebhookRecoveredMessage)
 		}
 		p.failures, p.unreachable, p.lastCause = 0, false, ""
@@ -197,7 +197,7 @@ func (p *apmWebhookProbe) observe(ctx context.Context, agent *monitoringv2alpha1
 			p.log.Info("APM injection webhook probe failed; confirming on the next probe", "cause", detail)
 			return
 		}
-		p.log.Error(errors.New(detail), "The API server cannot call the APM injection webhook; new Pods are created without APM injection")
+		p.log.Error(errors.New(detail), "kube-apiserver cannot call the APM injection webhook; new Pods are created without APM injection")
 		now := p.now()
 		if !p.unreachable || detail != p.lastCause || now.Sub(p.lastEventAt) >= apmWebhookEventRepeatInterval {
 			if p.record(ctx, agent, corev1.EventTypeWarning, apmWebhookUnreachableReason, apmWebhookUnreachableMessage(detail)) {
@@ -207,7 +207,7 @@ func (p *apmWebhookProbe) observe(ctx context.Context, agent *monitoringv2alpha1
 		p.unreachable, p.lastCause = true, detail
 	case apmWebhookProbeInconclusive:
 		if detail != p.lastInconclusive {
-			p.log.Info("Could not check whether the API server can call the APM injection webhook", "error", detail)
+			p.log.Info("Could not check whether kube-apiserver can call the APM injection webhook", "error", detail)
 			p.lastInconclusive = detail
 		}
 	}
@@ -248,9 +248,9 @@ func apmWebhookUnreachableMessage(cause string) string {
 	if len(cause) > apmWebhookCauseMaxLength {
 		cause = strings.ToValidUTF8(cause[:apmWebhookCauseMaxLength], "") + "..."
 	}
-	message := "The API server cannot call the WhaTap APM injection webhook, so new Pods are created without APM agents. Cause: " + cause
+	message := "kube-apiserver cannot call the WhaTap APM injection webhook, so new Pods are created without APM agents. Cause: " + cause
 	if strings.Contains(cause, "x509") {
-		message += ". If an HTTPS proxy intercepts the API server's connections, add .svc to the API server's NO_PROXY."
+		message += ". If an HTTPS proxy intercepts the connections of kube-apiserver, add .svc to the NO_PROXY of kube-apiserver."
 	}
 	return message
 }

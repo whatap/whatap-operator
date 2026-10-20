@@ -19,7 +19,7 @@ import (
 
 const (
 	apmInjectedAnnotation     = "whatap-apm-injected"
-	apmWebhookNotCalledReason = "ApmInjectionWebhookNotCalled"
+	apmInjectionMissingReason = "APMInjectionMissing"
 )
 
 // MissedInjectionEventReconciler records a Warning Event on each Pod that
@@ -62,12 +62,12 @@ func (r *MissedInjectionEventReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	whatapWebhookLogger.Info("Pod matching an APM target was created without APM injection because the API server did not call the injection webhook",
+	whatapWebhookLogger.Info("Pod matching an APM target was created without APM injection because kube-apiserver did not call the injection webhook",
 		"pod", req.NamespacedName.String(), "target", target)
 	now := metav1.Now()
 	warningEvent := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      injectionFailureEventName(pod.GetUID(), apmWebhookNotCalledReason),
+			Name:      injectionFailureEventName(pod.GetUID(), apmInjectionMissingReason),
 			Namespace: pod.GetNamespace(),
 		},
 		InvolvedObject: corev1.ObjectReference{
@@ -77,8 +77,8 @@ func (r *MissedInjectionEventReconciler) Reconcile(ctx context.Context, req ctrl
 			Name:       pod.GetName(),
 			UID:        pod.GetUID(),
 		},
-		Reason: apmWebhookNotCalledReason,
-		Message: fmt.Sprintf("APM injection was not applied: this Pod matches APM target %q, but the API server created it without calling "+
+		Reason: apmInjectionMissingReason,
+		Message: fmt.Sprintf("APM injection was not applied: this Pod matches APM target %q, but kube-apiserver created it without calling "+
 			"the WhaTap Operator webhook. See the events of WhatapAgent %q or the whatap-operator log for the cause, fix it, then restart the Pod.",
 			target, whatapAgentName),
 		Source:         corev1.EventSource{Component: injectionFailureEventComponent},

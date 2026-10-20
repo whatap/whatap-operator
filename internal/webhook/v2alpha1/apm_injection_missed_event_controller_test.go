@@ -32,8 +32,8 @@ func TestMissedInjectionEventRecordsUnmarkedTargetPodOnce(t *testing.T) {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
 	event := events[0]
-	if event.Type != corev1.EventTypeWarning || event.Reason != apmWebhookNotCalledReason {
-		t.Fatalf("event = %s/%s, want Warning/%s", event.Type, event.Reason, apmWebhookNotCalledReason)
+	if event.Type != corev1.EventTypeWarning || event.Reason != apmInjectionMissingReason {
+		t.Fatalf("event = %s/%s, want Warning/%s", event.Type, event.Reason, apmInjectionMissingReason)
 	}
 	if !strings.Contains(event.Message, `APM target "demo"`) {
 		t.Fatalf("event message does not name the target: %q", event.Message)
