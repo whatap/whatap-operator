@@ -311,6 +311,10 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "WhatapAgent")
 			os.Exit(1)
 		}
+		if err = webhookmonitoringv2alpha1.SetupAPMWebhookDiagnosticsWithManager(mgr, defaultNS); err != nil {
+			setupLog.Error(err, "unable to set up APM injection webhook diagnostics")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 

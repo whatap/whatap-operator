@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	monitoringv2alpha1 "github.com/whatap/whatap-operator/api/v2alpha1"
+	"github.com/whatap/whatap-operator/internal/apmwebhook"
 	"github.com/whatap/whatap-operator/internal/config"
 	kv "github.com/whatap/whatap-operator/internal/kubevirt"
 )
@@ -87,6 +88,14 @@ func (d *WhatapAgentCustomDefaulter) Default(ctx context.Context, obj runtime.Ob
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		whatapWebhookLogger.Info("skipping non-Pod object")
+		return nil
+	}
+	if isAPMWebhookProbe(ctx, pod) {
+		// The operator's reachability probe only needs proof that this handler was called.
+		if pod.Annotations == nil {
+			pod.Annotations = make(map[string]string, 1)
+		}
+		pod.Annotations[apmwebhook.ProbeReachedAnnotation] = "true"
 		return nil
 	}
 	podIdentifier := pod.GetNamespace() + "/" + pod.GetName()

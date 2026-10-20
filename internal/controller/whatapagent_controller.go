@@ -343,6 +343,7 @@ func (r *WhatapAgentReconciler) ensureMutatingWebhookConfiguration(ctx context.C
 		if whatapAgent.Spec.Features.KubeVirt.Enabled {
 			mwc.Webhooks = append(mwc.Webhooks, r.kubeVirtWebhook())
 		}
+		mwc.Webhooks = append(mwc.Webhooks, r.apmProbeWebhook())
 		return nil
 	})
 	return err
