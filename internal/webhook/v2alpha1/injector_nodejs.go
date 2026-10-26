@@ -96,7 +96,11 @@ func injectNodejsEnvVars(container corev1.Container, target monitoringv2alpha1.T
 		logger.Info("Skipping Node.js environment augmentation", "env", EnvNodejsOptions, "reason", "optional source fallback is not guaranteed; use explicit non-optional environment variables")
 		return original
 	}
-	return injectNodejsOptions(envVars, ValNodejsRequire, logger)
+	requireOption := ValNodejsRequire
+	if skipNodejsNpm(target) {
+		requireOption = "-r " + nodejsNpmPreloadPath
+	}
+	return injectNodejsOptions(envVars, requireOption, logger)
 }
 
 // Keep ValueFrom opaque to admission. Kubelet resolves the alias immediately
