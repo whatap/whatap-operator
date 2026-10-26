@@ -879,8 +879,10 @@ func addDcgmExporterToNodeAgent(podSpec *corev1.PodSpec, cr *monitoringv2alpha1.
 		podResourcesHostPath = gpuSpec.PodResourcesPath
 	}
 
-	// Check if a custom image is specified
-	dcgmImage := "public.ecr.aws/whatap/dcgm-exporter:4.6.0-4.8.3-distroless"
+	// Check if a custom image is specified. The default is NVIDIA's official
+	// image; OpenAgent 1.8.13+ derives DCGM_FI_DEV_WEIGHTED_GPU_UTIL from its
+	// GPU_UTIL and GR_ENGINE_ACTIVE output.
+	dcgmImage := "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
 	if gpuSpec.CustomImageFullName != "" {
 		dcgmImage = gpuSpec.CustomImageFullName
 	}
