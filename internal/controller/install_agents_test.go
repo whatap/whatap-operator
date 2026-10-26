@@ -317,3 +317,66 @@ func TestAddDcgmExporterToNodeAgent_EmptyRemoteHostEngineUsesEmbeddedMode(t *tes
 
 	t.Fatal("expected dcgm-exporter container")
 }
+
+func TestGpuGroupLabelEnvPassedToMasterAndNodeAgent(t *testing.T) {
+	tests := []struct {
+		name       string
+		gpuEnabled bool
+		groupLabel string
+		wantValue  string
+	}{
+		{name: "groupLabel set", gpuEnabled: true, groupLabel: "prjId", wantValue: "prjId"},
+		{name: "groupLabel empty", gpuEnabled: true, groupLabel: "", wantValue: ""},
+		{name: "gpu monitoring disabled", gpuEnabled: false, groupLabel: "prjId", wantValue: ""},
+	}
+
+	findEnv := func(envs []corev1.EnvVar) (string, bool) {
+		for _, e := range envs {
+			if e.Name == "WHATAP_GPU_GROUP_LABEL" {
+				return e.Value, true
+			}
+		}
+		return "", false
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &monitoringv2alpha1.WhatapAgent{
+				Spec: monitoringv2alpha1.WhatapAgentSpec{
+					Features: monitoringv2alpha1.FeaturesSpec{
+						K8sAgent: monitoringv2alpha1.K8sAgentSpec{
+							GpuMonitoring: monitoringv2alpha1.GpuMonitoringSpec{
+								Enabled:    tt.gpuEnabled,
+								GroupLabel: tt.groupLabel,
+							},
+						},
+					},
+				},
+			}
+			res := &corev1.ResourceRequirements{}
+
+			master := getMasterAgentDeploymentSpec("test-image", res, cr)
+			ds := getNodeAgentDaemonSetSpec("test-image", res, cr, "whatap-node-agent", tt.gpuEnabled)
+			var nodeAgentEnvs []corev1.EnvVar
+			for _, c := range ds.Template.Spec.Containers {
+				if c.Name == "whatap-node-agent" {
+					nodeAgentEnvs = c.Env
+				}
+			}
+
+			for name, envs := range map[string][]corev1.EnvVar{
+				"master": master.Template.Spec.Containers[0].Env,
+				"node":   nodeAgentEnvs,
+			} {
+				got, ok := findEnv(envs)
+				if tt.wantValue == "" {
+					if ok {
+						t.Errorf("%s: expected no WHATAP_GPU_GROUP_LABEL, got %q", name, got)
+					}
+				} else if got != tt.wantValue {
+					t.Errorf("%s: expected WHATAP_GPU_GROUP_LABEL=%q, got %q (present=%v)", name, tt.wantValue, got, ok)
+				}
+			}
+		})
+	}
+}
