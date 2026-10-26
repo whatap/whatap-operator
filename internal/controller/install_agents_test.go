@@ -253,7 +253,7 @@ func TestAddDcgmExporterToNodeAgent_DefaultImagesWithHostEngine(t *testing.T) {
 	if !ok {
 		t.Fatal("expected dcgm-exporter container")
 	}
-	if exporter.Image != "public.ecr.aws/whatap/dcgm-exporter:4.6.0-4.8.3-distroless" {
+	if exporter.Image != "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless" {
 		t.Fatalf("unexpected default dcgm-exporter image: %s", exporter.Image)
 	}
 

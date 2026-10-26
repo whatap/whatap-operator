@@ -37,6 +37,7 @@
 | Whatap chart / appVersion | 기본 이미지(immutable tag) | multi-arch digest | 포함 DCGM / Exporter | driver 기준 | MIG / hostengine 기준 | 상태 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1.9.9 / 3.0.16 | `public.ecr.aws/whatap/dcgm-exporter:4.6.0-4.8.3-distroless` | `sha256:96bdf764fc3119345bf1bc85ab3a431040d629e972e29a488aea319e40d8d571` | DCGM 4.6.0 / Exporter 4.8.3 | NVIDIA Datacenter Driver R450 이상은 기본 전제. GPU 아키텍처별 현재 지원 branch 및 CUDA/NVML 조합은 NVIDIA 지원표로 재확인 | embedded가 기본. 외부 hostengine 사용 시 exporter의 DCGM client(4.6.0) >= hostengine DCGM이어야 한다. MIG는 실제 profile에서 지표 노출 검증 필수 | 사전·사후 점검 통과 시 지원. 개별 GPU/driver 조합은 검증 기록이 없으면 미검증 |
+| 다음 Operator 릴리스 | `nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless` (NVIDIA 공식) | `sha256:613ab03c11d442fd960ff515f547e9921537454a712d08160bc8f677f89f1c35` | DCGM 4.6.0 / Exporter 4.8.3 | 위와 같음 | 위와 같음. `DCGM_FI_DEV_WEIGHTED_GPU_UTIL`은 exporter가 내지 않고 OpenAgent 1.8.13 이상이 계산한다 | 위와 같음. OpenAgent 1.8.12 이하와 함께 쓰면 가중 사용률이 없다 |
 
 태그의 첫 버전은 DCGM, 두 번째 버전은 Exporter다. 위 digest는 amd64와 arm64 manifest를 묶은 index digest다. 폐쇄망 반입 시 CPU 아키텍처별 manifest digest도 함께 기록한다.
 
@@ -50,7 +51,7 @@
    - 기존 exporter를 유지하고 `gpuMonitoring.enabled: false`로 둔 뒤 OpenAgent가 기존 `:9400/metrics`를 수집하도록 구성한다.
 3. 기본 이미지가 환경 요구사항과 맞지 않을 때만 `customImageFullName`을 사용한다. 이미지에는 NVIDIA가 짝지어 배포한 DCGM/Exporter pair가 들어 있어야 하며 Whatap CSV의 모든 필드를 읽을 수 있어야 한다.
 4. 외부 `nv-hostengine`에 연결할 경우 exporter 이미지의 DCGM client 버전이 hostengine 버전보다 낮으면 비지원이다.
-5. 고객 exporter는 `/metrics`에서 최소한 `DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE`, `DCGM_FI_DEV_POWER_USAGE`, `DCGM_FI_DEV_GPU_TEMP`를 제공해야 한다. MIG 가중 사용률이 필요하면 `DCGM_FI_DEV_WEIGHTED_GPU_UTIL`도 필수다. 실제 필수 전체 목록은 Operator의 `internal/gpu/csv.go`를 기준으로 한다.
+5. 고객 exporter는 `/metrics`에서 최소한 `DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE`, `DCGM_FI_DEV_POWER_USAGE`, `DCGM_FI_DEV_GPU_TEMP`를 제공해야 한다. MIG 가중 사용률(`DCGM_FI_DEV_WEIGHTED_GPU_UTIL`)은 OpenAgent 1.8.13 이상이 `DCGM_FI_DEV_GPU_UTIL`과 `DCGM_FI_PROF_GR_ENGINE_ACTIVE`(MIG는 `GPU_I_PROFILE` 레이블, 있으면 `DCGM_FI_DEV_MIG_MAX_SLICES` 레이블)로 계산하므로 exporter가 낼 필요는 없다. 실제 필수 전체 목록은 Operator의 `internal/gpu/csv.go`를 기준으로 한다.
 
 ```yaml
 apiVersion: monitoring.whatap.com/v2alpha1
@@ -115,7 +116,7 @@ reason/remaining validation:
 helm template whatap whatap/whatap-operator -n whatap-monitoring -f values.yaml \
   | awk '$1 == "image:" {print $2}' | sort -u
 
-docker buildx imagetools inspect public.ecr.aws/whatap/dcgm-exporter:4.6.0-4.8.3-distroless
+docker buildx imagetools inspect nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
 ```
 
 외부망에서 이미지를 digest로 pull하고, 승인된 스캔을 거쳐 사설 registry에 push한다. 반입 전후 digest와 파일 checksum을 기록한다. 사설 registry의 platform manifest digest를 CR의 `customImageFullName`에 지정하고 `imagePullSecrets`를 별도로 구성한다. 서로 다른 registry의 digest 문자열이 같다는 가정은 하지 말고 실제 push 결과를 다시 조회한다.
@@ -132,14 +133,14 @@ kubectl -n whatap-monitoring logs -l app.kubernetes.io/name=whatap-open-agent --
 
 POD=$(kubectl -n whatap-monitoring get pod -l name=whatap-node-agent -o jsonpath='{.items[0].metadata.name}')
 kubectl -n whatap-monitoring exec "$POD" -c dcgm-exporter -- \
-  wget -qO- http://127.0.0.1:9400/metrics | grep -E 'DCGM_FI_DEV_(GPU_UTIL|FB_USED|POWER_USAGE|GPU_TEMP|WEIGHTED_GPU_UTIL)' | head -50
+  wget -qO- http://127.0.0.1:9400/metrics | grep -E 'DCGM_FI_(DEV_(GPU_UTIL|FB_USED|POWER_USAGE|GPU_TEMP)|PROF_GR_ENGINE_ACTIVE)' | head -50
 ```
 
 다음을 모두 확인한다.
 
 - `:9400/metrics`가 Prometheus text 형식으로 응답한다.
 - GPU UUID/노드 라벨과 대표 지표가 실제 값을 가진다.
-- MIG 환경이면 GI/CI 식별과 `DCGM_FI_DEV_WEIGHTED_GPU_UTIL`의 지원/미지원 사유가 명확하다.
+- MIG 환경이면 GPU instance 행(`GPU_I_PROFILE`, `GPU_I_ID`)에 `DCGM_FI_PROF_GR_ENGINE_ACTIVE`가 있다. 공식 exporter의 `/metrics`에 `DCGM_FI_DEV_WEIGHTED_GPU_UTIL`이 없는 것은 정상이며, Whatap(MXQL)에서 물리 GPU UUID별로 조회되어야 한다(OpenAgent 1.8.13 이상).
 - OpenAgent target/log에 scrape 오류가 없다.
 - Whatap GPU 화면과 MXQL에서 동일 GPU UUID의 최신 데이터가 조회된다.
 
