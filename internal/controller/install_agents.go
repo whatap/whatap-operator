@@ -285,6 +285,17 @@ func createOrUpdateMasterAgent(ctx context.Context, r *WhatapAgentReconciler, lo
 	return nil
 }
 
+// getGpuGroupLabelEnvVars passes gpuMonitoring.groupLabel to the master/node agents so that
+// kube_pending_pod and kube_pod carry the same whatap_kube_label_gpu_group tag as the DCGM metrics.
+// User-provided envs are appended after this and can override it.
+func getGpuGroupLabelEnvVars(cr *monitoringv2alpha1.WhatapAgent) []corev1.EnvVar {
+	gpuSpec := cr.Spec.Features.K8sAgent.GpuMonitoring
+	if !gpuSpec.Enabled || gpuSpec.GroupLabel == "" {
+		return nil
+	}
+	return []corev1.EnvVar{{Name: "WHATAP_GPU_GROUP_LABEL", Value: gpuSpec.GroupLabel}}
+}
+
 func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements, cr *monitoringv2alpha1.WhatapAgent) appsv1.DeploymentSpec {
 	// Get the master agent component spec for easier access
 	masterSpec := cr.Spec.Features.K8sAgent.MasterAgent
@@ -343,6 +354,8 @@ func getMasterAgentDeploymentSpec(image string, res *corev1.ResourceRequirements
 			Value: "true",
 		},
 	}
+
+	masterEnvs = append(masterEnvs, getGpuGroupLabelEnvVars(cr)...)
 
 	// Add container-specific environment variables if provided
 	if masterSpec.MasterAgentContainer != nil && len(masterSpec.MasterAgentContainer.Envs) > 0 {
@@ -671,6 +684,8 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		{Name: "HOST_PREFIX", Value: "/rootfs"},
 		{Name: "whatap_server_agent_enabled", Value: "true"},
 	}
+
+	agentEnvs = append(agentEnvs, getGpuGroupLabelEnvVars(cr)...)
 
 	// Add container-specific environment variables if provided
 	if nodeSpec.NodeAgentContainer != nil && len(nodeSpec.NodeAgentContainer.Envs) > 0 {
