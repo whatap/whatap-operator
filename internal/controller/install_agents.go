@@ -563,6 +563,34 @@ func createOrUpdateNodeAgent(ctx context.Context, r *WhatapAgentReconciler, logg
 	return nil
 }
 
+// nodeAgentUpdateStrategy resolves the NodeAgent DaemonSet update strategy from the CR.
+// Unset fields keep the previous hard-coded default (RollingUpdate, maxUnavailable=1).
+func nodeAgentUpdateStrategy(spec *appsv1.DaemonSetUpdateStrategy) appsv1.DaemonSetUpdateStrategy {
+	defaultUnavailable := intstr.FromInt32(1)
+	if spec == nil {
+		return appsv1.DaemonSetUpdateStrategy{
+			Type:          appsv1.RollingUpdateDaemonSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDaemonSet{MaxUnavailable: &defaultUnavailable},
+		}
+	}
+	strategy := *spec.DeepCopy()
+	if strategy.Type == "" {
+		strategy.Type = appsv1.RollingUpdateDaemonSetStrategyType
+	}
+	if strategy.Type != appsv1.RollingUpdateDaemonSetStrategyType {
+		// OnDelete: rollingUpdate must not be set
+		strategy.RollingUpdate = nil
+		return strategy
+	}
+	if strategy.RollingUpdate == nil {
+		strategy.RollingUpdate = &appsv1.RollingUpdateDaemonSet{}
+	}
+	if strategy.RollingUpdate.MaxUnavailable == nil {
+		strategy.RollingUpdate.MaxUnavailable = &defaultUnavailable
+	}
+	return strategy
+}
+
 func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, cr *monitoringv2alpha1.WhatapAgent, dsName string, includeDcgm bool) appsv1.DaemonSetSpec {
 	// Get the node agent component spec for easier access
 	nodeSpec := cr.Spec.Features.K8sAgent.NodeAgent
@@ -756,12 +784,7 @@ func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, c
 		Selector: &metav1.LabelSelector{
 			MatchLabels: map[string]string{"name": dsName},
 		},
-		UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
-			Type: appsv1.RollingUpdateDaemonSetStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-				MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
-			},
-		},
+		UpdateStrategy:       nodeAgentUpdateStrategy(nodeSpec.UpdateStrategy),
 		RevisionHistoryLimit: int32Ptr(10),
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
@@ -2701,6 +2724,15 @@ func reconcileNodeAgentDaemonSet(ctx context.Context, r *WhatapAgentReconciler, 
 
 		// Preserve sidecars and reconcile resources
 		if !ds.CreationTimestamp.IsZero() {
+			// Older servers prune MaxSurge and newer ones default it to 0;
+			// keep the stored default unless the user set it explicitly.
+			if newRolling := newSpec.UpdateStrategy.RollingUpdate; newRolling != nil && newRolling.MaxSurge == nil {
+				if rolling := ds.Spec.UpdateStrategy.RollingUpdate; rolling != nil && rolling.MaxSurge != nil {
+					zero := intstr.FromInt32(0)
+					newRolling.MaxSurge = &zero
+				}
+			}
+
 			// Preserve existing labels on PodTemplate
 			if newSpec.Template.Labels == nil {
 				newSpec.Template.Labels = make(map[string]string)

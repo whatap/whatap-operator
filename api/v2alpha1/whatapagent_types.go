@@ -17,6 +17,7 @@ limitations under the License.
 package v2alpha1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -498,6 +499,11 @@ type NodeAgentComponentSpec struct {
 	// Use the host's pid namespace.
 	// +optional
 	HostPID bool `json:"hostPID,omitempty"`
+	// UpdateStrategy for the NodeAgent daemonset(s).
+	// If not set, RollingUpdate with maxUnavailable=1 is used (one node at a time).
+	// e.g. {type: RollingUpdate, rollingUpdate: {maxUnavailable: "10%"}} restarts up to 10% of nodes at once.
+	// +optional
+	UpdateStrategy *appsv1.DaemonSetUpdateStrategy `json:"updateStrategy,omitempty"`
 }
 
 // ContainerSpec defines configuration for a specific container
