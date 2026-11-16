@@ -25,7 +25,12 @@ func TestNodeAgentUpdateStrategy(t *testing.T) {
 		{name: "empty type defaults to RollingUpdate", spec: &appsv1.DaemonSetUpdateStrategy{}, wantType: appsv1.RollingUpdateDaemonSetStrategyType, wantUnavailable: ptrIntstr(intstr.FromInt32(1))},
 		{name: "percent", spec: &appsv1.DaemonSetUpdateStrategy{RollingUpdate: &appsv1.RollingUpdateDaemonSet{MaxUnavailable: &pct}}, wantType: appsv1.RollingUpdateDaemonSetStrategyType, wantUnavailable: &pct},
 		{name: "int", spec: &appsv1.DaemonSetUpdateStrategy{Type: appsv1.RollingUpdateDaemonSetStrategyType, RollingUpdate: &appsv1.RollingUpdateDaemonSet{MaxUnavailable: &five}}, wantType: appsv1.RollingUpdateDaemonSetStrategyType, wantUnavailable: &five},
-		{name: "surge only keeps user surge", spec: &appsv1.DaemonSetUpdateStrategy{RollingUpdate: &appsv1.RollingUpdateDaemonSet{MaxUnavailable: &zero, MaxSurge: &pct}}, wantType: appsv1.RollingUpdateDaemonSetStrategyType, wantUnavailable: &zero, wantSurge: &pct},
+		// The node agent runs on the host network, so a surge pod collides with the running one
+		// and the rollout stalls. maxSurge is dropped; a zero maxUnavailable would then be invalid,
+		// so it falls back to the default of 1.
+		{name: "surge is ignored and zero unavailable falls back to 1", spec: &appsv1.DaemonSetUpdateStrategy{RollingUpdate: &appsv1.RollingUpdateDaemonSet{MaxUnavailable: &zero, MaxSurge: &pct}}, wantType: appsv1.RollingUpdateDaemonSetStrategyType, wantUnavailable: ptrIntstr(intstr.FromInt32(1))},
+		{name: "surge is ignored and user unavailable is kept", spec: &appsv1.DaemonSetUpdateStrategy{RollingUpdate: &appsv1.RollingUpdateDaemonSet{MaxUnavailable: &pct, MaxSurge: &five}}, wantType: appsv1.RollingUpdateDaemonSetStrategyType, wantUnavailable: &pct},
+		{name: "zero percent unavailable falls back to 1", spec: &appsv1.DaemonSetUpdateStrategy{RollingUpdate: &appsv1.RollingUpdateDaemonSet{MaxUnavailable: ptrIntstr(intstr.FromString("0%"))}}, wantType: appsv1.RollingUpdateDaemonSetStrategyType, wantUnavailable: ptrIntstr(intstr.FromInt32(1))},
 		{name: "OnDelete drops rollingUpdate", spec: &appsv1.DaemonSetUpdateStrategy{Type: appsv1.OnDeleteDaemonSetStrategyType, RollingUpdate: &appsv1.RollingUpdateDaemonSet{MaxUnavailable: &five}}, wantType: appsv1.OnDeleteDaemonSetStrategyType},
 	}
 	for _, tc := range tests {

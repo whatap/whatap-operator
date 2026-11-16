@@ -502,6 +502,8 @@ type NodeAgentComponentSpec struct {
 	// UpdateStrategy for the NodeAgent daemonset(s).
 	// If not set, RollingUpdate with maxUnavailable=1 is used (one node at a time).
 	// e.g. {type: RollingUpdate, rollingUpdate: {maxUnavailable: "10%"}} restarts up to 10% of nodes at once.
+	// rollingUpdate.maxSurge is ignored: the node agent uses the host network, so a surge pod
+	// would collide with the running pod and stall the rollout. A maxUnavailable of 0 falls back to 1.
 	// +optional
 	UpdateStrategy *appsv1.DaemonSetUpdateStrategy `json:"updateStrategy,omitempty"`
 }

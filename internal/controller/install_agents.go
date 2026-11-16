@@ -585,10 +585,21 @@ func nodeAgentUpdateStrategy(spec *appsv1.DaemonSetUpdateStrategy) appsv1.Daemon
 	if strategy.RollingUpdate == nil {
 		strategy.RollingUpdate = &appsv1.RollingUpdateDaemonSet{}
 	}
-	if strategy.RollingUpdate.MaxUnavailable == nil {
+	// The node agent runs on the host network by default, so a surge pod on the same node
+	// collides with the running pod and never becomes ready, which stalls the rollout.
+	// maxSurge is therefore ignored. Without surge a zero maxUnavailable is rejected by the
+	// API server, so it falls back to the default of 1 as well.
+	strategy.RollingUpdate.MaxSurge = nil
+	if mu := strategy.RollingUpdate.MaxUnavailable; mu == nil || isZeroIntOrPercent(*mu) {
 		strategy.RollingUpdate.MaxUnavailable = &defaultUnavailable
 	}
 	return strategy
+}
+
+// isZeroIntOrPercent reports whether v is 0 or "0%". Invalid strings are left to API validation.
+func isZeroIntOrPercent(v intstr.IntOrString) bool {
+	n, err := intstr.GetScaledValueFromIntOrPercent(&v, 100, false)
+	return err == nil && n == 0
 }
 
 func getNodeAgentDaemonSetSpec(image string, res *corev1.ResourceRequirements, cr *monitoringv2alpha1.WhatapAgent, dsName string, includeDcgm bool) appsv1.DaemonSetSpec {
