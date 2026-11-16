@@ -21,6 +21,7 @@ limitations under the License.
 package v2alpha1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -701,6 +702,11 @@ func (in *NodeAgentComponentSpec) DeepCopyInto(out *NodeAgentComponentSpec) {
 		in, out := &in.HostNetwork, &out.HostNetwork
 		*out = new(bool)
 		**out = **in
+	}
+	if in.UpdateStrategy != nil {
+		in, out := &in.UpdateStrategy, &out.UpdateStrategy
+		*out = new(appsv1.DaemonSetUpdateStrategy)
+		(*in).DeepCopyInto(*out)
 	}
 }
 
