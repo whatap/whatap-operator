@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.24.3 AS builder
+FROM golang:1.26.11 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -30,7 +30,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
 # Use alpine to support curl
 FROM alpine:latest
 WORKDIR /
-RUN apk add --no-cache curl ca-certificates
+RUN apk upgrade --no-cache && apk add --no-cache curl ca-certificates
 COPY --from=builder /workspace/manager .
 USER 65532:65532
 
