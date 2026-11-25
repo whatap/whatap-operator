@@ -249,6 +249,8 @@ spec:
         # (권장) GPU를 사용하는 애플리케이션 파드의 특정 라벨(예: prjId)을
         # DCGM 메트릭 라벨로 포함시키고 whatap_kube_label_gpu_group 으로 정규화하려면
         # groupLabel 을 사용하세요.
+        # 같은 라벨 키가 Master/Node Agent(1.9.33 이상)에도 전달되어
+        # kube_pending_pod, kube_pod 에도 같은 이름의 태그가 붙습니다.
         # groupLabel: "prjId"
 
         # (옵션) 노출할 파드 라벨 키 allowlist 정규식 (기본: ^(groupLabel)$)
